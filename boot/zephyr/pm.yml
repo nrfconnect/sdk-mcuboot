@@ -1,0 +1,52 @@
+#include <autoconf.h>
+
+mcuboot:
+  size: CONFIG_PM_PARTITION_SIZE_MCUBOOT
+  placement:
+    before: [mcuboot_primary]
+
+mcuboot_primary_app:
+  # All images to be placed in MCUboot's slot 0 should be placed in this
+  # partition
+  span: [app]
+
+mcuboot_primary:
+  span: [mcuboot_pad, mcuboot_primary_app]
+
+# Partition for secondary slot is not created if building in single application
+# slot configuration.
+#if !defined(CONFIG_SINGLE_APPLICATION_SLOT)
+mcuboot_secondary:
+#if defined(CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY)
+  region: external_flash
+  size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SECONDARY
+  placement:
+    align: {start: 4}
+#else
+  share_size: [mcuboot_primary]
+  placement:
+    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align_next: CONFIG_FPROTECT_BLOCK_SIZE # Ensure that the next partition does not interfere with this image
+    after: mcuboot_primary
+#endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
+#endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) */
+
+#if !defined(CONFIG_BOOT_SWAP_USING_MOVE) && !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_UPGRADE_ONLY)
+mcuboot_scratch:
+  size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
+  placement:
+    after: app
+    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+#endif
+
+# Padding placed before image to boot. This reserves space for the MCUboot image header
+# and it ensures that the boot image gets linked with the correct address offset in flash.
+mcuboot_pad:
+    # MCUboot pad must be placed before the 'spm' partition if that is present.
+    # If 'spm' partition is not present, it must be placed before the 'app'.
+  size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_PAD
+  placement:
+    before: [mcuboot_primary_app]
+#ifdef CONFIG_FPROTECT
+    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+#endif
