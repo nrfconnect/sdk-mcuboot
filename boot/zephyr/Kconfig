@@ -8,6 +8,8 @@ mainmenu "MCUboot configuration"
 
 comment "MCUboot-specific configuration options"
 
+source "$(ZEPHYR_NRF_MODULE_DIR)/modules/mcuboot/boot/zephyr/Kconfig"
+
 # Hidden option to mark a project as MCUboot
 config MCUBOOT
 	default y
@@ -295,15 +297,6 @@ config BOOT_MAX_IMG_SECTORS
 	  the two image areas can contain. Smaller values reduce MCUboot's
 	  memory usage; larger values allow it to support larger images.
 	  If unsure, leave at the default value.
-
-config BOOT_ERASE_PROGRESSIVELY
-	bool "Erase flash progressively when receiving new firmware"
-	default y if SOC_FAMILY_NRF
-	help
-	 If enabled, flash is erased as necessary when receiving new firmware,
-	 instead of erasing the whole image slot at once. This is necessary
-	 on some hardware that has long erase times, to prevent long wait
-	 times at the beginning of the DFU process.
 
 config MEASURED_BOOT
 	bool "Store the boot state/measurements in shared memory"
