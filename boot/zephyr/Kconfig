@@ -14,6 +14,37 @@ config MCUBOOT
 	select MPU_ALLOW_FLASH_WRITE if ARM_MPU
 	select USE_CODE_PARTITION if HAS_FLASH_LOAD_OFFSET
 
+# Define used by partition_manager.py to deduce size of partition
+config PM_PARTITION_SIZE_MCUBOOT
+	hex "Flash space reserved for bootloader."
+	default 0xc000
+	help
+	  Flash space set aside for the MCUBoot. Note, the name
+	  of this configuration needs to match the requirements set by the
+	  script 'partition_manager.py'. See pm.yaml.
+
+
+# Define used by partition_manager.py to deduce size of partition
+config PM_PARTITION_SIZE_MCUBOOT_SCRATCH
+	hex "Flash space reserved for scratch."
+	default 0x1e000
+	help
+	  Flash space set aside for the scratch area.
+
+# Define used by partition_manager.py to deduce size of partition
+config PM_PARTITION_SIZE_MCUBOOT_STORAGE
+	hex "Flash space reserved for storage."
+	default 0x4000
+	help
+	  Flash space set aside for the storage area.
+
+# Define used by partition_manager.py to deduce size of partition
+config PM_PARTITION_SIZE_MCUBOOT_PAD
+	hex "Flash space reserved for padding area."
+	default 0x200
+	help
+	  Flash space set aside for the padding area.
+
 config BOOT_USE_MBEDTLS
 	bool
 	# Hidden option
@@ -110,14 +141,6 @@ endchoice
 endif #BOOT_SIGNATURE_TYPE_ECDSA_P256
 
 endchoice
-
-config BOOT_SIGNATURE_KEY_FILE
-	string "PEM key file"
-	default ""
-	help
-	  The key file will be parsed by imgtool's getpub command and a .c source
-	  with the public key information will be written in a format expected by
-	  MCUboot.
 
 config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
