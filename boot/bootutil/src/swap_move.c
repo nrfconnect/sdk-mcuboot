@@ -259,6 +259,18 @@ static int app_max_sectors(struct boot_loader_state *state)
 int
 boot_slots_compatible(struct boot_loader_state *state)
 {
+#ifdef PM_S1_ADDRESS
+    /* Patch needed for NCS. In this case, image 1 primary points to the other
+     * B1 slot (ie S0 or S1), and image 0 primary points to the app.
+     * With this configuration, image 0 and image 1 share the secondary slot.
+     * Hence, the primary slot of image 1 will be *smaller* than image 1's
+     * secondary slot. This is not allowed in upstream mcuboot, so we need
+     * this patch to allow it. Also, all of these checks are redundant when
+     * partition manager is in use, and since we have the same sector size
+     * in all of our flash.
+     */
+        return 1;
+#else
     size_t num_sectors_pri;
     size_t num_sectors_sec;
     size_t sector_sz_pri = 0;
@@ -306,6 +318,7 @@ boot_slots_compatible(struct boot_loader_state *state)
     }
 
     return 1;
+#endif /* PM_S1_ADDRESS */
 }
 
 #define BOOT_LOG_SWAP_STATE(area, state)                            \
