@@ -42,6 +42,10 @@
 #include "bootutil/mcuboot_status.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#ifdef CONFIG_FW_INFO
+#include <fw_info.h>
+#endif
+
 #ifdef CONFIG_MCUBOOT_SERIAL
 #include "boot_serial/boot_serial.h"
 #include "serial_adapter/serial_adapter.h"
@@ -109,6 +113,11 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
         * !defined(ZEPHYR_LOG_MODE_MINIMAL)
 	*/
+
+#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
+#include <fprotect.h>
+#include <pm_config.h>
+#endif
 
 #ifdef CONFIG_SOC_FAMILY_NRF
 #include <helpers/nrfx_reset_reason.h>
@@ -217,6 +226,19 @@ static void do_boot(struct boot_rsp *rsp)
     /* Disable the USB to prevent it from firing interrupts */
     usb_disable();
 #endif
+
+#if defined(CONFIG_FW_INFO) && !defined(CONFIG_EXT_API_PROVIDE_EXT_API_UNUSED)
+    bool provided = fw_info_ext_api_provide(fw_info_find((uint32_t)vt), true);
+
+#ifdef PM_S0_ADDRESS
+    /* Only fail if the immutable bootloader is present. */
+    if (!provided) {
+        BOOT_LOG_ERR("Failed to provide EXT_APIs\n");
+        return;
+    }
+#endif
+#endif
+
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     cleanup_arm_nvic(); /* cleanup NVIC registers */
 
@@ -639,7 +661,30 @@ void main(void)
 
     mcuboot_status_change(MCUBOOT_STATUS_BOOTABLE_IMAGE_FOUND);
 
+#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
+
+#ifdef PM_S1_ADDRESS
+/* MCUBoot is stored in either S0 or S1, protect both */
+#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_S0_ADDRESS)
+#define PROTECT_ADDR PM_S0_ADDRESS
+#else
+/* There is only one instance of MCUBoot */
+#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_MCUBOOT_ADDRESS)
+#define PROTECT_ADDR PM_MCUBOOT_ADDRESS
+#endif
+
+    rc = fprotect_area(PROTECT_ADDR, PROTECT_SIZE);
+
+    if (rc != 0) {
+        BOOT_LOG_ERR("Protect mcuboot flash failed, cancel startup.");
+        while (1)
+            ;
+    }
+
+#endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
+
     ZEPHYR_BOOT_LOG_STOP();
+
     do_boot(&rsp);
 
     mcuboot_status_change(MCUBOOT_STATUS_BOOT_FAILED);
