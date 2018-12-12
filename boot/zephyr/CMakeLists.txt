@@ -297,6 +297,13 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
   endif()
   message("MCUBoot bootloader key file: ${KEY_FILE}")
 
+  set_property(
+	GLOBAL
+	PROPERTY
+	KEY_FILE
+	${KEY_FILE}
+	)
+
   set(GENERATED_PUBKEY ${ZEPHYR_BINARY_DIR}/autogen-pubkey.c)
   add_custom_command(
     OUTPUT ${GENERATED_PUBKEY}
