@@ -9,6 +9,8 @@ mainmenu "MCUboot configuration"
 
 comment "MCUboot-specific configuration options"
 
+source "$(ZEPHYR_NRF_MODULE_DIR)/modules/mcuboot/boot/zephyr/Kconfig"
+
 # Hidden option to mark a project as MCUboot
 config MCUBOOT
 	default y
