@@ -34,6 +34,7 @@
 
 #if (defined(MCUBOOT_USE_TINYCRYPT) + \
      defined(MCUBOOT_USE_CC310) + \
+     defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_PSA_OR_MBED_TLS)) != 1
     #error "One crypto backend must be defined: either CC310/TINYCRYPT/MBED_TLS/PSA_CRYPTO"
 #endif
@@ -69,6 +70,11 @@
 #include "mbedtls/asn1.h"
 #include "bootutil/sign_key.h"
 #include "common.h"
+
+#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
+    #include <bl_crypto.h>
+    #define BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE (4 * 8)
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 extern "C" {
@@ -592,6 +598,43 @@ static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
 }
 
 #endif /* MCUBOOT_USE_MBED_TLS */
+
+#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
+typedef uintptr_t bootutil_ecdsa_p256_context;
+
+static inline void bootutil_ecdsa_p256_init(bootutil_ecdsa_p256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline void bootutil_ecdsa_p256_drop(bootutil_ecdsa_p256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx,
+                                             uint8_t *pk, size_t pk_len,
+                                             uint8_t *hash,
+                                             uint8_t *sig, size_t sig_len)
+{
+    (void)ctx;
+    (void)pk_len;
+    (void)sig_len;
+
+	/* As described on the compact representation in IETF protocols,
+	 * the first byte of the key defines if the ECC points are
+	 * compressed (0x2 or 0x3) or uncompressed (0x4).
+	 * We only support uncompressed keys.
+	 */
+	if (pk[0] != 0x04)
+		return -1;
+
+	pk++;
+
+    return bl_secp256r1_validate(hash, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE,
+                                 pk, sig);
+}
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 }
