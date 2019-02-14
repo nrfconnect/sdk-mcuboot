@@ -30,6 +30,7 @@
 
 #if (defined(MCUBOOT_USE_PSA_OR_MBED_TLS) + \
      defined(MCUBOOT_USE_TINYCRYPT) + \
+     defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_CC310)) != 1
     #error "One crypto backend must be defined: either CC310/MBED_TLS/TINYCRYPT/PSA_CRYPTO"
 #endif
@@ -187,6 +188,37 @@ static inline int bootutil_sha256_finish(bootutil_sha256_context *ctx,
     return 0;
 }
 #endif /* MCUBOOT_USE_CC310 */
+
+#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
+
+#include <bl_crypto.h>
+
+typedef bl_sha256_ctx_t bootutil_sha256_context;
+
+static inline void bootutil_sha256_init(bootutil_sha256_context *ctx)
+{
+    bl_sha256_init(ctx);
+}
+
+static inline void bootutil_sha256_drop(bootutil_sha256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline int bootutil_sha256_update(bootutil_sha256_context *ctx,
+                                          const void *data,
+                                          uint32_t data_len)
+{
+    return bl_sha256_update(ctx, data, data_len);
+}
+
+static inline int bootutil_sha256_finish(bootutil_sha256_context *ctx,
+                                          uint8_t *output)
+{
+    bl_sha256_finalize(ctx, output);
+    return 0;
+}
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 }
