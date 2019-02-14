@@ -14,6 +14,7 @@
 
 #if (defined(MCUBOOT_USE_TINYCRYPT) + \
      defined(MCUBOOT_USE_CC310) + \
+     defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_MBED_TLS)) != 1
     #error "One crypto backend must be defined: either CC310 or TINYCRYPT"
 #endif
@@ -28,6 +29,11 @@
     #include <cc310_glue.h>
     #define BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE (4 * 8)
 #endif /* MCUBOOT_USE_CC310 */
+
+#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
+    #include <bl_crypto.h>
+    #define BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE (4 * 8)
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +81,27 @@ static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx, u
     return cc310_ecdsa_verify_secp256r1(hash, pk, sig, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE);
 }
 #endif /* MCUBOOT_USE_CC310 */
+
+#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
+typedef uintptr_t bootutil_ecdsa_p256_context;
+
+static inline void bootutil_ecdsa_p256_init(bootutil_ecdsa_p256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline void bootutil_ecdsa_p256_drop(bootutil_ecdsa_p256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx, uint8_t *pk, uint8_t *hash, uint8_t *sig)
+{
+    (void)ctx;
+    return bl_secp256r1_validate(hash, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE,
+                                 pk, sig);
+}
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 }
