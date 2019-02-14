@@ -35,6 +35,15 @@ uint32_t bootutil_get_caps(void)
 #else
         res |= BOOTUTIL_CAP_SWAP_UPGRADE;
 #endif
+#if defined(MCUBOOT_ENCRYPT_RSA)
+	res |= BOOTUTIL_CAP_ENC_RSA;
+#endif
+#if defined(MCUBOOT_ENCRYPT_KW)
+	res |= BOOTUTIL_CAP_ENC_KW;
+#endif
+#if defined(MCUBOOT_VALIDATE_SLOT0)
+	res |= BOOTUTIL_CAP_VALIDATE_SLOT0;
+#endif
 
         return res;
 }
