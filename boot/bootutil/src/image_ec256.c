@@ -30,7 +30,6 @@
 #include "mcuboot_config/mcuboot_config.h"
 
 #ifdef MCUBOOT_SIGN_EC256
-
 #include "bootutil_priv.h"
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/crypto/ecdsa_p256.h"
