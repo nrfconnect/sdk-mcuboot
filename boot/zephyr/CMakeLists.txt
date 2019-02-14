@@ -71,6 +71,8 @@ if(CONFIG_BOOT_USE_NRF_CC310_BL)
 set(NRFXLIB_DIR ${MCUBOOT_DIR}/../nrfxlib)
 assert_exists(NRFXLIB_DIR)
 endif()
+set(NRF_EXTERNAL_CRYPTO_DIR "${MCUBOOT_DIR}/../nrf/subsys/bootloader/bl_crypto")
+assert_exists(NRF_EXTERNAL_CRYPTO_DIR)
 
 zephyr_library_include_directories(
   include
@@ -132,6 +134,8 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256)
     zephyr_library_sources(${NRF_DIR}/cc310_glue.c)
     zephyr_library_include_directories(${NRF_DIR})
     zephyr_link_libraries(nrfxlib_crypto)
+  elseif(CONFIG_BOOT_USE_NRF_EXTERNAL_CRYPTO)
+    zephyr_include_directories(${BL_CRYPTO_DIR}/../include)
   endif()
 
   # Since here we are not using Zephyr's mbedTLS but rather our own, we need
