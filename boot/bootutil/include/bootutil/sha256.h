@@ -49,6 +49,10 @@
     #include <cc310_glue.h>
 #endif /* MCUBOOT_USE_CC310 */
 
+#ifdef MCUBOOT_USE_NRF_EXTERNAL_CRYPTO
+    #include <bl_crypto.h>
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
+
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -118,6 +122,29 @@ static inline void bootutil_sha256_finish(bootutil_sha256_context *ctx,
     cc310_sha256_finalize(ctx, output);
 }
 #endif /* MCUBOOT_USE_CC310 */
+
+#ifdef MCUBOOT_USE_NRF_EXTERNAL_CRYPTO
+typedef bl_sha256_ctx_t bootutil_sha256_context;
+
+static inline void bootutil_sha256_init(bootutil_sha256_context *ctx)
+{
+    bl_sha256_init(ctx);
+}
+
+static inline void bootutil_sha256_update(bootutil_sha256_context *ctx,
+                                          const void * data,
+                                          uint32_t data_len)
+{
+    bl_sha256_update(ctx, data, data_len);
+
+}
+
+static inline void bootutil_sha256_finish(bootutil_sha256_context *ctx,
+                                          uint8_t * output)
+{
+    bl_sha256_finalize(ctx, output);
+}
+#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 }
