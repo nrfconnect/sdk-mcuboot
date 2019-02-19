@@ -1,4 +1,4 @@
-def IMAGE_TAG = "ncs-toolchain:1.06"
+def IMAGE_TAG = "ncs-toolchain:1.07"
 def REPO_CI_TOOLS = "https://github.com/zephyrproject-rtos/ci-tools.git"
 
 pipeline {
@@ -18,7 +18,8 @@ pipeline {
       GH_TOKEN = credentials('nordicbuilder-compliance-token')
       GH_USERNAME = "NordicBuilder"
       COMPLIANCE_SCRIPT_PATH = "../ci-tools/scripts/check_compliance.py"
-      COMPLIANCE_ARGS = "-g -r NordicPlayground/fw-nrfconnect-mcuboot -p $CHANGE_ID -S $GIT_COMMIT"
+      COMPLIANCE_ARGS = "-r NordicPlayground/fw-nrfconnect-mcuboot"
+      COMPLIANCE_REPORT_ARGS = "-p $CHANGE_ID -S $GIT_COMMIT -g"
   }
 
   stages {
@@ -33,15 +34,13 @@ pipeline {
     stage('Run compliance check') {
       steps {
         dir('mcuboot') {
-          // Set the initial status to 'pending' for the various checks we plan to run
-          sh "$COMPLIANCE_SCRIPT_PATH $COMPLIANCE_ARGS --status"
-
           script {
             // If we're a pull request, compare the target branch against the current HEAD (the PR)
             if (env.CHANGE_TARGET) {
               COMMIT_RANGE = "origin/${env.CHANGE_TARGET}..HEAD"
+              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS $COMPLIANCE_REPORT_ARGS"
             }
-            // If not a PR, it's a non-PR-branch or master build. Compare against the origin.
+            // If not a PR, it's a non-PR-branch or a master build. Compare against the origin.
             else {
               COMMIT_RANGE = "origin/${env.BRANCH_NAME}..HEAD"
             }
