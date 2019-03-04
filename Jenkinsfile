@@ -63,5 +63,20 @@ pipeline {
       // Clean up the working space at the end (including tracked files)
       cleanWs()
     }
+    failure {
+      script{
+        if (env.BRANCH_NAME == 'master' || env.BRANCH_NAME.startsWith("PR"))
+        {
+            emailext(to: 'anpu',
+                body: "${currentBuild.currentResult}\nJob ${env.JOB_NAME}\t\t build ${env.BUILD_NUMBER}\r\nLink: ${env.BUILD_URL}",
+                subject: "[Jenkins][Build ${currentBuild.currentResult}: ${env.JOB_NAME}]",
+                mimeType: 'text/html',)
+        }
+        else
+        {
+            echo "Branch ${env.BRANCH_NAME} is not master nor PR. Sending failure email skipped."
+        }
+      }
+    }
   }
 }
