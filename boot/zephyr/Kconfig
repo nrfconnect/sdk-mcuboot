@@ -12,6 +12,7 @@ config MCUBOOT
 	default y
 	bool
 	select MPU_ALLOW_FLASH_WRITE if ARM_MPU
+	select USE_CODE_PARTITION if HAS_FLASH_LOAD_OFFSET
 
 if BOARD_HAS_NRF5_BOOTLOADER
 
@@ -43,6 +44,29 @@ config BOOT_USE_TINYCRYPT
 	help
 	  Use TinyCrypt for crypto primitives.
 
+config BOOT_USE_CC310
+	bool
+	# Hidden option
+	default n
+	# When building for ECDSA, we use our own copy of mbedTLS, so the
+	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
+	# will collide.
+	depends on ! MBEDTLS
+	help
+	  Use cc310 for crypto primitives.
+
+config BOOT_USE_NRF_CC310_BL
+	bool
+	default n
+
+config NRFXLIB_CRYPTO
+	bool
+	default n
+
+config NRF_CC310_BL
+	bool
+	default n
+
 menu "MCUBoot settings"
 
 choice
@@ -56,8 +80,22 @@ config BOOT_SIGNATURE_TYPE_RSA
 
 config BOOT_SIGNATURE_TYPE_ECDSA_P256
 	bool "Elliptic curve digital signatures with curve P-256"
-	select BOOT_USE_TINYCRYPT
 
+if BOOT_SIGNATURE_TYPE_ECDSA_P256
+choice
+	prompt "Ecdsa implementation"
+	default BOOT_TINYCRYPT
+config BOOT_TINYCRYPT
+	bool "Use tinycrypt"
+	select BOOT_USE_TINYCRYPT
+config BOOT_CC310
+	bool "Use CC310"
+	select BOOT_USE_NRF_CC310_BL if HAS_HW_NRF_CC310
+	select NRF_CC310_BL if HAS_HW_NRF_CC310
+	select NRFXLIB_CRYPTO if SOC_FAMILY_NRF
+	select BOOT_USE_CC310
+endchoice
+endif
 endchoice
 
 config BOOT_SIGNATURE_KEY_FILE
@@ -72,11 +110,11 @@ config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
 
 config BOOT_VALIDATE_SLOT0
-	bool "Validate image slot 0 on every boot"
+	bool "Validate image in the primary slot on every boot"
 	default y
 	help
-	  If y, the bootloader attempts to validate the signature of
-	  slot0 every boot.  This adds the signature check time to
+	  If y, the bootloader attempts to validate the signature of the
+	  primary slot every boot. This adds the signature check time to
 	  every boot, but can mitigate against some changes that are
 	  able to modify the flash image itself.
 
@@ -84,25 +122,25 @@ config BOOT_UPGRADE_ONLY
 	bool "Overwrite image updates instead of swapping"
 	default n
 	help
-	  If y, overwrite slot0 with the upgrade image instead of
-	  swapping them.  This prevents the fallback recovery, but
+	  If y, overwrite the primary slot with the upgrade image instead
+	  of swapping them. This prevents the fallback recovery, but
 	  uses a much simpler code path.
 
 config BOOT_BOOTSTRAP
-	bool "Boostrap erased slot0 from slot1"
+	bool "Boostrap erased the primary slot from the secondary slot"
 	default n
 	help
 	  If y, enables bootstraping support. Bootstrapping allows an erased
-	  slot0 to be initialized from a valid image in slot1.
+	  primary slot to be initialized from a valid image in the secondary slot.
 	  If unsure, leave at the default value.
 
 config BOOT_ENCRYPT_RSA
 	bool "Support for encrypted upgrade images"
 	default n
 	help
-	  If y, images in slot 1 can be encrypted and are decrypted
-	  on the fly when upgrading to slot 0, as well as encrypted
-	  back when swapping from slot 0 to slot 1.
+	  If y, images in the secondary slot can be encrypted and are decrypted
+	  on the fly when upgrading to the primary slot, as well as encrypted
+	  back when swapping from the primary slot to the secondary slot.
 
 config BOOT_MAX_IMG_SECTORS
 	int "Maximum number of sectors per image slot"
@@ -121,6 +159,17 @@ config BOOT_ERASE_PROGRESSIVELY
 	 instead of erasing the whole image slot at once. This is necessary
 	 on some hardware that has long erase times, to prevent long wait
 	 times at the beginning of the DFU process.
+
+config BOOT_WAIT_FOR_USB_DFU
+	bool "Wait for a prescribed duration to see if USB DFU is invoked"
+	default n
+	select USB
+	select USB_DFU_CLASS
+	select IMG_MANAGER
+	help
+	  If y, MCUboot waits for a prescribed duration of time to allow
+	  for USB DFU to be invoked. Please note DFU always updates the
+	  slot1 image.
 
 config ZEPHYR_TRY_MASS_ERASE
 	bool "Try to mass erase flash when flashing MCUboot image"

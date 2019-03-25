@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ pushd sim
 EXIT_CODE=0
 
 if [[ ! -z $SINGLE_FEATURES ]]; then
-  all_features="sig-rsa sig-ecdsa overwrite-only validate-slot0 enc-rsa enc-kw boostrap"
+  all_features="sig-rsa sig-ecdsa overwrite-only validate-primary-slot enc-rsa enc-kw boostrap"
 
   if [[ $SINGLE_FEATURES =~ "none" ]]; then
     echo "Running cargo with no features"
