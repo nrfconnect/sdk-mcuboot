@@ -42,8 +42,6 @@ if(NOT EXISTS ${NRFXLIB_DIR})
     To use the tinycrypt set `CONFIG_BOOT_ECDSA_TINYCRYPT` to y.
     ------------------------------------------------------------------------")
 endif()
-# Don't include this if we are using west
- add_subdirectory(${NRFXLIB_DIR} ${PROJECT_BINARY_DIR}/nrfxlib)
 endif()
 
 zephyr_library_include_directories(
