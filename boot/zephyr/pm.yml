@@ -1,0 +1,33 @@
+# The size of this partition is defined by the kconfig symbol
+# CONFIG_PM_PARTITION_SIZE_MCUBOOT
+mcuboot:
+  placement:
+    # MCUboot must be placed in front of 'mcuboot_pad'.
+    before: [mcuboot_pad]
+
+mcuboot_partitions:
+  # Define a set of sub-partitions which spans over 'mcuboot_pad', 'spm' and 
+  # 'app' if both are present. If only 'app' is present, then these partitions
+  # will only span across that partition.
+  # The sub partitions share the size of the parent partition(s) equally.
+  sub_partitions: [primary, secondary]
+  span: [mcuboot_pad, spm, app]
+
+# The size of this partition is defined by the kconfig symbol
+# CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
+mcuboot_scratch:
+  placement:
+    after: [app]
+
+# The size of this partition is defined by the kconfig symbol
+# CONFIG_PM_PARTITION_SIZE_MCUBOOT_STORAGE
+mcuboot_storage:
+  placement:
+    after: [mcuboot_scratch]
+
+# Padding placed before image to boot
+mcuboot_pad:
+    # MCUboot pad must be placed before the 'spm' partition if that is present.
+    # If 'spm' partition is not present, it must be placed before the 'app'.
+  placement:
+    before: [spm, app]
