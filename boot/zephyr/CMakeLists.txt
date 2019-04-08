@@ -8,7 +8,11 @@ cmake_minimum_required(VERSION 3.8.2)
 
 # Board-specific CONF_FILES should get merged into the build as well.
 # Default to qemu_x86 if no board has been specified.
-set(BOARD qemu_x86)
+# If BOARD is already defined, mcuboot is being built in a multi image
+# context, and should default to its parent image BOARD.
+if (NOT BOARD)
+  set(BOARD qemu_x86)
+endif()
 
 # Add a common dts overlay necessary to ensure mcuboot is linked into,
 # and fits inside, the boot partition. (If the user specified a
