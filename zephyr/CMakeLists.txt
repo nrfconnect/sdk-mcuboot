@@ -12,6 +12,12 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
 
     set(SIGNED_IMAGE signed.hex)
 
+    if (${DT_FLASH_AREA_IMAGE_0_SIZE} GREATER ${DT_FLASH_AREA_IMAGE_1_SIZE})
+      set(SLOT_SIZE ${DT_FLASH_AREA_IMAGE_0_SIZE})
+    else()
+      set(SLOT_SIZE ${DT_FLASH_AREA_IMAGE_1_SIZE})
+    endif()
+
     set_property(GLOBAL APPEND PROPERTY
       extra_post_build_commands
       COMMAND
@@ -22,7 +28,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
       --header-size ${CONFIG_TEXT_SECTION_OFFSET}
       --align       ${DT_FLASH_WRITE_BLOCK_SIZE}
       --version 0.1       # TODO: Configurable?
-      --slot-size 0x32000 # TODO: Configurable?
+      --slot-size ${SLOT_SIZE}
       ${KERNEL_HEX_NAME}  # TODO: Enforce that this will be present through Kconfig
       ${SIGNED_IMAGE}
       )
