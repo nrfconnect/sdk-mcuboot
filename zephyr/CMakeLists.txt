@@ -6,7 +6,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
   zephyr_add_executable(mcuboot require_build)
 
   if (${require_build})
-    add_subdirectory(${MCUBOOT_BASE}/boot/zephyr ${CMAKE_CURRENT_BINARY_DIR}/mcuboot)
+    add_subdirectory(${MCUBOOT_BASE}/boot/zephyr ${CMAKE_BINARY_DIR}/mcuboot)
 
     # TODO: Assert that the bootloader and image use the same key.
 
