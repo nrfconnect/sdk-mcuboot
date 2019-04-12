@@ -8,7 +8,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
   if (${require_build})
     add_subdirectory(${MCUBOOT_BASE}/boot/zephyr ${CMAKE_BINARY_DIR}/mcuboot)
 
-    set(to_sign ${KERNEL_HEX_NAME})
+    set(to_sign_hex ${KERNEL_HEX_NAME})
 
     # TODO: Assert that the bootloader and image use the same key.
 
@@ -24,62 +24,51 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
       $<TARGET_PROPERTY:partition_manager,MCUBOOT_TO_SIGN_DEPENDS>)
     set(sign_merged
       $<BOOL:$<TARGET_PROPERTY:partition_manager,MCUBOOT_TO_SIGN>>)
-    set(to_sign
+    set(to_sign_hex
       $<IF:${sign_merged},${merged_hex_file},${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}>)
     set(sign_depends
       $<IF:${sign_merged},${merged_hex_file_depends},kernel_elf>)
+    set(sign_cmd
+      ${PYTHON_EXECUTABLE}
+      ${MCUBOOT_BASE}/scripts/imgtool.py
+      sign
+      --key ${MCUBOOT_BASE}/${CONFIG_BOOT_SIGNATURE_KEY_FILE}
+      --header-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_HEADER_SIZE>
+      --align       ${DT_FLASH_WRITE_BLOCK_SIZE}
+      --version 0.1 # TODO configurable?
+      --slot-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
+      --pad-header
+      )
+
     add_custom_command(
       OUTPUT
       ${signed_image_hex}
       ${update_hex}
       ${update_bin}
       COMMAND
-      ${PYTHON_EXECUTABLE}
-      ${MCUBOOT_BASE}/scripts/imgtool.py
-      sign
-      --key ${MCUBOOT_BASE}/${CONFIG_BOOT_SIGNATURE_KEY_FILE}
-      --header-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_HEADER_SIZE>
-      --align       ${DT_FLASH_WRITE_BLOCK_SIZE}
-      --version 0.1       # TODO: Configurable?
-      --slot-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
-      --pad-header
-      ${to_sign}
+      ${sign_cmd}
+      ${to_sign_hex}
       ${signed_image_hex}
       COMMAND
       ${CMAKE_OBJCOPY}
       --input-target=ihex
       --output-target=binary
-      ${to_sign}
+      ${to_sign_hex}
       ${to_sign_bin}
       COMMAND
-      ${PYTHON_EXECUTABLE}
-      ${MCUBOOT_BASE}/scripts/imgtool.py
-      sign
-      --key ${MCUBOOT_BASE}/${CONFIG_BOOT_SIGNATURE_KEY_FILE}
-      --header-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_HEADER_SIZE>
-      --align       ${DT_FLASH_WRITE_BLOCK_SIZE}
-      --version 0.1       # TODO: Configurable?
-      --slot-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
-      --pad-header
+      ${sign_cmd}
       ${to_sign_bin}
       ${update_bin}
       COMMAND
-      ${CMAKE_OBJCOPY}
-      --input-target=binary
-      --output-target=ihex
-      ${update_bin}
-      ${update_hex}
-      COMMAND
-      ${CMAKE_OBJCOPY}
-      --input-target=binary
-      --output-target=ihex
-      ${update_bin}
+      ${sign_cmd}
+      --pad # This argument is needed for MCUboot to apply the test swap.
+      ${to_sign_hex}
       ${update_hex}
       COMMAND
       ${CMAKE_OBJCOPY}
       --input-target=ihex
       --output-target=ihex
-      --change-address $<TARGET_PROPERTY:partition_manager,MCUBOOT_SECONDARY_ADDRESS>
+      --change-address $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
       ${update_hex}
       ${PROJECT_BINARY_DIR}/moved_update.hex
       DEPENDS
