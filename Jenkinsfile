@@ -5,7 +5,7 @@ pipeline {
   agent {
     docker {
       image "$IMAGE_TAG"
-      label "docker && ncs"
+      label "docker && build-node && ncs"
     }
   }
   options {
