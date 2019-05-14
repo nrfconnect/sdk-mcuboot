@@ -27,7 +27,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     set(to_sign_hex
       $<IF:${sign_merged},${merged_hex_file},${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}>)
     set(sign_depends
-      $<IF:${sign_merged},${merged_hex_file_depends},kernel_elf>)
+      $<IF:${sign_merged},${merged_hex_file_depends},zephyr_final>)
     set(sign_cmd
       ${PYTHON_EXECUTABLE}
       ${MCUBOOT_BASE}/scripts/imgtool.py
