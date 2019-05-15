@@ -18,12 +18,13 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     set(update_hex ${PROJECT_BINARY_DIR}/update.hex)
     set(update_bin ${PROJECT_BINARY_DIR}/update.bin)
 
+    get_property(app_binary_dir GLOBAL PROPERTY PROJECT_BINARY_DIR)
     set(merged_hex_file
-      $<TARGET_PROPERTY:partition_manager,MCUBOOT_TO_SIGN>)
+      ${app_binary_dir}/mcuboot_primary_app.hex)
     set(merged_hex_file_depends
-      $<TARGET_PROPERTY:partition_manager,MCUBOOT_TO_SIGN_DEPENDS>)
+      mcuboot_primary_app_hex)
     set(sign_merged
-      $<BOOL:$<TARGET_PROPERTY:partition_manager,MCUBOOT_TO_SIGN>>)
+      $<TARGET_EXISTS:partition_manager>)
     set(to_sign_hex
       $<IF:${sign_merged},${merged_hex_file},${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}>)
     set(sign_depends
@@ -76,13 +77,12 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
       )
     add_custom_target(mcuboot_sign_target DEPENDS ${signed_image_hex})
 
-    set_property(GLOBAL APPEND PROPERTY
-      HEX_FILES_TO_MERGE
+    set_property(GLOBAL PROPERTY
+      mcuboot_primary_app_PM_HEX_FILE
       ${signed_image_hex}
       )
-    set_property(GLOBAL APPEND PROPERTY
-      HEX_FILES_TO_MERGE_TARGET
-      ${logical_target_for_zephyr_elf}
+    set_property(GLOBAL PROPERTY
+      mcuboot_primary_app_PM_TARGET
       mcuboot_sign_target
       )
   endif() # ${require_build}
