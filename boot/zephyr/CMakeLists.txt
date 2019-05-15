@@ -18,18 +18,18 @@ endif()
 # and fits inside, the boot partition. (If the user specified a
 # DTC_OVERLAY_FILE on the CMake command line, we need to append onto
 # the list).
-if(DTC_OVERLAY_FILE)
-  set(DTC_OVERLAY_FILE
-    "${DTC_OVERLAY_FILE} ${CMAKE_CURRENT_LIST_DIR}/dts.overlay"
+if(${IMAGE}DTC_OVERLAY_FILE)
+  set(${IMAGE}DTC_OVERLAY_FILE
+    "${${IMAGE}DTC_OVERLAY_FILE} ${CMAKE_CURRENT_LIST_DIR}/dts.overlay"
     CACHE STRING "" FORCE
     )
 else()
-  set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_LIST_DIR}/dts.overlay)
+  set(${IMAGE}DTC_OVERLAY_FILE ${CMAKE_CURRENT_LIST_DIR}/dts.overlay)
 endif()
 
 if (EXISTS ${CMAKE_CURRENT_LIST_DIR}/boards/${BOARD}.overlay)
-  set(DTC_OVERLAY_FILE
-    "${DTC_OVERLAY_FILE} ${CMAKE_CURRENT_LIST_DIR}/boards/${BOARD}.overlay"
+  set(${IMAGE}DTC_OVERLAY_FILE
+    "${${IMAGE}DTC_OVERLAY_FILE} ${CMAKE_CURRENT_LIST_DIR}/boards/${BOARD}.overlay"
     CACHE STRING "" FORCE
     )
 endif()
