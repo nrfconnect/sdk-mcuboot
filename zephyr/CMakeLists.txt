@@ -35,10 +35,10 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     ${MCUBOOT_BASE}/scripts/imgtool.py
     sign
     --key ${MCUBOOT_BASE}/${CONFIG_BOOT_SIGNATURE_KEY_FILE}
-    --header-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_HEADER_SIZE>
+    --header-size $<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_PAD_SIZE>
     --align       ${DT_FLASH_WRITE_BLOCK_SIZE}
     --version     ${CONFIG_MCUBOOT_IMAGE_VERSION}
-    --slot-size   $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
+    --slot-size   $<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_PRIMARY_SIZE>
     --pad-header
     )
 
@@ -70,7 +70,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     ${CMAKE_OBJCOPY}
     --input-target=ihex
     --output-target=ihex
-    --change-address $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
+    --change-address $<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_PRIMARY_SIZE>
     ${update_hex}
     ${PROJECT_BINARY_DIR}/moved_update.hex
     DEPENDS
