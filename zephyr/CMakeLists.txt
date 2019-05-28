@@ -37,8 +37,8 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     --key ${MCUBOOT_BASE}/${CONFIG_BOOT_SIGNATURE_KEY_FILE}
     --header-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_HEADER_SIZE>
     --align       ${DT_FLASH_WRITE_BLOCK_SIZE}
-    --version 0.1 # TODO configurable?
-    --slot-size $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
+    --version     ${CONFIG_MCUBOOT_IMAGE_VERSION}
+    --slot-size   $<TARGET_PROPERTY:partition_manager,MCUBOOT_SLOT_SIZE>
     --pad-header
     )
 

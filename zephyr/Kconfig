@@ -33,6 +33,16 @@ config MCUBOOT_BUILD_STRATEGY_FROM_SOURCE
 
 endchoice
 
+config MCUBOOT_IMAGE_VERSION
+        string "Image version"
+        default "0.0.0+0"
+	help
+	  Value to be passed as 'version' argument to 'imgtool.py' when
+	  creating signed image. Note that no semantics are connected to
+	  this variable. It does not provide downgrade prevention, and is only
+	  valuable for debugging purposes. Format: maj.min.rev+build with
+	  latter parts optional.
+
 endif # BOOTLOADER_MCUBOOT
 
 config BOOT_SIGNATURE_KEY_FILE
