@@ -23,7 +23,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
   set(merged_hex_file
     ${app_binary_dir}/mcuboot_primary_app.hex)
   set(merged_hex_file_depends
-    mcuboot_primary_app_hex)
+    mcuboot_primary_app_hex$<SEMICOLON>${PROJECT_BINARY_DIR}/mcuboot_primary_app.hex)
   set(sign_merged
     $<TARGET_EXISTS:partition_manager>)
   set(to_sign_hex
