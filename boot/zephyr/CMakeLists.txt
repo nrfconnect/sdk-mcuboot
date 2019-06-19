@@ -54,6 +54,8 @@ macro(app_set_runner_args)
   endif()
 endmacro()
 
+include($ENV{ZEPHYR_BASE}/../nrf/cmake/boilerplate.cmake NO_POLICY_SCOPE)
+
 # Standard Zephyr application boilerplate:
 # http://docs.zephyrproject.org/application/application.html
 include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
