@@ -100,8 +100,20 @@ config BOOT_SIGNATURE_TYPE_RSA
 	select BOOT_USE_MBEDTLS
 	select MBEDTLS
 
+if BOOT_SIGNATURE_TYPE_RSA
+config BOOT_SIGNATURE_TYPE_RSA_LEN
+	int "RSA signature length"
+	range 2048 3072
+	default 2048
+endif
+
 config BOOT_SIGNATURE_TYPE_ECDSA_P256
 	bool "Elliptic curve digital signatures with curve P-256"
+
+config BOOT_SIGNATURE_TYPE_ED25519
+	bool "Edwards curve digital signatures using ed25519"
+	select BOOT_USE_MBEDTLS
+	select MBEDTLS
 
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice
@@ -258,6 +270,7 @@ config BOOT_SERIAL_DETECT_PORT
 
 config BOOT_SERIAL_DETECT_PIN
 	int "Pin to trigger serial recovery mode"
+	default 6 if BOARD_NRF9160_PCA10090
 	default 11 if BOARD_NRF52840_PCA10056
 	default 13 if BOARD_NRF52_PCA10040
 	help

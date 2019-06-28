@@ -4,23 +4,24 @@ ECDSA key management
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from .general import KeyClass
 
-class ECDSAUsageError(Exception):
+
+class Ed25519UsageError(Exception):
     pass
 
-class ECDSA256P1Public(KeyClass):
+
+class Ed25519Public(KeyClass):
     def __init__(self, key):
         self.key = key
 
     def shortname(self):
-        return "ecdsa"
+        return "ed25519"
 
     def _unsupported(self, name):
-        raise ECDSAUsageError("Operation {} requires private key".format(name))
+        raise Ed25519UsageError("Operation {} requires private key".format(name))
 
     def _get_public(self):
         return self.key
@@ -43,29 +44,16 @@ class ECDSA256P1Public(KeyClass):
             f.write(pem)
 
     def sig_type(self):
-        return "ECDSA256_SHA256"
+        return "ED25519"
 
     def sig_tlv(self):
-        return "ECDSA256"
+        return "ED25519"
 
     def sig_len(self):
-        # The DER encoding depends on the high bit, and can be
-        # anywhere from 70 to 72 bytes.  Because we have to fill in
-        # the length field before computing the signature, however,
-        # we'll give the largest, and the sig checking code will allow
-        # for it to be up to two bytes larger than the actual
-        # signature.
-        return 72
-
-    def verify(self, signature, payload):
-        k = self.key
-        if isinstance(self.key, ec.EllipticCurvePrivateKey):
-            k = self.key.public_key()
-        return k.verify(signature=signature, data=payload,
-                        signature_algorithm=ec.ECDSA(SHA256()))
+        return 64
 
 
-class ECDSA256P1(ECDSA256P1Public):
+class Ed25519(Ed25519Public):
     """
     Wrapper around an ECDSA private key.
     """
@@ -76,16 +64,17 @@ class ECDSA256P1(ECDSA256P1Public):
 
     @staticmethod
     def generate():
-        pk = ec.generate_private_key(
-                ec.SECP256R1(),
-                backend=default_backend())
-        return ECDSA256P1(pk)
+        pk = ed25519.Ed25519PrivateKey.generate()
+        return Ed25519(pk)
 
     def _get_public(self):
         return self.key.public_key()
 
     def export_private(self, path, passwd=None):
-        """Write the private key to the given file, protecting it with the optional password."""
+        """
+        Write the private key to the given file, protecting it with the
+        optional password.
+        """
         if passwd is None:
             enc = serialization.NoEncryption()
         else:
@@ -97,14 +86,13 @@ class ECDSA256P1(ECDSA256P1Public):
         with open(path, 'wb') as f:
             f.write(pem)
 
-    def raw_sign(self, payload):
+    def sign_digest(self, digest):
         """Return the actual signature"""
-        return self.key.sign(
-                data=payload,
-                signature_algorithm=ec.ECDSA(SHA256()))
+        return self.key.sign(data=digest)
 
-    def sign(self, payload):
-        # To make fixed length, pad with one or two zeros.
-        sig = self.raw_sign(payload)
-        sig += b'\000' * (self.sig_len() - len(sig))
-        return sig
+    def verify_digest(self, signature, digest):
+        """Verify that signature is valid for given digest"""
+        k = self.key
+        if isinstance(self.key, ed25519.Ed25519PrivateKey):
+            k = self.key.public_key()
+        return k.verify(signature=signature, data=digest)

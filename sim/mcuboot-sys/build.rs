@@ -10,7 +10,9 @@ use std::path::Path;
 fn main() {
     // Feature flags.
     let sig_rsa = env::var("CARGO_FEATURE_SIG_RSA").is_ok();
+    let sig_rsa3072 = env::var("CARGO_FEATURE_SIG_RSA3072").is_ok();
     let sig_ecdsa = env::var("CARGO_FEATURE_SIG_ECDSA").is_ok();
+    let sig_ed25519 = env::var("CARGO_FEATURE_SIG_ED25519").is_ok();
     let overwrite_only = env::var("CARGO_FEATURE_OVERWRITE_ONLY").is_ok();
     let validate_primary_slot =
                   env::var("CARGO_FEATURE_VALIDATE_PRIMARY_SLOT").is_ok();
@@ -35,13 +37,23 @@ fn main() {
         conf.define("MCUBOOT_VALIDATE_PRIMARY_SLOT", None);
     }
 
-    // Currently, mbed TLS cannot build with both RSA and ECDSA.
-    if sig_rsa && sig_ecdsa {
-        panic!("mcuboot does not support RSA and ECDSA at the same time");
+    // Currently no more than one sig type can be used simultaneously.
+    if vec![sig_rsa, sig_rsa3072, sig_ecdsa, sig_ed25519].iter()
+        .fold(0, |sum, &v| sum + v as i32) > 1 {
+        panic!("mcuboot does not support more than one sig type at the same time");
     }
 
-    if sig_rsa {
+    if sig_rsa || sig_rsa3072 {
         conf.define("MCUBOOT_SIGN_RSA", None);
+        // The Kconfig style defines must be added here as well because
+        // they are used internally by "config-rsa.h"
+        if sig_rsa {
+            conf.define("MCUBOOT_SIGN_RSA_LEN", "2048");
+            conf.define("CONFIG_BOOT_SIGNATURE_TYPE_RSA_2048", None);
+        } else {
+            conf.define("MCUBOOT_SIGN_RSA_LEN", "3072");
+            conf.define("CONFIG_BOOT_SIGNATURE_TYPE_RSA_3072", None);
+        }
         conf.define("MCUBOOT_USE_MBED_TLS", None);
 
         conf.include("mbedtls/include");
@@ -72,6 +84,18 @@ fn main() {
 
         conf.file("../../ext/mbedtls/src/platform_util.c");
         conf.file("../../ext/mbedtls/src/asn1parse.c");
+    } else if sig_ed25519 {
+        conf.define("MCUBOOT_SIGN_ED25519", None);
+        conf.define("MCUBOOT_USE_MBED_TLS", None);
+
+        conf.include("mbedtls/include");
+        conf.file("mbedtls/library/sha256.c");
+        conf.file("mbedtls/library/sha512.c");
+        conf.file("csupport/keys.c");
+        conf.file("../../ext/fiat/src/curve25519.c");
+        conf.file("mbedtls/library/platform.c");
+        conf.file("mbedtls/library/platform_util.c");
+        conf.file("mbedtls/library/asn1parse.c");
     } else {
         // Neither signature type, only verify sha256. The default
         // configuration file bundled with mbedTLS is sufficient.
@@ -114,7 +138,7 @@ fn main() {
         conf.file("../../boot/bootutil/src/encrypted.c");
         conf.file("csupport/keys.c");
 
-        if sig_rsa {
+        if sig_rsa || sig_rsa3072 {
             conf.file("mbedtls/library/sha256.c");
         }
 
@@ -137,23 +161,31 @@ fn main() {
             conf.file("../../ext/tinycrypt/lib/source/aes_encrypt.c");
             conf.file("../../ext/tinycrypt/lib/source/aes_decrypt.c");
         }
+
+        if sig_ed25519 {
+            panic!("ed25519 does not support image encryption with KW yet");
+        }
     }
 
     if sig_rsa && enc_kw {
         conf.define("MBEDTLS_CONFIG_FILE", Some("<config-rsa-kw.h>"));
-    } else if sig_rsa || enc_rsa {
+    } else if sig_rsa || sig_rsa3072 || enc_rsa {
         conf.define("MBEDTLS_CONFIG_FILE", Some("<config-rsa.h>"));
     } else if sig_ecdsa && !enc_kw {
         conf.define("MBEDTLS_CONFIG_FILE", Some("<config-asn1.h>"));
+    } else if sig_ed25519 {
+        conf.define("MBEDTLS_CONFIG_FILE", Some("<config-ed25519.h>"));
     } else if enc_kw {
         conf.define("MBEDTLS_CONFIG_FILE", Some("<config-kw.h>"));
     }
 
     conf.file("../../boot/bootutil/src/image_validate.c");
-    if sig_rsa {
+    if sig_rsa || sig_rsa3072 {
         conf.file("../../boot/bootutil/src/image_rsa.c");
     } else if sig_ecdsa {
         conf.file("../../boot/bootutil/src/image_ec256.c");
+    } else if sig_ed25519 {
+        conf.file("../../boot/bootutil/src/image_ed25519.c");
     }
     conf.file("../../boot/bootutil/src/loader.c");
     conf.file("../../boot/bootutil/src/caps.c");
