@@ -17,6 +17,10 @@
  * under the License.
  */
 
+/*
+ * Modifications are Copyright (c) 2019 Arm Limited.
+ */
+
 #ifndef H_BOOTUTIL_PRIV_
 #define H_BOOTUTIL_PRIV_
 
@@ -44,13 +48,14 @@ extern "C" {
 
 struct flash_area;
 
-#define BOOT_EFLASH     1
-#define BOOT_EFILE      2
-#define BOOT_EBADIMAGE  3
-#define BOOT_EBADVECT   4
-#define BOOT_EBADSTATUS 5
-#define BOOT_ENOMEM     6
-#define BOOT_EBADARGS   7
+#define BOOT_EFLASH      1
+#define BOOT_EFILE       2
+#define BOOT_EBADIMAGE   3
+#define BOOT_EBADVECT    4
+#define BOOT_EBADSTATUS  5
+#define BOOT_ENOMEM      6
+#define BOOT_EBADARGS    7
+#define BOOT_EBADVERSION 8
 
 #define BOOT_TMPBUF_SZ  256
 
@@ -106,7 +111,7 @@ struct boot_status {
  *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  *  |                      Swap size (4 octets)                     |
  *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *  |   Swap type   |           0xff padding (7 octets)             |
+ *  |   Swap info   |           0xff padding (7 octets)             |
  *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  *  |   Copy done   |           0xff padding (7 octets)             |
  *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -120,6 +125,7 @@ struct boot_status {
  *      (`MCUBOOT_ENC_IMAGES`).
  */
 
+extern uint8_t current_image;
 extern const uint32_t boot_img_magic[4];
 
 struct boot_swap_state {
@@ -127,9 +133,31 @@ struct boot_swap_state {
     uint8_t swap_type;  /* One of the BOOT_SWAP_TYPE_[...] values. */
     uint8_t copy_done;  /* One of the BOOT_FLAG_[...] values. */
     uint8_t image_ok;   /* One of the BOOT_FLAG_[...] values. */
+    uint8_t image_num;  /* Boot status belongs to this image */
 };
 
+#ifdef MCUBOOT_IMAGE_NUMBER
+#define BOOT_IMAGE_NUMBER          MCUBOOT_IMAGE_NUMBER
+#else
+#define BOOT_IMAGE_NUMBER          1
+#endif
+
 #define BOOT_MAX_IMG_SECTORS       MCUBOOT_MAX_IMG_SECTORS
+
+/*
+ * Extract the swap type and image number from image trailers's swap_info
+ * filed.
+ */
+#define BOOT_GET_SWAP_TYPE(swap_info)    ((swap_info) & 0x0F)
+#define BOOT_GET_IMAGE_NUM(swap_info)    ((swap_info) >> 4)
+
+/* Construct the swap_info field from swap type and image number */
+#define BOOT_SET_SWAP_INFO(swap_info, image, type)  {                          \
+                                                    assert((image) < 0xF);     \
+                                                    assert((type)  < 0xF);     \
+                                                    (swap_info) = (image) << 4 \
+                                                                | (type);      \
+                                                    }
 
 /*
  * The current flashmap API does not check the amount of space allocated when
@@ -176,7 +204,7 @@ struct boot_loader_state {
         const struct flash_area *area;
         boot_sector_t *sectors;
         size_t num_sectors;
-    } imgs[BOOT_NUM_SLOTS];
+    } imgs[BOOT_IMAGE_NUMBER][BOOT_NUM_SLOTS];
 
     struct {
         const struct flash_area *area;
@@ -184,6 +212,7 @@ struct boot_loader_state {
         size_t num_sectors;
     } scratch;
 
+    uint8_t swap_type[BOOT_IMAGE_NUMBER];
     uint8_t write_sz;
 };
 
@@ -194,7 +223,7 @@ int boot_magic_compatible_check(uint8_t tbl_val, uint8_t val);
 uint32_t boot_trailer_sz(uint8_t min_write_sz);
 int boot_status_entries(const struct flash_area *fap);
 uint32_t boot_status_off(const struct flash_area *fap);
-uint32_t boot_swap_type_off(const struct flash_area *fap);
+uint32_t boot_swap_info_off(const struct flash_area *fap);
 int boot_read_swap_state(const struct flash_area *fap,
                          struct boot_swap_state *state);
 int boot_read_swap_state_by_id(int flash_area_id,
@@ -204,7 +233,8 @@ int boot_write_status(struct boot_status *bs);
 int boot_schedule_test_swap(void);
 int boot_write_copy_done(const struct flash_area *fap);
 int boot_write_image_ok(const struct flash_area *fap);
-int boot_write_swap_type(const struct flash_area *fap, uint8_t swap_type);
+int boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type,
+                         uint8_t image_num);
 int boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size);
 int boot_read_swap_size(uint32_t *swap_size);
 #ifdef MCUBOOT_ENC_IMAGES
@@ -212,26 +242,32 @@ int boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
                        const uint8_t *enckey);
 int boot_read_enc_key(uint8_t slot, uint8_t *enckey);
 #endif
+#if (BOOT_IMAGE_NUMBER > 1)
+int boot_is_version_sufficient(struct image_version *req,
+                               struct image_version *ver);
+#endif
 
 /*
  * Accessors for the contents of struct boot_loader_state.
  */
 
 /* These are macros so they can be used as lvalues. */
-#define BOOT_IMG_AREA(state, slot) ((state)->imgs[(slot)].area)
+#define BOOT_IMG(state, slot) ((state)->imgs[current_image][(slot)])
+#define BOOT_IMG_AREA(state, slot) (BOOT_IMG(state, slot).area)
 #define BOOT_SCRATCH_AREA(state) ((state)->scratch.area)
 #define BOOT_WRITE_SZ(state) ((state)->write_sz)
+#define BOOT_SWAP_TYPE(state) ((state)->swap_type[current_image])
 
 static inline struct image_header*
 boot_img_hdr(struct boot_loader_state *state, size_t slot)
 {
-    return &state->imgs[slot].hdr;
+    return &BOOT_IMG(state, slot).hdr;
 }
 
 static inline size_t
 boot_img_num_sectors(struct boot_loader_state *state, size_t slot)
 {
-    return state->imgs[slot].num_sectors;
+    return BOOT_IMG(state, slot).num_sectors;
 }
 
 static inline size_t
@@ -246,7 +282,7 @@ boot_scratch_num_sectors(struct boot_loader_state *state)
 static inline uint32_t
 boot_img_slot_off(struct boot_loader_state *state, size_t slot)
 {
-    return state->imgs[slot].area->fa_off;
+    return BOOT_IMG(state, slot).area->fa_off;
 }
 
 static inline size_t boot_scratch_area_size(struct boot_loader_state *state)
@@ -260,7 +296,7 @@ static inline size_t
 boot_img_sector_size(struct boot_loader_state *state,
                      size_t slot, size_t sector)
 {
-    return state->imgs[slot].sectors[sector].fa_size;
+    return BOOT_IMG(state, slot).sectors[sector].fa_size;
 }
 
 /*
@@ -271,8 +307,8 @@ static inline uint32_t
 boot_img_sector_off(struct boot_loader_state *state, size_t slot,
                     size_t sector)
 {
-    return state->imgs[slot].sectors[sector].fa_off -
-           state->imgs[slot].sectors[0].fa_off;
+    return BOOT_IMG(state, slot).sectors[sector].fa_off -
+           BOOT_IMG(state, slot).sectors[0].fa_off;
 }
 
 static inline int
@@ -281,23 +317,21 @@ boot_initialize_area(struct boot_loader_state *state, int flash_area)
     int num_sectors = BOOT_MAX_IMG_SECTORS;
     int rc;
 
-    switch (flash_area) {
-    case FLASH_AREA_IMAGE_PRIMARY:
+    if (flash_area == FLASH_AREA_IMAGE_PRIMARY) {
         rc = flash_area_to_sectors(flash_area, &num_sectors,
-                                   state->imgs[BOOT_PRIMARY_SLOT].sectors);
-        state->imgs[BOOT_PRIMARY_SLOT].num_sectors = (size_t)num_sectors;
-        break;
-    case FLASH_AREA_IMAGE_SECONDARY:
+                                   BOOT_IMG(state, BOOT_PRIMARY_SLOT).sectors);
+        BOOT_IMG(state, BOOT_PRIMARY_SLOT).num_sectors = (size_t)num_sectors;
+
+    } else if (flash_area == FLASH_AREA_IMAGE_SECONDARY) {
         rc = flash_area_to_sectors(flash_area, &num_sectors,
-                                   state->imgs[BOOT_SECONDARY_SLOT].sectors);
-        state->imgs[BOOT_SECONDARY_SLOT].num_sectors = (size_t)num_sectors;
-        break;
-    case FLASH_AREA_IMAGE_SCRATCH:
+                                 BOOT_IMG(state, BOOT_SECONDARY_SLOT).sectors);
+        BOOT_IMG(state, BOOT_SECONDARY_SLOT).num_sectors = (size_t)num_sectors;
+
+    } else if (flash_area == FLASH_AREA_IMAGE_SCRATCH) {
         rc = flash_area_to_sectors(flash_area, &num_sectors,
                                    state->scratch.sectors);
         state->scratch.num_sectors = (size_t)num_sectors;
-        break;
-    default:
+    } else {
         return BOOT_EFLASH;
     }
 
@@ -310,15 +344,15 @@ static inline size_t
 boot_img_sector_size(struct boot_loader_state *state,
                      size_t slot, size_t sector)
 {
-    return state->imgs[slot].sectors[sector].fs_size;
+    return BOOT_IMG(state, slot).sectors[sector].fs_size;
 }
 
 static inline uint32_t
 boot_img_sector_off(struct boot_loader_state *state, size_t slot,
                     size_t sector)
 {
-    return state->imgs[slot].sectors[sector].fs_off -
-           state->imgs[slot].sectors[0].fs_off;
+    return BOOT_IMG(state, slot).sectors[sector].fs_off -
+           BOOT_IMG(state, slot).sectors[0].fs_off;
 }
 
 static inline int
@@ -329,24 +363,19 @@ boot_initialize_area(struct boot_loader_state *state, int flash_area)
     size_t *out_num_sectors;
     int rc;
 
-    switch (flash_area) {
-    case FLASH_AREA_IMAGE_PRIMARY:
-        num_sectors = BOOT_MAX_IMG_SECTORS;
-        out_sectors = state->imgs[BOOT_PRIMARY_SLOT].sectors;
-        out_num_sectors = &state->imgs[BOOT_PRIMARY_SLOT].num_sectors;
-        break;
-    case FLASH_AREA_IMAGE_SECONDARY:
-        num_sectors = BOOT_MAX_IMG_SECTORS;
-        out_sectors = state->imgs[BOOT_SECONDARY_SLOT].sectors;
-        out_num_sectors = &state->imgs[BOOT_SECONDARY_SLOT].num_sectors;
-        break;
-    case FLASH_AREA_IMAGE_SCRATCH:
-        num_sectors = BOOT_MAX_IMG_SECTORS;
+    num_sectors = BOOT_MAX_IMG_SECTORS;
+
+    if (flash_area == FLASH_AREA_IMAGE_PRIMARY) {
+        out_sectors = BOOT_IMG(state, BOOT_PRIMARY_SLOT).sectors;
+        out_num_sectors = &BOOT_IMG(state, BOOT_PRIMARY_SLOT).num_sectors;
+    } else if (flash_area == FLASH_AREA_IMAGE_SECONDARY) {
+        out_sectors = BOOT_IMG(state, BOOT_SECONDARY_SLOT).sectors;
+        out_num_sectors = &BOOT_IMG(state, BOOT_SECONDARY_SLOT).num_sectors;
+    } else if (flash_area == FLASH_AREA_IMAGE_SCRATCH) {
         out_sectors = state->scratch.sectors;
         out_num_sectors = &state->scratch.num_sectors;
-        break;
-    default:
-        return -1;
+    } else {
+        return BOOT_EFLASH;
     }
 
     rc = flash_area_get_sectors(flash_area, &num_sectors, out_sectors);

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Open Source Foundries Limited
+ * Copyright (c) 2019 Arm Limited
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -82,6 +83,10 @@
  * as desirable. */
 #define MCUBOOT_MAX_IMG_SECTORS 128
 
+/* Default number of separately updateable images; change in case of
+ * multiple images. */
+#define MCUBOOT_IMAGE_NUMBER 1
+
 /*
  * Logging
  */
@@ -115,5 +120,18 @@
  * If so, it must provide an ASSERT macro for use by bootutil. Otherwise,
  * "assert" is used. */
 /* #define MCUBOOT_HAVE_ASSERT_H */
+
+/*
+ * Watchdog feeding
+ */
+
+/* This macro might be implemented if the OS / HW watchdog is enabled while
+ * doing a swap upgrade and the time it takes for a swapping is long enough
+ * to cause an unwanted reset. If implementing this, the OS main.c must also
+ * enable the watchdog (if required)!
+ *
+ * #define MCUBOOT_WATCHDOG_FEED()
+ *    do { do watchdog feeding here! } while (0)
+ */
 
 #endif /* __MCUBOOT_CONFIG_H__ */

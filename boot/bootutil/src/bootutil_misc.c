@@ -17,6 +17,10 @@
  * under the License.
  */
 
+/*
+ * Modifications are Copyright (c) 2019 Arm Limited.
+ */
+
 #include <assert.h>
 #include <string.h>
 #include <inttypes.h>
@@ -168,13 +172,12 @@ boot_magic_off(const struct flash_area *fap)
 int
 boot_status_entries(const struct flash_area *fap)
 {
-    switch (fap->fa_id) {
-    case FLASH_AREA_IMAGE_PRIMARY:
-    case FLASH_AREA_IMAGE_SECONDARY:
-        return BOOT_STATUS_STATE_COUNT * BOOT_STATUS_MAX_ENTRIES;
-    case FLASH_AREA_IMAGE_SCRATCH:
+    if (fap->fa_id == FLASH_AREA_IMAGE_SCRATCH) {
         return BOOT_STATUS_STATE_COUNT;
-    default:
+    } else if ((fap->fa_id == FLASH_AREA_IMAGE_PRIMARY) ||
+               (fap->fa_id == FLASH_AREA_IMAGE_SECONDARY)) {
+        return BOOT_STATUS_STATE_COUNT * BOOT_STATUS_MAX_ENTRIES;
+    } else {
         return BOOT_EBADARGS;
     }
 }
@@ -194,7 +197,7 @@ boot_status_off(const struct flash_area *fap)
 }
 
 uint32_t
-boot_swap_type_off(const struct flash_area *fap)
+boot_swap_info_off(const struct flash_area *fap)
 {
     return fap->fa_size - BOOT_MAGIC_SZ - BOOT_MAX_ALIGN * 3;
 }
@@ -232,6 +235,7 @@ boot_read_swap_state(const struct flash_area *fap,
 {
     uint32_t magic[BOOT_MAGIC_ARR_SZ];
     uint32_t off;
+    uint8_t swap_info;
     int rc;
 
     off = boot_magic_off(fap);
@@ -245,14 +249,19 @@ boot_read_swap_state(const struct flash_area *fap,
         state->magic = boot_magic_decode(magic);
     }
 
-    off = boot_swap_type_off(fap);
-    rc = flash_area_read_is_empty(fap, off, &state->swap_type,
-            sizeof state->swap_type);
+    off = boot_swap_info_off(fap);
+    rc = flash_area_read_is_empty(fap, off, &swap_info, sizeof swap_info);
     if (rc < 0) {
         return BOOT_EFLASH;
     }
+
+    /* Extract the swap type and image number */
+    state->swap_type = BOOT_GET_SWAP_TYPE(swap_info);
+    state->image_num = BOOT_GET_IMAGE_NUM(swap_info);
+
     if (rc == 1 || state->swap_type > BOOT_SWAP_TYPE_REVERT) {
         state->swap_type = BOOT_SWAP_TYPE_NONE;
+        state->image_num = 0;
     }
 
     off = boot_copy_done_off(fap);
@@ -291,16 +300,14 @@ boot_read_swap_state_by_id(int flash_area_id, struct boot_swap_state *state)
     const struct flash_area *fap;
     int rc;
 
-    switch (flash_area_id) {
-    case FLASH_AREA_IMAGE_SCRATCH:
-    case FLASH_AREA_IMAGE_PRIMARY:
-    case FLASH_AREA_IMAGE_SECONDARY:
+    if (flash_area_id == FLASH_AREA_IMAGE_SCRATCH ||
+        flash_area_id == FLASH_AREA_IMAGE_PRIMARY ||
+        flash_area_id == FLASH_AREA_IMAGE_SECONDARY) {
         rc = flash_area_open(flash_area_id, &fap);
         if (rc != 0) {
             return BOOT_EFLASH;
         }
-        break;
-    default:
+    } else {
         return BOOT_EBADARGS;
     }
 
@@ -494,14 +501,18 @@ boot_write_image_ok(const struct flash_area *fap)
  * resume in case of an unexpected reset.
  */
 int
-boot_write_swap_type(const struct flash_area *fap, uint8_t swap_type)
+boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type,
+                     uint8_t image_num)
 {
     uint32_t off;
+    uint8_t swap_info;
 
-    off = boot_swap_type_off(fap);
-    BOOT_LOG_DBG("writing swap_type; fa_id=%d off=0x%x (0x%x), swap_type=0x%x",
-                 fap->fa_id, off, fap->fa_off + off, swap_type);
-    return boot_write_trailer_byte(fap, off, swap_type);
+    BOOT_SET_SWAP_INFO(swap_info, image_num, swap_type);
+    off = boot_swap_info_off(fap);
+    BOOT_LOG_DBG("writing swap_info; fa_id=%d off=0x%x (0x%x), swap_type=0x%x"
+                 " image_num=0x%x",
+                 fap->fa_id, off, fap->fa_off + off, swap_type, image_num);
+    return boot_write_trailer_byte(fap, off, swap_info);
 }
 
 int
@@ -648,7 +659,7 @@ boot_set_pending(int permanent)
             } else {
                 swap_type = BOOT_SWAP_TYPE_TEST;
             }
-            rc = boot_write_swap_type(fap, swap_type);
+            rc = boot_write_swap_info(fap, swap_type, 0);
         }
 
         flash_area_close(fap);
@@ -730,3 +741,38 @@ done:
     flash_area_close(fap);
     return rc;
 }
+
+#if (BOOT_IMAGE_NUMBER > 1)
+/**
+ * Check if the version of the image is not older than required.
+ *
+ * @param req         Required minimal image version.
+ * @param ver         Version of the image to be checked.
+ *
+ * @return            0 if the version is sufficient, nonzero otherwise.
+ */
+int
+boot_is_version_sufficient(struct image_version *req,
+                           struct image_version *ver)
+{
+    if (ver->iv_major > req->iv_major) {
+        return 0;
+    }
+    if (ver->iv_major < req->iv_major) {
+        return BOOT_EBADVERSION;
+    }
+    /* The major version numbers are equal. */
+    if (ver->iv_minor > req->iv_minor) {
+        return 0;
+    }
+    if (ver->iv_minor < req->iv_minor) {
+        return BOOT_EBADVERSION;
+    }
+    /* The minor version numbers are equal. */
+    if (ver->iv_revision < req->iv_revision) {
+        return BOOT_EBADVERSION;
+    }
+
+    return 0;
+}
+#endif /* BOOT_IMAGE_NUMBER > 1 */

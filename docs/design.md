@@ -17,6 +17,10 @@
   under the License.
 -->
 
+<!--
+  Modifications are Copyright (c) 2019 Arm Limited.
+-->
+
 # Boot Loader
 
 ## Summary
@@ -60,12 +64,12 @@ struct image_version {
 struct image_header {
     uint32_t ih_magic;
     uint32_t ih_load_addr;
-    uint16_t ih_hdr_size; /* Size of image header (bytes). */
-    uint16_t _pad2;
-    uint32_t ih_img_size; /* Does not include header. */
-    uint32_t ih_flags;    /* IMAGE_F_[...]. */
+    uint16_t ih_hdr_size;           /* Size of image header (bytes). */
+    uint16_t ih_protect_tlv_size;   /* Size of protected TLV area (bytes). */
+    uint32_t ih_img_size;           /* Does not include header. */
+    uint32_t ih_flags;              /* IMAGE_F_[...]. */
     struct image_version ih_ver;
-    uint32_t _pad3;
+    uint32_t _pad1;
 };
 
 /** Image TLV header.  All fields in little endian. */
@@ -98,10 +102,19 @@ struct image_tlv {
 #define IMAGE_TLV_ECDSA256          0x22   /* ECDSA of hash output */
 #define IMAGE_TLV_RSA3072_PSS       0x23   /* RSA3072 of hash output */
 #define IMAGE_TLV_ED25519           0x24   /* ED25519 of hash output */
+#define IMAGE_TLV_ENC_RSA2048       0x30   /* Key encrypted with RSA-OAEP-2048 */
+#define IMAGE_TLV_ENC_KW128         0x31   /* Key encrypted with AES-KW-128 */
+#define IMAGE_TLV_DEPENDENCY        0x40   /* Image depends on other image */
 ```
 
 Optional type-length-value records (TLVs) containing image metadata are placed
 after the end of the image.
+
+The `ih_protect_tlv_size` field indicates the length of the protected TLV area.
+If dependency TLVs are present then the TLV info header and the dependency TLVs
+are also protected and have to be included in the hash calculation. Otherwise
+the hash is only calculated over the image header and the image itself. In this
+case the value of the `ih_protect_tlv_size` field is 0.
 
 The `ih_hdr_size` field indicates the length of the header, and therefore the
 offset of the image itself.  This field provides for backwards compatibility in
@@ -116,33 +129,44 @@ region of disk with the following properties:
 2. A write to one area does not restrict writes to other areas.
 
 The boot loader uses the following flash area IDs:
-
-``` c
+```c
+/* Independent from multiple image boot */
 #define FLASH_AREA_BOOTLOADER         0
+#define FLASH_AREA_IMAGE_SCRATCH      3
+```
+```c
+/* If the boot loader is working with the first image */
 #define FLASH_AREA_IMAGE_PRIMARY      1
 #define FLASH_AREA_IMAGE_SECONDARY    2
-#define FLASH_AREA_IMAGE_SCRATCH      3
+```
+```c
+/* If the boot loader is working with the second image */
+#define FLASH_AREA_IMAGE_PRIMARY      5
+#define FLASH_AREA_IMAGE_SECONDARY    6
 ```
 
 The bootloader area contains the bootloader image itself. The other areas are
-described in subsequent sections.
+described in subsequent sections. The flash could contain multiple executable
+images therefore the flash area IDs of primary and secondary areas are mapped
+based on the number of the active image (on which the bootloader is currently
+working).
 
 ## Image Slots
 
-A portion of the flash memory is partitioned into two image slots: a primary
-slot (0) and a secondary slot (1).  The boot loader will only run an image from
-the primary slot, so images must be built such that they can run from that
-fixed location in flash.  If the boot loader needs to run the image resident in
-the secondary slot, it must copy its contents into the primary slot before doing
-so, either by swapping the two images or by overwriting the contents of the
-primary slot. The bootloader supports either swap- or overwrite-based image
-upgrades, but must be configured at build time to choose one of these two
-strategies.
+A portion of the flash memory can be partitioned into multiple image areas, each
+contains two image slots: a primary slot and a secondary slot.
+The boot loader will only run an image from the primary slot, so images must be
+built such that they can run from that fixed location in flash.  If the boot
+loader needs to run the image resident in the secondary slot, it must copy its
+contents into the primary slot before doing so, either by swapping the two
+images or by overwriting the contents of the primary slot. The bootloader
+supports either swap- or overwrite-based image upgrades, but must be configured
+at build time to choose one of these two strategies.
 
-In addition to the two image slots, the boot loader requires a scratch area to
-allow for reliable image swapping. The scratch area must have a size that is
-enough to store at least the largest sector that is going to be swapped. Many
-devices have small equally sized flash sectors, eg 4K, while others have
+In addition to the slots of image areas, the boot loader requires a scratch
+area to allow for reliable image swapping. The scratch area must have a size
+that is enough to store at least the largest sector that is going to be swapped.
+Many devices have small equally sized flash sectors, eg 4K, while others have
 variable sized sectors where the largest sectors might be 128K or 256K, so the
 scratch must be big enough to store that. The scratch is only ever used when
 swapping firmware, which means only when doing an upgrade. Given that, the main
@@ -189,19 +213,19 @@ during an upgrade.
 ## Boot Swap Types
 
 When the device first boots under normal circumstances, there is an up-to-date
-firmware image in the primary slot, which mcuboot can validate and then
+firmware image in each primary slot, which mcuboot can validate and then
 chain-load. In this case, no image swaps are necessary. During device upgrades,
-however, new candidate images are present in the secondary slot, which mcuboot
-must swap into the primary slot before booting as discussed above.
+however, new candidate image(s) is present in the secondary slot(s), which
+mcuboot must swap into the primary slot(s) before booting as discussed above.
 
 Upgrading an old image with a new one by swapping can be a two-step process. In
 this process, mcuboot performs a "test" swap of image data in flash and boots
-the new image. The new image can then update the contents of flash at runtime
-to mark itself "OK", and mcuboot will then still choose to run it during the
-next boot. When this happens, the swap is made "permanent". If this doesn't
-happen, mcuboot will perform a "revert" swap during the next boot by swapping
-the images back into their original locations, and attempting to boot the old
-image.
+the new image or it will be executed during operation. The new image can then
+update the contents of flash at runtime to mark itself "OK", and mcuboot will
+then still choose to run it during the next boot. When this happens, the swap is
+made "permanent". If this doesn't happen, mcuboot will perform a "revert" swap
+during the next boot by swapping the image(s) back into its original location(s)
+, and attempting to boot the old image(s).
 
 Depending on the use case, the first swap can also be made permanent directly.
 In this case, mcuboot will never attempt to revert the images on the next reset.
@@ -213,8 +237,9 @@ at the next device reset, rather than booting the bad image again. This allows
 device firmware to make test swaps permanent only after performing a self-test
 routine.
 
-On startup, mcuboot inspects the contents of flash to decide which of these
-"swap types" to perform; this decision determines how it proceeds.
+On startup, mcuboot inspects the contents of flash to decide for each images
+which of these "swap types" to perform; this decision determines how it
+proceeds.
 
 The possible swap types, and their meanings, are:
 
@@ -266,7 +291,7 @@ image trailer. An image trailer has the following structure:
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |                      Swap size (4 octets)                     |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |   Swap type   |           0xff padding (7 octets)             |
+    |   Swap info   |           0xff padding (7 octets)             |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |   Copy done   |           0xff padding (7 octets)             |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -315,14 +340,21 @@ of 3 is explained below.
    [encrypted images](encrypted_images.md) document for more information.
 
 3. Swap size: When beginning a new swap operation, the total size that needs
-   to be swapped (based on the slot with largest image + tlvs) is written to
+   to be swapped (based on the slot with largest image + TLVs) is written to
    this location for easier recovery in case of a reset while performing the
    swap.
 
-4. Swap type: A single byte indicating the type of swap operation in progress.
-   When mcuboot resumes an interrupted swap, it uses this field to determine
-   the type of operation to perform.  This field contains one of the following
-   values:
+4. Swap info: A single byte which encodes the following information:
+    - Swap type: Stored in bits 0-3. Indicating the type of swap operation in
+    progress. When mcuboot resumes an interrupted swap, it uses this field to
+    determine the type of operation to perform. This field contains one of the
+    following values in the table below.
+    - Image number: Stored in bits 4-7. It has always 0 value at single image
+    boot. In case of multi image boot it indicates, which image was swapped when
+    interrupt happened. The same scratch area is used during in case of all
+    image swap operation. Therefore this field is used to determine which image
+    the trailer belongs to if boot status is found on scratch area when the swap
+    operation is resumed.
 
 | Name                      | Value |
 | ------------------------- | ----- |
@@ -439,8 +471,9 @@ Note: An important caveat to the above is the result when a swap is requested
 
 If mcuboot determines that it is resuming an interrupted swap (i.e., a reset
 occurred mid-swap), it fully determines the operation to resume by reading the
-`swap type` field from the active trailer.  The set of tables in the previous
-section are not necessary in the resume case.
+`swap info` field from the active trailer and extracting the swap type from bits
+0-3. The set of tables in the previous section are not necessary in the resume
+case.
 
 ## High-Level Operation
 
@@ -469,6 +502,98 @@ Procedure:
 
 3. Boot into image in primary slot.
 
+### Multiple Image Boot
+
+When the flash contains multiple executable images the boot loader's operation
+is a bit more complex but similar to the previously described procedure with
+one image. Every image can be updated independently therefore the flash is
+partitioned further to arrange two slots for each image.
+```
++--------------------+
+| MCUBoot            |
++--------------------+
+        ~~~~~            <- memory might be not contiguous
++--------------------+
+| Image 0            |
+| primary   slot     |
++--------------------+
+| Image 0            |
+| secondary slot     |
++--------------------+
+        ~~~~~            <- memory might be not contiguous
++--------------------+
+| Image N            |
+| primary   slot     |
++--------------------+
+| Image N            |
+| secondary slot     |
++--------------------+
+| Scratch            |
++--------------------+
+```
+MCUBoot is also capable of handling dependencies between images. For example
+if an image needs to be reverted it might be necessary to revert another one too
+(e.g. due to API incompatibilities) or simply to prevent from being updated
+because of an unsatisfied dependency. Therefore all aborted swaps have to be
+completed and all the swap types have to be determined for each image before
+the dependency checks. Dependency handling is described in more detail in a
+following section. The multiple image boot procedure is organized in loops which
+iterate over all the firmware images. The high-level overview of the boot
+process is presented below.
+
++ ###### Loop 1. Iterate over all images
+    1. Inspect swap status region of current image; is an interrupted swap being
+       resumed?
+        + Yes:
+            + Review the validity of previously determined swap types
+              of other images.
+            + Complete the partial swap operation.
+            + Mark the swap type as `None`.
+            + Skip to next image.
+        + No: Proceed to step 2.
+
+    2. Inspect image trailers in the primary and secondary slot; is an image
+       swap requested?
+        + Yes: Review the validity of previously determined swap types of other
+               images. Is the requested image valid (integrity and security
+               check)?
+            + Yes:
+                + Set the previously determined swap type for the current image.
+                + Skip to next image.
+            + No:
+                + Erase invalid image.
+                + Persist failure of swap procedure to image trailers.
+                + Mark the swap type as `Fail`.
+                + Skip to next image.
+        + No:
+            + Mark the swap type as `None`.
+            + Skip to next image.
+
++ ###### Loop 2. Iterate over all images
+    1. Does the current image depend on other image(s)?
+        + Yes: Are all the image dependencies satisfied?
+            + Yes: Skip to next image.
+            + No:
+                + Modify swap type depending on what the previous type was.
+                + Restart dependency check from the first image.
+        + No: Skip to next image.
+
++ ###### Loop 3. Iterate over all images
+    1. Is an image swap requested?
+        + Yes:
+            + Perform image update operation.
+            + Persist completion of swap procedure to image trailers.
+            + Skip to next image.
+        + No: Skip to next image.
+
++ ###### Loop 4. Iterate over all images
+    1. Validate image in the primary slot (integrity and security check) or
+       at least do a basic sanity check to avoid booting into an empty flash
+       area.
+
++ Boot into image in the primary slot of the 0th image position\
+  (other image in the boot chain is started by another image).
+
 ## Image Swapping
 
 The boot loader swaps the contents of the two image slots for two reasons:
@@ -493,13 +618,13 @@ bulletted lists, so maybe that is better. -->
 ​       with the greatest index); current element = "index".
 ​        b. Erase scratch area.
 ​        c. Copy secondary_slot[index] to scratch area.
-​            - If these are the last sectors (i.e., first swap being perfomed),
+​            - If these are the last sectors (i.e., first swap being performed),
 ​              copy the full sector *except* the image trailer.
 ​            - Else, copy entire sector contents.
 ​        d. Write updated swap status (i).
 ​        e. Erase secondary_slot[index]
 ​        f. Copy primary_slot[index] to secondary_slot[index]
-​            - If these are the last sectors (i.e., first swap being perfomed),
+​            - If these are the last sectors (i.e., first swap being performed),
 ​              copy the full sector *except* the image trailer.
 ​            - Else, copy entire sector contents.
 ​        g. Write updated swap status (ii).
@@ -643,7 +768,11 @@ The first step is determine where the relevant swap status region is located.
 Because this region is embedded within the image slots, its location in flash
 changes during a swap operation.  The below set of tables map image trailers
 contents to swap status location.  In these tables, the "source" field
-indicates where the swap status region is located.
+indicates where the swap status region is located. In case of multi image boot
+the images primary area and the single scratch area is always examined in pairs.
+If swap status found on scratch area then it might not belong to the current
+image. The swap_info field of swap status stores the corresponding image number.
+If it does not match then "source: none" is returned.
 
 ```
               | primary slot | scratch      |
@@ -687,13 +816,13 @@ indicates where the swap status region is located.
 
 If the swap status region indicates that the images are not contiguous, mcuboot
 determines the type of swap operation that was interrupted by reading the `swap
-type` field in the active image trailer, and then resumes the operation.  In
-other words, it applies the procedure defined in the previous section, moving
-image 1 into the primary slot and image 0 into the secondary slot. If the boot
-status indicates that an image part is present in the scratch area, this part
-is copied into the correct location by starting at step e or step h in the
-area-swap procedure, depending on whether the part belongs to image 0 or image
-1.
+info` field in the active image trailer and extracting the swap type from bits
+0-3 then resumes the operation. In other words, it applies the procedure defined
+in the previous section, moving image 1 into the primary slot and image 0 into
+the secondary slot. If the boot status indicates that an image part is present
+in the scratch area, this part is copied into the correct location by starting
+at step e or step h in the area-swap procedure, depending on whether the part
+belongs to image 0 or image 1.
 
 After the swap operation has been completed, the boot loader proceeds as though
 it had just been started.
@@ -723,7 +852,7 @@ an image:
 As indicated above, the final step of the integrity check is signature
 verification.  The boot loader can have one or more public keys embedded in it
 at build time.  During signature verification, the boot loader verifies that an
-image was signed with a private key that corresponds to the embedded keyhash
+image was signed with a private key that corresponds to the embedded KEYHASH
 TLV.
 
 For information on embedding public keys in the boot loader, as well as
@@ -731,3 +860,51 @@ producing signed images, see: [signed_images](signed_images.md).
 
 If you want to enable and use encrypted images, see:
 [encrypted_images](encrypted_images.md).
+
+## Dependency Check
+
+MCUBoot can handle multiple firmware images. It is possible to update them
+independently but in many cases it can be desired to be able to describe
+dependencies between the images (e.g. to ensure API compliance and avoid
+interoperability issues).
+
+The dependencies between images can be described with additional TLV entries in
+the TLV area after the end of an image. There can be more than one dependency
+entry, but in practice if the platform only supports two individual images then
+there can be maximum one entry which reflects to the other image.
+
+If the TLV area contains dependency TLV entries, then these are required to be
+integrity and authenticity protected. In this case the SHA256 has to be
+calculated over not just the image header and the image but also the TLV info
+header and the dependency TLVs.
+```
+A +---------------------+
+  | Header              | <- struct image_header
+  +---------------------+
+  | Payload             |
+  +---------------------+
+  | TLV area            |
+  | +-----------------+ |
+  | | TLV area header | | <- struct image_tlv_info
+  | +-----------------+ |
+  | | Dependency      | | <- Dependency entry (struct image_tlv)
+B | +-----------------+ |
+  | | SHA256 hash     | | <- hash from A - B (struct image_tlv)
+C | +-----------------+ |
+  | | Keyhash         | | <- indicates which pub. key for sig (struct image_tlv)
+  | +-----------------+ |
+  | | Signature       | | <- signature from B - C (struct image_tlv), only hash
+  | +-----------------+ |
+  +---------------------+
+```
+At the phase of dependency check all aborted swaps are finalized if there were
+any. During the dependency check the boot loader verifies whether the image
+dependencies are all satisfied. If at least one of the dependencies of an image
+is not fulfilled then the swap type of that image has to be modified
+accordingly and the dependency check needs to be restarted. This way the number
+of unsatisfied dependencies will decrease or remain the same. There is always at
+least 1 valid configuration. In worst case, the system returns to the initial
+state after dependency check.
+
+For more information on adding dependency entries to an image,
+see: [imgtool](imgtool.md).

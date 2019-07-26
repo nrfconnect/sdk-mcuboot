@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Open Source Foundries Limited
+ * Copyright (c) 2019 Arm Limited
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -64,6 +65,12 @@
 #define MCUBOOT_BOOTSTRAP 1
 #endif
 
+#ifdef CONFIG_UPDATEABLE_IMAGE_NUMBER
+#define MCUBOOT_IMAGE_NUMBER    CONFIG_UPDATEABLE_IMAGE_NUMBER
+#else
+#define MCUBOOT_IMAGE_NUMBER    1
+#endif
+
 /*
  * Enabling this option uses newer flash map APIs. This saves RAM and
  * avoids deprecated API usage.
@@ -76,5 +83,10 @@
 #define MCUBOOT_MAX_IMG_SECTORS       CONFIG_BOOT_MAX_IMG_SECTORS
 
 #endif /* !__BOOTSIM__ */
+
+#define MCUBOOT_WATCHDOG_FEED()         \
+    do {                                \
+        /* TODO: to be implemented */   \
+    } while (0)
 
 #endif /* __MCUBOOT_CONFIG_H__ */
