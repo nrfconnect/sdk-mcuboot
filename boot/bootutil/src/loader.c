@@ -2102,7 +2102,7 @@ boot_go(struct boot_rsp *rsp)
 {
     size_t slot;
     struct boot_status bs;
-    int rc;
+    int rc = 0;
     int fa_id;
 
     /* The array of slot sectors are defined here (as opposed to file scope) so
