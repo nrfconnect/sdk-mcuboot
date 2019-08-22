@@ -13,6 +13,7 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
   set(signed_image_bin ${PROJECT_BINARY_DIR}/signed.bin)
   set(to_sign_bin ${PROJECT_BINARY_DIR}/to_sign.bin)
   set(update_hex ${PROJECT_BINARY_DIR}/update.hex)
+  set(test_update_hex ${PROJECT_BINARY_DIR}/test_update.hex)
   set(update_bin ${PROJECT_BINARY_DIR}/update.bin)
 
   set(merged_hex_file
@@ -59,6 +60,10 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     COMMAND
     ${sign_cmd}
     --pad # This argument is needed for MCUboot to apply the test swap.
+    ${to_sign_hex}
+    ${test_update_hex}
+    COMMAND
+    ${sign_cmd}
     ${to_sign_hex}
     ${update_hex}
     COMMAND
