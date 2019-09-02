@@ -1,4 +1,5 @@
 #include <autoconf.h>
+#include <generated_dts_board_unfixed.h>
 
 mcuboot:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT
@@ -16,18 +17,20 @@ mcuboot_primary:
 mcuboot_secondary:
   share_size: [mcuboot_primary]
   placement:
-    after:
-      [mcuboot_primary]
+    align: {start: DT_FLASH_ERASE_BLOCK_SIZE}
+    after: mcuboot_primary
 
 mcuboot_scratch:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
   placement:
-    after: [app]
+    after: app
+    align: {start: DT_FLASH_ERASE_BLOCK_SIZE}
 
 mcuboot_storage:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_STORAGE
   placement:
     after: [mcuboot_scratch]
+    align: {start: DT_FLASH_ERASE_BLOCK_SIZE}
 
 # Padding placed before image to boot
 mcuboot_pad:
@@ -36,3 +39,4 @@ mcuboot_pad:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_PAD
   placement:
     before: [mcuboot_primary_app]
+    align: {start: DT_FLASH_ERASE_BLOCK_SIZE}
