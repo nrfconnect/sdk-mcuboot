@@ -8,6 +8,10 @@
 //! Because of this header, we have to make two passes.  The first pass will compute the size of
 //! the TLV, and the second pass will build the data for the TLV.
 
+use byteorder::{
+    LittleEndian, WriteBytesExt,
+};
+use crate::image::ImageVersion;
 use pem;
 use base64;
 use ring::{digest, rand};
@@ -22,7 +26,7 @@ use untrusted;
 use mcuboot_sys::c;
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)] // TODO: For now
 pub enum TlvKinds {
     KEYHASH = 0x01,
@@ -34,6 +38,7 @@ pub enum TlvKinds {
     ED25519 = 0x24,
     ENCRSA2048 = 0x30,
     ENCKW128 = 0x31,
+    DEPENDENCY = 0x40,
 }
 
 #[allow(dead_code, non_camel_case_types)]
@@ -53,6 +58,14 @@ pub trait ManifestGen {
     /// Retrieve the flags value for this particular manifest type.
     fn get_flags(&self) -> u32;
 
+    /// Retrieve the number of bytes of this manifest that is "protected".
+    /// This field is stored in the outside image header instead of the
+    /// manifest header.
+    fn protect_size(&self) -> u16;
+
+    /// Add a dependency on another image.
+    fn add_dependency(&mut self, id: u8, version: &ImageVersion);
+
     /// Add a sequence of bytes to the payload that the manifest is
     /// protecting.
     fn add_bytes(&mut self, bytes: &[u8]);
@@ -61,11 +74,22 @@ pub trait ManifestGen {
     fn make_tlv(self: Box<Self>) -> Vec<u8>;
 }
 
+#[derive(Debug)]
 pub struct TlvGen {
     flags: u32,
     kinds: Vec<TlvKinds>,
+    /// The total size of the payload.
     size: u16,
+    /// Extra bytes of the TLV that are protected.
+    protect_size: u16,
     payload: Vec<u8>,
+    dependencies: Vec<Dependency>,
+}
+
+#[derive(Debug)]
+struct Dependency {
+    id: u8,
+    version: ImageVersion,
 }
 
 pub const AES_SEC_KEY: &[u8; 16] = b"0123456789ABCDEF";
@@ -78,7 +102,9 @@ impl TlvGen {
             flags: 0,
             kinds: vec![TlvKinds::SHA256],
             size: 4 + 32,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -88,7 +114,9 @@ impl TlvGen {
             flags: 0,
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA2048],
             size: 4 + 32 + 4 + 32 + 4 + 256,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -98,7 +126,9 @@ impl TlvGen {
             flags: 0,
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA3072],
             size: 4 + 32 + 4 + 32 + 4 + 384,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -108,7 +138,9 @@ impl TlvGen {
             flags: 0,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ECDSA256],
             size: 4 + 32 + 4 + 32 + 4 + 72,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -118,7 +150,9 @@ impl TlvGen {
             flags: 0,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ED25519],
             size: 4 + 32 + 4 + 32 + 4 + 64,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -128,7 +162,9 @@ impl TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ENCRSA2048],
             size: 4 + 32 + 4 + 256,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -138,7 +174,9 @@ impl TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA2048, TlvKinds::ENCRSA2048],
             size: 4 + 32 + 4 + 32 + 4 + 256 + 4 + 256,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -148,7 +186,9 @@ impl TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ENCKW128],
             size: 4 + 32 + 4 + 24,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -158,7 +198,9 @@ impl TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA2048, TlvKinds::ENCKW128],
             size: 4 + 32 + 4 + 32 + 4 + 256 + 4 + 24,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -168,7 +210,9 @@ impl TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ECDSA256, TlvKinds::ENCKW128],
             size: 4 + 32 + 4 + 32 + 4 + 72 + 4 + 24,
+            protect_size: 0,
             payload: vec![],
+            dependencies: vec![],
         }
     }
 
@@ -193,6 +237,25 @@ impl ManifestGen for TlvGen {
         self.payload.extend_from_slice(bytes);
     }
 
+    fn protect_size(&self) -> u16 {
+        if self.protect_size == 0 {
+            0
+        } else {
+            // Include the protected size, as well as the TLV header.
+            4 + self.protect_size
+        }
+    }
+
+    fn add_dependency(&mut self, id: u8, version: &ImageVersion) {
+        let my_size = 4 + 4 + 8;
+        self.protect_size += my_size;
+        self.size += my_size;
+        self.dependencies.push(Dependency {
+            id: id,
+            version: version.clone(),
+        });
+    }
+
     /// Compute the TLV given the specified block of data.
     fn make_tlv(self: Box<Self>) -> Vec<u8> {
         let mut result: Vec<u8> = vec![];
@@ -200,11 +263,41 @@ impl ManifestGen for TlvGen {
         let size = self.get_size();
         result.push(0x07);
         result.push(0x69);
-        result.push((size & 0xFF) as u8);
-        result.push(((size >> 8) & 0xFF) as u8);
+        result.write_u16::<LittleEndian>(size).unwrap();
+
+        for dep in &self.dependencies {
+            result.push(TlvKinds::DEPENDENCY as u8);
+            result.push(0);
+            result.push(12);
+            result.push(0);
+
+            // The dependency.
+            result.push(dep.id);
+            for _ in 0 .. 3 {
+                result.push(0);
+            }
+            result.push(dep.version.major);
+            result.push(dep.version.minor);
+            result.write_u16::<LittleEndian>(dep.version.revision).unwrap();
+            result.write_u32::<LittleEndian>(dep.version.build_num).unwrap();
+        }
+
+        // Ring does the signature itself, which means that it must be
+        // given a full, contiguous payload.  Although this does help from
+        // a correct usage perspective, it is fairly stupid from an
+        // efficiency view.  If this is shown to be a performance issue
+        // with the tests, the protected data could be appended to the
+        // payload, and then removed after the signature is done.  For now,
+        // just make a signed payload.
+        let mut sig_payload = self.payload.clone();
+        if self.protect_size > 0 {
+            assert_eq!(self.protect_size as usize + 4, result.len());
+            sig_payload.extend_from_slice(&result);
+        }
+        let sig_payload = sig_payload;
 
         if self.kinds.contains(&TlvKinds::SHA256) {
-            let hash = digest::digest(&digest::SHA256, &self.payload);
+            let hash = digest::digest(&digest::SHA256, &sig_payload);
             let hash = hash.as_ref();
 
             assert!(hash.len() == 32);
@@ -251,7 +344,7 @@ impl ManifestGen for TlvGen {
             } else {
                 assert_eq!(signature.len(), 384);
             }
-            key_pair.sign(&RSA_PSS_SHA256, &rng, &self.payload, &mut signature).unwrap();
+            key_pair.sign(&RSA_PSS_SHA256, &rng, &sig_payload, &mut signature).unwrap();
 
             if is_rsa2048 {
                 result.push(TlvKinds::RSA2048 as u8);
@@ -259,8 +352,7 @@ impl ManifestGen for TlvGen {
                 result.push(TlvKinds::RSA3072 as u8);
             }
             result.push(0);
-            result.push((signature.len() & 0xFF) as u8);
-            result.push(((signature.len() >> 8) & 0xFF) as u8);
+            result.write_u16::<LittleEndian>(signature.len() as u16).unwrap();
             result.extend_from_slice(&signature);
         }
 
@@ -282,7 +374,7 @@ impl ManifestGen for TlvGen {
             let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING,
                                                     key_bytes).unwrap();
             let rng = rand::SystemRandom::new();
-            let payload = untrusted::Input::from(&self.payload);
+            let payload = untrusted::Input::from(&sig_payload);
             let signature = key_pair.sign(&rng, payload).unwrap();
 
             result.push(TlvKinds::ECDSA256 as u8);
@@ -295,8 +387,7 @@ impl ManifestGen for TlvGen {
                 signature[1] += 1;
             }
 
-            result.push((signature.len() & 0xFF) as u8);
-            result.push(((signature.len() >> 8) & 0xFF) as u8);
+            result.write_u16::<LittleEndian>(signature.len() as u16).unwrap();
             result.extend_from_slice(signature.as_ref());
         }
 
@@ -311,7 +402,7 @@ impl ManifestGen for TlvGen {
             result.push(0);
             result.extend_from_slice(keyhash);
 
-            let hash = digest::digest(&digest::SHA256, &self.payload);
+            let hash = digest::digest(&digest::SHA256, &sig_payload);
             let hash = hash.as_ref();
             assert!(hash.len() == 32);
 
@@ -327,8 +418,7 @@ impl ManifestGen for TlvGen {
             result.push(0);
 
             let signature = signature.as_ref().to_vec();
-            result.push((signature.len() & 0xFF) as u8);
-            result.push(((signature.len() >> 8) & 0xFF) as u8);
+            result.write_u16::<LittleEndian>(signature.len() as u16).unwrap();
             result.extend_from_slice(signature.as_ref());
         }
 

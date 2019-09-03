@@ -109,18 +109,21 @@ def getpub(key, lang):
 @click.command(help="Check that signed image can be verified by given key")
 def verify(key, imgfile):
     key = load_key(key) if key else None
-    ret = image.Image.verify(imgfile, key)
+    ret, version = image.Image.verify(imgfile, key)
     if ret == image.VerifyResult.OK:
         print("Image was correctly validated")
+        print("Image version: {}.{}.{}+{}".format(*version))
         return
     elif ret == image.VerifyResult.INVALID_MAGIC:
         print("Invalid image magic; is this an MCUboot image?")
-    elif ret == image.VerifyResult.INVALID_MAGIC:
+    elif ret == image.VerifyResult.INVALID_TLV_INFO_MAGIC:
         print("Invalid TLV info magic; is this an MCUboot image?")
     elif ret == image.VerifyResult.INVALID_HASH:
         print("Image has an invalid sha256 digest")
     elif ret == image.VerifyResult.INVALID_SIGNATURE:
         print("No signature found for the given key")
+    else:
+        print("Unknown return code: {}".format(ret))
     sys.exit(1)
 
 

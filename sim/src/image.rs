@@ -1,9 +1,20 @@
-use log::{info, warn, error};
+use byteorder::{
+    LittleEndian, WriteBytesExt,
+};
+use log::{
+    Level::Info,
+    error,
+    info,
+    log_enabled,
+    warn,
+};
 use rand::{
     distributions::{IndependentSample, Range},
     Rng, SeedableRng, XorShiftRng,
 };
 use std::{
+    collections::HashSet,
+    io::{Cursor, Write},
     mem,
     slice,
 };
@@ -23,6 +34,13 @@ use crate::{
     DeviceName,
 };
 use crate::caps::Caps;
+use crate::depends::{
+    BoringDep,
+    Depender,
+    DepTest,
+    PairDep,
+    UpgradeInfo,
+};
 use crate::tlv::{ManifestGen, TlvGen, TlvFlags, AES_SEC_KEY};
 
 /// A builder for Images.  This describes a single run of the simulator,
@@ -101,6 +119,7 @@ impl ImagesBuilder {
                 trailer_off: primary_base + primary_len - offset_from_end,
                 len: primary_len as usize,
                 dev_id: primary_dev_id,
+                index: 0,
             };
 
             // And an upgrade image.
@@ -109,6 +128,7 @@ impl ImagesBuilder {
                 trailer_off: secondary_base + secondary_len - offset_from_end,
                 len: secondary_len as usize,
                 dev_id: secondary_dev_id,
+                index: 1,
             };
 
             slots.push([primary, secondary]);
@@ -137,16 +157,23 @@ impl ImagesBuilder {
     }
 
     /// Construct an `Images` that doesn't expect an upgrade to happen.
-    pub fn make_no_upgrade_image(self) -> Images {
+    pub fn make_no_upgrade_image(self, deps: &DepTest) -> Images {
+        let num_images = self.num_images();
         let mut flash = self.flash;
-        let images = self.slots.into_iter().map(|slots| {
-            let primaries = install_image(&mut flash, &slots, 0, 42784, false);
-            let upgrades = install_image(&mut flash, &slots, 1, 46928, false);
+        let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
+            let dep: Box<dyn Depender> = if num_images > 1 {
+                Box::new(PairDep::new(num_images, image_num, deps))
+            } else {
+                Box::new(BoringDep(image_num))
+            };
+            let primaries = install_image(&mut flash, &slots[0], 42784, &*dep, false);
+            let upgrades = install_image(&mut flash, &slots[1], 46928, &*dep, false);
             OneImage {
                 slots: slots,
                 primaries: primaries,
                 upgrades: upgrades,
             }}).collect();
+        install_ptable(&mut flash, &self.areadesc);
         Images {
             flash: flash,
             areadesc: self.areadesc,
@@ -155,15 +182,14 @@ impl ImagesBuilder {
         }
     }
 
-    /// Construct an `Images` for normal testing.
-    pub fn make_image(self) -> Images {
-        let mut images = self.make_no_upgrade_image();
+    pub fn make_image(self, deps: &DepTest, permanent: bool) -> Images {
+        let mut images = self.make_no_upgrade_image(deps);
         for image in &images.images {
             mark_upgrade(&mut images.flash, &image.slots[1]);
         }
 
         // upgrades without fails, counts number of flash operations
-        let total_count = match images.run_basic_upgrade() {
+        let total_count = match images.run_basic_upgrade(permanent) {
             Ok(v)  => v,
             Err(_) => {
                 panic!("Unable to perform basic upgrade");
@@ -176,9 +202,10 @@ impl ImagesBuilder {
 
     pub fn make_bad_secondary_slot_image(self) -> Images {
         let mut bad_flash = self.flash;
-        let images = self.slots.into_iter().map(|slots| {
-            let primaries = install_image(&mut bad_flash, &slots, 0, 32784, false);
-            let upgrades = install_image(&mut bad_flash, &slots, 1, 41928, true);
+        let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
+            let dep = BoringDep(image_num);
+            let primaries = install_image(&mut bad_flash, &slots[0], 32784, &dep, false);
+            let upgrades = install_image(&mut bad_flash, &slots[1], 41928, &dep, true);
             OneImage {
                 slots: slots,
                 primaries: primaries,
@@ -297,6 +324,10 @@ impl ImagesBuilder {
             }
         }
     }
+
+    pub fn num_images(&self) -> usize {
+        self.slots.len()
+    }
 }
 
 impl Images {
@@ -304,8 +335,8 @@ impl Images {
     ///
     /// Returns the number of flash operations which can later be used to
     /// inject failures at chosen steps.
-    pub fn run_basic_upgrade(&self) -> Result<i32, ()> {
-        let (flash, total_count) = self.try_upgrade(None);
+    pub fn run_basic_upgrade(&self, permanent: bool) -> Result<i32, ()> {
+        let (flash, total_count) = self.try_upgrade(None, permanent);
         info!("Total flash operation count={}", total_count);
 
         if !self.verify_images(&flash, 0, 1) {
@@ -314,6 +345,14 @@ impl Images {
         } else {
             Ok(total_count)
         }
+    }
+
+    /// Test a simple upgrade, with dependencies given, and verify that the
+    /// image does as is described in the test.
+    pub fn run_check_deps(&self, deps: &DepTest) -> bool {
+        let (flash, _) = self.try_upgrade(None, true);
+
+        self.verify_dep_images(&flash, deps)
     }
 
     pub fn run_basic_revert(&self) -> bool {
@@ -345,7 +384,7 @@ impl Images {
         // Let's try an image halfway through.
         for i in 1 .. total_flash_ops {
             info!("Try interruption at {}", i);
-            let (flash, count) = self.try_upgrade(Some(i));
+            let (flash, count) = self.try_upgrade(Some(i), true);
             info!("Second boot, count={}", count);
             if !self.verify_images(&flash, 0, 1) {
                 warn!("FAIL at step {} of {}", i, total_flash_ops);
@@ -379,10 +418,6 @@ impl Images {
         }
 
         fails > 0
-    }
-
-    pub fn run_perm_with_random_fails_5(&self) -> bool {
-        self.run_perm_with_random_fails(5)
     }
 
     pub fn run_perm_with_random_fails(&self, total_fails: usize) -> bool {
@@ -431,7 +466,7 @@ impl Images {
         let mut fails = 0;
 
         if Caps::SwapUpgrade.present() {
-            for i in 1 .. (self.total_count.unwrap() - 1) {
+            for i in 1 .. self.total_count.unwrap() {
                 info!("Try interruption at {}", i);
                 if self.try_revert_with_fail_at(i) {
                     error!("Revert failed at interruption {}", i);
@@ -779,11 +814,13 @@ impl Images {
 
     /// Test a boot, optionally stopping after 'n' flash options.  Returns a count
     /// of the number of flash operations done total.
-    fn try_upgrade(&self, stop: Option<i32>) -> (SimMultiFlash, i32) {
+    fn try_upgrade(&self, stop: Option<i32>, permanent: bool) -> (SimMultiFlash, i32) {
         // Clone the flash to have a new copy.
         let mut flash = self.flash.clone();
 
-        self.mark_permanent_upgrades(&mut flash, 1);
+        if permanent {
+            self.mark_permanent_upgrades(&mut flash, 1);
+        }
 
         let mut counter = stop.unwrap_or(0);
 
@@ -825,6 +862,13 @@ impl Images {
         let (x, _) = c::boot_go(&mut flash, &self.areadesc, Some(&mut counter), false);
         if x != -0x13579 {
             warn!("Should have stopped test at interruption point");
+            fails += 1;
+        }
+
+        // In a multi-image setup, copy done might be set if any number of
+        // images was already successfully swapped.
+        if !self.verify_trailers_loose(&flash, 0, None, None, BOOT_FLAG_UNSET) {
+            warn!("copy_done should be unset");
             fails += 1;
         }
 
@@ -942,17 +986,42 @@ impl Images {
     /// Verify the image in the given flash device, the specified slot
     /// against the expected image.
     fn verify_images(&self, flash: &SimMultiFlash, slot: usize, against: usize) -> bool {
-        for image in &self.images {
-            if !verify_image(flash, &image.slots, slot,
-                             match against {
-                                 0 => &image.primaries,
-                                 1 => &image.upgrades,
-                                 _ => panic!("Invalid 'against'"),
-                             }) {
-                return false;
+        self.images.iter().all(|image| {
+            verify_image(flash, &image.slots[slot],
+                         match against {
+                             0 => &image.primaries,
+                             1 => &image.upgrades,
+                             _ => panic!("Invalid 'against'")
+                             })
+        })
+    }
+
+    /// Verify the images, according to the dependency test.
+    fn verify_dep_images(&self, flash: &SimMultiFlash, deps: &DepTest) -> bool {
+        for (image_num, (image, upgrade)) in self.images.iter().zip(deps.upgrades.iter()).enumerate() {
+            info!("Upgrade: slot:{}, {:?}", image_num, upgrade);
+            if !verify_image(flash, &image.slots[0],
+                            match upgrade {
+                                UpgradeInfo::Upgraded => &image.upgrades,
+                                UpgradeInfo::Held => &image.primaries,
+                            }) {
+                error!("Failed to upgrade properly: image: {}, upgrade: {:?}", image_num, upgrade);
+                return true;
             }
         }
-        true
+
+        false
+    }
+
+    /// Verify that at least one of the trailers of the images have the
+    /// specified values.
+    fn verify_trailers_loose(&self, flash: &SimMultiFlash, slot: usize,
+                             magic: Option<u8>, image_ok: Option<u8>,
+                             copy_done: Option<u8>) -> bool {
+        self.images.iter().any(|image| {
+            verify_trailer(flash, &image.slots[slot],
+                           magic, image_ok, copy_done)
+        })
     }
 
     /// Verify that the trailers of the images have the specified
@@ -960,13 +1029,10 @@ impl Images {
     fn verify_trailers(&self, flash: &SimMultiFlash, slot: usize,
                        magic: Option<u8>, image_ok: Option<u8>,
                        copy_done: Option<u8>) -> bool {
-        for image in &self.images {
-            if !verify_trailer(flash, &image.slots, slot,
-                               magic, image_ok, copy_done) {
-                return false;
-            }
-        }
-        true
+        self.images.iter().all(|image| {
+            verify_trailer(flash, &image.slots[slot],
+                           magic, image_ok, copy_done)
+        })
     }
 
     /// Mark each of the images for permanent upgrade.
@@ -980,6 +1046,20 @@ impl Images {
     fn mark_upgrades(&self, flash: &mut SimMultiFlash, slot: usize) {
         for image in &self.images {
             mark_upgrade(flash, &image.slots[slot]);
+        }
+    }
+
+    /// Dump out the flash image(s) to one or more files for debugging
+    /// purposes.  The names will be written as either "{prefix}.mcubin" or
+    /// "{prefix}-001.mcubin" depending on how many images there are.
+    pub fn debug_dump(&self, prefix: &str) {
+        for (id, fdev) in &self.flash {
+            let name = if self.flash.len() == 1 {
+                format!("{}.mcubin", prefix)
+            } else {
+                format!("{}-{:>0}.mcubin", prefix, id)
+            };
+            fdev.write_file(&name).unwrap();
         }
     }
 }
@@ -997,13 +1077,18 @@ fn show_flash(flash: &dyn Flash) {
 
 /// Install a "program" into the given image.  This fakes the image header, or at least all of the
 /// fields used by the given code.  Returns a copy of the image that was written.
-fn install_image(flash: &mut SimMultiFlash, slots: &[SlotInfo], slot: usize, len: usize,
-                 bad_sig: bool) -> ImageData {
-    let offset = slots[slot].base_off;
-    let slot_len = slots[slot].len;
-    let dev_id = slots[slot].dev_id;
+fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: usize,
+                 deps: &dyn Depender, bad_sig: bool) -> ImageData {
+    let offset = slot.base_off;
+    let slot_len = slot.len;
+    let dev_id = slot.dev_id;
 
     let mut tlv: Box<dyn ManifestGen> = Box::new(make_tlv());
+
+    // Add the dependencies early to the tlv.
+    for dep in deps.my_deps(offset, slot.index) {
+        tlv.add_dependency(deps.other_id(), &dep);
+    }
 
     const HDR_SIZE: usize = 32;
 
@@ -1012,15 +1097,10 @@ fn install_image(flash: &mut SimMultiFlash, slots: &[SlotInfo], slot: usize, len
         magic: tlv.get_magic(),
         load_addr: 0,
         hdr_size: HDR_SIZE as u16,
-        _pad1: 0,
+        protect_tlv_size: tlv.protect_size(),
         img_size: len as u32,
         flags: tlv.get_flags(),
-        ver: ImageVersion {
-            major: (offset / (128 * 1024)) as u8,
-            minor: 0,
-            revision: 1,
-            build_num: offset as u32,
-        },
+        ver: deps.my_version(offset, slot.index),
         _pad2: 0,
     };
 
@@ -1033,6 +1113,15 @@ fn install_image(flash: &mut SimMultiFlash, slots: &[SlotInfo], slot: usize, len
     // The core of the image itself is just pseudorandom data.
     let mut b_img = vec![0; len];
     splat(&mut b_img, offset);
+
+    // Add some information at the start of the payload to make it easier
+    // to see what it is.  This will fail if the image itself is too small.
+    {
+        let mut wr = Cursor::new(&mut b_img);
+        writeln!(&mut wr, "offset: {:#x}, dev_id: {:#x}, slot_info: {:?}",
+                 offset, dev_id, slot).unwrap();
+        writeln!(&mut wr, "version: {:?}", deps.my_version(offset, slot.index)).unwrap();
+    }
 
     // TLV signatures work over plain image
     tlv.add_bytes(&b_img);
@@ -1082,7 +1171,7 @@ fn install_image(flash: &mut SimMultiFlash, slots: &[SlotInfo], slot: usize, len
 
     let dev = flash.get_mut(&dev_id).unwrap();
 
-    if slot == 0 {
+    if slot.index == 0 {
         let enc_copy: Option<Vec<u8>>;
 
         if is_encrypted {
@@ -1186,22 +1275,21 @@ impl ImageData {
 }
 
 /// Verify that given image is present in the flash at the given offset.
-fn verify_image(flash: &SimMultiFlash, slots: &[SlotInfo], slot: usize,
-                images: &ImageData) -> bool {
-    let image = images.find(slot);
+fn verify_image(flash: &SimMultiFlash, slot: &SlotInfo, images: &ImageData) -> bool {
+    let image = images.find(slot.index);
     let buf = image.as_slice();
-    let dev_id = slots[slot].dev_id;
+    let dev_id = slot.dev_id;
 
     let mut copy = vec![0u8; buf.len()];
-    let offset = slots[slot].base_off;
+    let offset = slot.base_off;
     let dev = flash.get(&dev_id).unwrap();
     dev.read(offset, &mut copy).unwrap();
 
     if buf != &copy[..] {
         for i in 0 .. buf.len() {
             if buf[i] != copy[i] {
-                info!("First failure for slot{} at {:#x} {:#x}!={:#x}",
-                      slot, offset + i, buf[i], copy[i]);
+                info!("First failure for slot{} at {:#x} ({:#x} within) {:#x}!={:#x}",
+                      slot.index, offset + i, i, buf[i], copy[i]);
                 break;
             }
         }
@@ -1211,15 +1299,15 @@ fn verify_image(flash: &SimMultiFlash, slots: &[SlotInfo], slot: usize,
     }
 }
 
-fn verify_trailer(flash: &SimMultiFlash, slots: &[SlotInfo], slot: usize,
+fn verify_trailer(flash: &SimMultiFlash, slot: &SlotInfo,
                   magic: Option<u8>, image_ok: Option<u8>,
                   copy_done: Option<u8>) -> bool {
     if Caps::OverwriteUpgrade.present() {
         return true;
     }
 
-    let offset = slots[slot].trailer_off + c::boot_max_align();
-    let dev_id = slots[slot].dev_id;
+    let offset = slot.trailer_off + c::boot_max_align();
+    let dev_id = slot.dev_id;
     let mut copy = vec![0u8; c::boot_magic_sz() + c::boot_max_align() * 3];
     let mut failed = false;
 
@@ -1274,13 +1362,64 @@ fn verify_trailer(flash: &SimMultiFlash, slots: &[SlotInfo], slot: usize,
     !failed
 }
 
+/// Install a partition table.  This is a simplified partition table that
+/// we write at the beginning of flash so make it easier for external tools
+/// to analyze these images.
+fn install_ptable(flash: &mut SimMultiFlash, areadesc: &AreaDesc) {
+    let ids: HashSet<u8> = areadesc.iter_areas().map(|area| area.device_id).collect();
+    for &id in &ids {
+        // If there are any partitions in this device that start at 0, and
+        // aren't marked as the BootLoader partition, avoid adding the
+        // partition table.  This makes it harder to view the image, but
+        // avoids messing up images already written.
+        if areadesc.iter_areas().any(|area| {
+            area.device_id == id &&
+                area.off == 0 &&
+                area.flash_id != FlashId::BootLoader
+        }) {
+            if log_enabled!(Info) {
+                let special: Vec<FlashId> = areadesc.iter_areas()
+                    .filter(|area| area.device_id == id && area.off == 0)
+                    .map(|area| area.flash_id)
+                    .collect();
+                info!("Skipping partition table: {:?}", special);
+            }
+            break;
+        }
+
+        let mut buf: Vec<u8> = vec![];
+        write!(&mut buf, "mcuboot\0").unwrap();
+
+        // Iterate through all of the partitions in that device, and encode
+        // into the table.
+        let count = areadesc.iter_areas().filter(|area| area.device_id == id).count();
+        buf.write_u32::<LittleEndian>(count as u32).unwrap();
+
+        for area in areadesc.iter_areas().filter(|area| area.device_id == id) {
+            buf.write_u32::<LittleEndian>(area.flash_id as u32).unwrap();
+            buf.write_u32::<LittleEndian>(area.off).unwrap();
+            buf.write_u32::<LittleEndian>(area.size).unwrap();
+            buf.write_u32::<LittleEndian>(0).unwrap();
+        }
+
+        let dev = flash.get_mut(&id).unwrap();
+
+        // Pad to alignment.
+        while buf.len() % dev.align() != 0 {
+            buf.push(0);
+        }
+
+        dev.write(0, &buf).unwrap();
+    }
+}
+
 /// The image header
 #[repr(C)]
 pub struct ImageHeader {
     magic: u32,
     load_addr: u32,
     hdr_size: u16,
-    _pad1: u16,
+    protect_tlv_size: u16,
     img_size: u32,
     flags: u32,
     ver: ImageVersion,
@@ -1290,18 +1429,21 @@ pub struct ImageHeader {
 impl AsRaw for ImageHeader {}
 
 #[repr(C)]
+#[derive(Clone, Debug)]
 pub struct ImageVersion {
-    major: u8,
-    minor: u8,
-    revision: u16,
-    build_num: u32,
+    pub major: u8,
+    pub minor: u8,
+    pub revision: u16,
+    pub build_num: u32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SlotInfo {
     pub base_off: usize,
     pub trailer_off: usize,
     pub len: usize,
+    // Which slot within this device.
+    pub index: usize,
     pub dev_id: u8,
 }
 

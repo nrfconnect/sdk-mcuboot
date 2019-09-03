@@ -49,14 +49,18 @@ struct enc_key_data {
 
 extern const struct bootutil_key bootutil_enc_key;
 
-int boot_enc_set_key(uint8_t slot, uint8_t *enckey);
-int boot_enc_load(const struct image_header *hdr, const struct flash_area *fap,
+int boot_enc_set_key(struct enc_key_data *enc_state, uint8_t slot,
         uint8_t *enckey);
-bool boot_enc_valid(const struct flash_area *fap);
-void boot_enc_mark_keys_invalid(void);
-void boot_encrypt(const struct flash_area *fap, uint32_t off, uint32_t sz,
+int boot_enc_load(struct enc_key_data *enc_state, int image_index,
+        const struct image_header *hdr, const struct flash_area *fap,
+        uint8_t *enckey);
+bool boot_enc_valid(struct enc_key_data *enc_state, int image_index,
+        const struct flash_area *fap);
+void boot_enc_mark_keys_invalid(struct enc_key_data *enc_state);
+void boot_encrypt(struct enc_key_data *enc_state, int image_index,
+        const struct flash_area *fap, uint32_t off, uint32_t sz,
         uint32_t blk_off, uint8_t *buf);
-void boot_enc_zeroize(void);
+void boot_enc_zeroize(struct enc_key_data *enc_state);
 
 #ifdef __cplusplus
 }

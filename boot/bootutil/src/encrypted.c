@@ -42,14 +42,11 @@
 #  endif
 #endif
 
-
 #include "bootutil/image.h"
 #include "bootutil/enc_key.h"
 #include "bootutil/sign_key.h"
 
 #include "bootutil_priv.h"
-
-static struct enc_key_data enc_state[BOOT_NUM_SLOTS];
 
 #define TLV_ENC_RSA_SZ  256
 #define TLV_ENC_KW_SZ   24
@@ -180,7 +177,7 @@ parse_enckey(mbedtls_rsa_context *ctx, uint8_t **p, uint8_t *end)
 #endif
 
 int
-boot_enc_set_key(uint8_t slot, uint8_t *enckey)
+boot_enc_set_key(struct enc_key_data *enc_state, uint8_t slot, uint8_t *enckey)
 {
     int rc;
 
@@ -215,8 +212,9 @@ boot_enc_set_key(uint8_t slot, uint8_t *enckey)
  * Load encryption key.
  */
 int
-boot_enc_load(const struct image_header *hdr, const struct flash_area *fap,
-              uint8_t *enckey)
+boot_enc_load(struct enc_key_data *enc_state, int image_index,
+        const struct image_header *hdr, const struct flash_area *fap,
+        uint8_t *enckey)
 {
 #if defined(MCUBOOT_ENCRYPT_RSA)
     mbedtls_rsa_context rsa;
@@ -233,7 +231,7 @@ boot_enc_load(const struct image_header *hdr, const struct flash_area *fap,
     uint8_t enckey_type;
     int rc;
 
-    rc = flash_area_id_to_image_slot(fap->fa_id);
+    rc = flash_area_id_to_multi_image_slot(image_index, fap->fa_id);
     if (rc < 0) {
         return rc;
     }
@@ -244,7 +242,7 @@ boot_enc_load(const struct image_header *hdr, const struct flash_area *fap,
         return 1;
     }
 
-    off = hdr->ih_img_size + hdr->ih_hdr_size;
+    off = BOOT_TLV_OFF(hdr);
 
     rc = flash_area_read(fap, off, &info, sizeof(info));
     if (rc) {
@@ -307,14 +305,15 @@ boot_enc_load(const struct image_header *hdr, const struct flash_area *fap,
 }
 
 bool
-boot_enc_valid(const struct flash_area *fap)
+boot_enc_valid(struct enc_key_data *enc_state, int image_index,
+        const struct flash_area *fap)
 {
     int rc;
 
-    rc = flash_area_id_to_image_slot(fap->fa_id);
+    rc = flash_area_id_to_multi_image_slot(image_index, fap->fa_id);
     if (rc < 0) {
         /* can't get proper slot number - skip encryption, */
-        /* postpone the erro for a upper layer */
+        /* postpone the error for a upper layer */
         return false;
     }
 
@@ -322,7 +321,7 @@ boot_enc_valid(const struct flash_area *fap)
 }
 
 void
-boot_enc_mark_keys_invalid(void)
+boot_enc_mark_keys_invalid(struct enc_key_data *enc_state)
 {
     size_t slot;
 
@@ -332,7 +331,8 @@ boot_enc_mark_keys_invalid(void)
 }
 
 void
-boot_encrypt(const struct flash_area *fap, uint32_t off, uint32_t sz,
+boot_encrypt(struct enc_key_data *enc_state, int image_index,
+        const struct flash_area *fap, uint32_t off, uint32_t sz,
         uint32_t blk_off, uint8_t *buf)
 {
     struct enc_key_data *enc;
@@ -349,7 +349,7 @@ boot_encrypt(const struct flash_area *fap, uint32_t off, uint32_t sz,
     nonce[14] = (uint8_t)(off >> 8);
     nonce[15] = (uint8_t)off;
 
-    rc = flash_area_id_to_image_slot(fap->fa_id);
+    rc = flash_area_id_to_multi_image_slot(image_index, fap->fa_id);
     if (rc < 0) {
         assert(0);
         return;
@@ -378,9 +378,12 @@ boot_encrypt(const struct flash_area *fap, uint32_t off, uint32_t sz,
     }
 }
 
-void boot_enc_zeroize(void)
+/**
+ * Clears encrypted state after use.
+ */
+void boot_enc_zeroize(struct enc_key_data *enc_state)
 {
-    memset(&enc_state, 0, sizeof(enc_state));
+    memset(enc_state, 0, sizeof(struct enc_key_data) * BOOT_NUM_SLOTS);
 }
 
 #endif /* MCUBOOT_ENC_IMAGES */
