@@ -51,6 +51,11 @@ pipeline {
         script {
           lib_Status.set("PENDING", 'MCUBOOT', CI_STATE);
           dir('mcuboot') {
+
+            if (CI_STATE.MCUBOOT.CHANGE_TITLE.toLowerCase().contains('[nrf mergeup]')) {
+              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS --exclude-module Gitlint"
+            }
+
             def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.MCUBOOT)
             if (BUILD_TYPE == "PR") {
               COMMIT_RANGE = "$CI_STATE.MCUBOOT.MERGE_BASE..$CI_STATE.MCUBOOT.REPORT_SHA"
