@@ -62,6 +62,7 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
     uint32_t off;
     int rc;
 #ifdef MCUBOOT_ENC_IMAGES
+    uint32_t protected_off;
     uint32_t blk_off;
 #endif
 
@@ -69,6 +70,14 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
     (void)enc_state;
     (void)image_index;
     (void)hdr_size;
+#endif
+
+#ifdef MCUBOOT_ENC_IMAGES
+    /* Encrypted images only exist in the secondary slot */
+    if (MUST_DECRYPT(fap, image_index, hdr) &&
+            !boot_enc_valid(enc_state, image_index, fap)) {
+        return -1;
+    }
 #endif
 
     bootutil_sha256_init(&sha256_ctx);
@@ -79,17 +88,13 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
         bootutil_sha256_update(&sha256_ctx, seed, seed_len);
     }
 
-#ifdef MCUBOOT_ENC_IMAGES
-    /* Encrypted images only exist in the secondary slot */
-    if (fap->fa_id == FLASH_AREA_IMAGE_SECONDARY(image_index) &&
-            IS_ENCRYPTED(hdr) && !boot_enc_valid(enc_state, image_index, fap)) {
-        return -1;
-    }
-#endif
-
     /* Hash is computed over image header and image itself. */
     hdr_size = hdr->ih_hdr_size;
     size = BOOT_TLV_OFF(hdr);
+
+#ifdef MCUBOOT_ENC_IMAGES
+    protected_off = size;
+#endif
 
 #if (MCUBOOT_IMAGE_NUMBER > 1)
     /* If dependency TLVs are present then the TLV info header and the
@@ -103,28 +108,35 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
 
     for (off = 0; off < size; off += blk_sz) {
         blk_sz = size - off;
+#ifdef MCUBOOT_ENC_IMAGES
+        /* The only data that is encrypted in an image is the payload;
+         * both header and TLVs (when protected) are not.
+         */
+        if ((off < hdr_size) && ((off + blk_sz) > hdr_size)) {
+            /* read only the header */
+            blk_sz = hdr_size - off;
+        } else if (off >= protected_off) {
+            /* read protected TLVs */
+            blk_sz = size - off;
+        } else if ((off + blk_sz) > protected_off) {
+            /* do not copy beyond image payload */
+            blk_sz = protected_off - off;
+        }
+#endif
         if (blk_sz > tmp_buf_sz) {
             blk_sz = tmp_buf_sz;
         }
-#ifdef MCUBOOT_ENC_IMAGES
-        /* Avoid reading header data together with other image data
-         * because the header is not encrypted, so maintain correct
-         * bounds when sending encrypted data to decrypt routine.
-         */
-        if ((off < hdr_size) && ((off + blk_sz) > hdr_size)) {
-            blk_sz = hdr_size - off;
-        }
-#endif
         rc = flash_area_read(fap, off, tmp_buf, blk_sz);
         if (rc) {
             return rc;
         }
 #ifdef MCUBOOT_ENC_IMAGES
-        if (fap->fa_id == FLASH_AREA_IMAGE_SECONDARY(image_index) &&
-                IS_ENCRYPTED(hdr) && off >= hdr_size) {
-            blk_off = (off - hdr_size) & 0xf;
-            boot_encrypt(enc_state, image_index, fap, off - hdr_size, blk_sz,
-                    blk_off, tmp_buf);
+        if (MUST_DECRYPT(fap, image_index, hdr)) {
+            if (off >= hdr_size && off < protected_off) {
+                blk_off = (off - hdr_size) & 0xf;
+                boot_encrypt(enc_state, image_index, fap, off - hdr_size,
+                        blk_sz, blk_off, tmp_buf);
+            }
         }
 #endif
         bootutil_sha256_update(&sha256_ctx, tmp_buf, blk_sz);
@@ -212,7 +224,6 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
     uint32_t off;
     uint32_t end;
     int sha256_valid = 0;
-    struct image_tlv_info info;
 #ifdef EXPECTED_SIG_TLV
     int valid_signature = 0;
     int key_id = -1;
@@ -232,18 +243,10 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
         memcpy(out_hash, hash, 32);
     }
 
-    /* The TLVs come after the image. */
-    off = BOOT_TLV_OFF(hdr);
-
-    rc = flash_area_read(fap, off, &info, sizeof(info));
+    rc = boot_find_tlv_offs(hdr, fap, &off, &end);
     if (rc) {
         return rc;
     }
-    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
-        return -1;
-    }
-    end = off + info.it_tlv_tot;
-    off += sizeof(info);
 
     /*
      * Traverse through all of the TLVs, performing any checks we know

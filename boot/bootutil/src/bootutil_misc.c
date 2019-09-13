@@ -407,7 +407,7 @@ boot_write_magic(const struct flash_area *fap)
 
     off = boot_magic_off(fap);
 
-    BOOT_LOG_DBG("writing magic; fa_id=%d off=0x%x (0x%x)",
+    BOOT_LOG_DBG("writing magic; fa_id=%d off=0x%lx (0x%lx)",
                  fap->fa_id, off, fap->fa_off + off);
     rc = flash_area_write(fap, off, boot_img_magic, BOOT_MAGIC_SZ);
     if (rc != 0) {
@@ -464,7 +464,7 @@ boot_write_copy_done(const struct flash_area *fap)
     uint32_t off;
 
     off = boot_copy_done_off(fap);
-    BOOT_LOG_DBG("writing copy_done; fa_id=%d off=0x%x (0x%x)",
+    BOOT_LOG_DBG("writing copy_done; fa_id=%d off=0x%lx (0x%lx)",
                  fap->fa_id, off, fap->fa_off + off);
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
 }
@@ -475,7 +475,7 @@ boot_write_image_ok(const struct flash_area *fap)
     uint32_t off;
 
     off = boot_image_ok_off(fap);
-    BOOT_LOG_DBG("writing image_ok; fa_id=%d off=0x%x (0x%x)",
+    BOOT_LOG_DBG("writing image_ok; fa_id=%d off=0x%lx (0x%lx)",
                  fap->fa_id, off, fap->fa_off + off);
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
 }
@@ -494,7 +494,7 @@ boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type,
 
     BOOT_SET_SWAP_INFO(swap_info, image_num, swap_type);
     off = boot_swap_info_off(fap);
-    BOOT_LOG_DBG("writing swap_info; fa_id=%d off=0x%x (0x%x), swap_type=0x%x"
+    BOOT_LOG_DBG("writing swap_info; fa_id=%d off=0x%lx (0x%lx), swap_type=0x%x"
                  " image_num=0x%x",
                  fap->fa_id, off, fap->fa_off + off, swap_type, image_num);
     return boot_write_trailer(fap, off, (const uint8_t *) &swap_info, 1);
@@ -506,7 +506,7 @@ boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size)
     uint32_t off;
 
     off = boot_swap_size_off(fap);
-    BOOT_LOG_DBG("writing swap_size; fa_id=%d off=0x%x (0x%x)",
+    BOOT_LOG_DBG("writing swap_size; fa_id=%d off=0x%lx (0x%lx)",
                  fap->fa_id, off, fap->fa_off + off);
     return boot_write_trailer(fap, off, (const uint8_t *) &swap_size, 4);
 }
@@ -580,12 +580,15 @@ boot_swap_type_multi(int image_index)
     return BOOT_SWAP_TYPE_NONE;
 }
 
+/*
+ * This function is not used by the bootloader itself, but its required API
+ * by external tooling like mcumgr.
+ */
 int
 boot_swap_type(void)
 {
     return boot_swap_type_multi(0);
 }
-
 
 /**
  * Marks the image in the secondary slot as pending.  On the next reboot,
@@ -718,37 +721,3 @@ done:
     return rc;
 }
 
-#if (BOOT_IMAGE_NUMBER > 1)
-/**
- * Check if the version of the image is not older than required.
- *
- * @param req         Required minimal image version.
- * @param ver         Version of the image to be checked.
- *
- * @return            0 if the version is sufficient, nonzero otherwise.
- */
-int
-boot_is_version_sufficient(struct image_version *req,
-                           struct image_version *ver)
-{
-    if (ver->iv_major > req->iv_major) {
-        return 0;
-    }
-    if (ver->iv_major < req->iv_major) {
-        return BOOT_EBADVERSION;
-    }
-    /* The major version numbers are equal. */
-    if (ver->iv_minor > req->iv_minor) {
-        return 0;
-    }
-    if (ver->iv_minor < req->iv_minor) {
-        return BOOT_EBADVERSION;
-    }
-    /* The minor version numbers are equal. */
-    if (ver->iv_revision < req->iv_revision) {
-        return BOOT_EBADVERSION;
-    }
-
-    return 0;
-}
-#endif /* BOOT_IMAGE_NUMBER > 1 */

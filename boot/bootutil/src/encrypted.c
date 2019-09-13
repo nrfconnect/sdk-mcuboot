@@ -53,7 +53,7 @@
 
 #if defined(MCUBOOT_ENCRYPT_KW)
 #if defined(MCUBOOT_USE_MBED_TLS)
-int
+static int
 key_unwrap(uint8_t *wrapped, uint8_t *enckey)
 {
     mbedtls_nist_kw_context kw;
@@ -80,7 +80,7 @@ done:
  * Implements AES key unwrapping following RFC-3394 section 2.2.2, using
  * tinycrypt for AES-128 decryption.
  */
-int
+static int
 key_unwrap(uint8_t *wrapped, uint8_t *enckey)
 {
     struct tc_aes_key_sched_struct aes;
@@ -224,7 +224,6 @@ boot_enc_load(struct enc_key_data *enc_state, int image_index,
 #endif
     uint32_t off;
     uint32_t end;
-    struct image_tlv_info info;
     struct image_tlv tlv;
     uint8_t buf[TLV_ENC_RSA_SZ];
     uint8_t slot;
@@ -242,20 +241,12 @@ boot_enc_load(struct enc_key_data *enc_state, int image_index,
         return 1;
     }
 
-    off = BOOT_TLV_OFF(hdr);
-
-    rc = flash_area_read(fap, off, &info, sizeof(info));
+    rc = boot_find_tlv_offs(hdr, fap, &off, &end);
     if (rc) {
-        return rc;
-    }
-    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
         return -1;
     }
-    end = off + info.it_tlv_tot;
-    off += sizeof(info);
 
-    enckey_type = 0;
-    for (; off < end; off += sizeof(tlv) + tlv.it_len) {
+    for (enckey_type = 0; off < end; off += sizeof(tlv) + tlv.it_len) {
         rc = flash_area_read(fap, off, &tlv, sizeof tlv);
         if (rc) {
             return rc;
@@ -267,7 +258,7 @@ boot_enc_load(struct enc_key_data *enc_state, int image_index,
             }
             rc = flash_area_read(fap, off + sizeof(tlv), buf, EXPECTED_ENC_LEN);
             if (rc) {
-                return rc;
+                return -1;
             }
             enckey_type = EXPECTED_ENC_TLV;
             break;
@@ -276,30 +267,30 @@ boot_enc_load(struct enc_key_data *enc_state, int image_index,
 
     if (enckey_type == 0) {
         return -1;
+    } else if (enckey_type != EXPECTED_ENC_TLV) {
+        return 0;
     }
 
-    if (enckey_type == EXPECTED_ENC_TLV) {
 #if defined(MCUBOOT_ENCRYPT_RSA)
-        mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
+    mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
 
-        cp = (uint8_t *)bootutil_enc_key.key;
-        cpend = cp + *bootutil_enc_key.len;
+    cp = (uint8_t *)bootutil_enc_key.key;
+    cpend = cp + *bootutil_enc_key.len;
 
-        rc = parse_enckey(&rsa, &cp, cpend);
-        if (rc) {
-            mbedtls_rsa_free(&rsa);
-            return rc;
-        }
-
-        rc = mbedtls_rsa_rsaes_oaep_decrypt(&rsa, NULL, NULL, MBEDTLS_RSA_PRIVATE,
-                NULL, 0, &olen, buf, enckey, BOOT_ENC_KEY_SIZE);
+    rc = parse_enckey(&rsa, &cp, cpend);
+    if (rc) {
         mbedtls_rsa_free(&rsa);
+        return rc;
+    }
+
+    rc = mbedtls_rsa_rsaes_oaep_decrypt(&rsa, NULL, NULL, MBEDTLS_RSA_PRIVATE,
+            NULL, 0, &olen, buf, enckey, BOOT_ENC_KEY_SIZE);
+    mbedtls_rsa_free(&rsa);
 
 #elif defined(MCUBOOT_ENCRYPT_KW)
-        assert(*bootutil_enc_key.len == 16);
-        rc = key_unwrap(buf, enckey);
+    assert(*bootutil_enc_key.len == 16);
+    rc = key_unwrap(buf, enckey);
 #endif
-    }
 
     return rc;
 }
@@ -318,16 +309,6 @@ boot_enc_valid(struct enc_key_data *enc_state, int image_index,
     }
 
     return enc_state[rc].valid;
-}
-
-void
-boot_enc_mark_keys_invalid(struct enc_key_data *enc_state)
-{
-    size_t slot;
-
-    for(slot = 0; slot < BOOT_NUM_SLOTS; ++slot) {
-        enc_state[slot].valid = 0;
-    }
 }
 
 void
@@ -381,7 +362,8 @@ boot_encrypt(struct enc_key_data *enc_state, int image_index,
 /**
  * Clears encrypted state after use.
  */
-void boot_enc_zeroize(struct enc_key_data *enc_state)
+void
+boot_enc_zeroize(struct enc_key_data *enc_state)
 {
     memset(enc_state, 0, sizeof(struct enc_key_data) * BOOT_NUM_SLOTS);
 }

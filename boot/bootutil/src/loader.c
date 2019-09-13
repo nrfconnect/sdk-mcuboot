@@ -243,6 +243,38 @@ boot_status_source(struct boot_loader_state *state)
 }
 
 /*
+ * Locate the TLVs in an image.
+ *
+ * @param hdr The image_header struct of the image being checked
+ * @param fap flash_area struct of the slot storing the image being checked
+ * @param off Address of the first TLV (after TLV info)
+ * @param end Address where TLV area ends
+ *
+ * Returns 0 on success.
+ */
+int
+boot_find_tlv_offs(const struct image_header *hdr, const struct flash_area *fap,
+        uint32_t *off, uint32_t *end)
+{
+    struct image_tlv_info info;
+    uint32_t off_;
+
+    off_ = BOOT_TLV_OFF(hdr);
+
+    if (flash_area_read(fap, off_, &info, sizeof(info))) {
+        return BOOT_EFLASH;
+    }
+
+    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
+        return BOOT_EBADIMAGE;
+    }
+
+    *end = off_ + info.it_tlv_tot;
+    *off = off_ + sizeof(info);
+    return 0;
+}
+
+/*
  * Compute the total size of the given image.  Includes the size of
  * the TLVs.
  */
@@ -251,8 +283,7 @@ static int
 boot_read_image_size(struct boot_loader_state *state, int slot, uint32_t *size)
 {
     const struct flash_area *fap;
-    struct image_tlv_info info;
-    uint32_t tlv_off;
+    uint32_t off;
     int area_id;
     int rc;
 
@@ -267,17 +298,10 @@ boot_read_image_size(struct boot_loader_state *state, int slot, uint32_t *size)
         goto done;
     }
 
-    tlv_off = BOOT_TLV_OFF(boot_img_hdr(state, slot));
-    rc = flash_area_read(fap, tlv_off, &info, sizeof(info));
+    rc = boot_find_tlv_offs(boot_img_hdr(state, slot), fap, &off, size);
     if (rc != 0) {
-        rc = BOOT_EFLASH;
         goto done;
     }
-    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
-        rc = BOOT_EBADIMAGE;
-        goto done;
-    }
-    *size = tlv_off + info.it_tlv_tot;
     rc = 0;
 
 done:
@@ -622,7 +646,6 @@ boot_read_status_bytes(const struct flash_area *fap,
         if (!found_idx) {
             found_idx = i;
         }
-        found_idx--;
         bs->idx = (found_idx / BOOT_STATUS_STATE_COUNT) + 1;
         bs->state = (found_idx % BOOT_STATUS_STATE_COUNT) + 1;
     }
@@ -771,31 +794,27 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
     (void)state;
 #endif
 
-    image_index = BOOT_CURR_IMG(state);
-
-#ifndef MCUBOOT_ENC_IMAGES
     (void)bs;
     (void)rc;
-    if (bootutil_img_validate(NULL, image_index, hdr, fap, tmpbuf,
-                              BOOT_TMPBUF_SZ, NULL, 0, NULL)) {
-        return BOOT_EBADIMAGE;
-    }
-#else
-    if ((fap->fa_id == FLASH_AREA_IMAGE_SECONDARY(image_index))
-            && IS_ENCRYPTED(hdr)) {
-        rc = boot_enc_load(state->enc, image_index, hdr, fap, bs->enckey[1]);
+
+    image_index = BOOT_CURR_IMG(state);
+
+#ifdef MCUBOOT_ENC_IMAGES
+    if (MUST_DECRYPT(fap, image_index, hdr)) {
+        rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs->enckey[1]);
         if (rc < 0) {
             return BOOT_EBADIMAGE;
         }
-        if (rc == 0 && boot_enc_set_key(state->enc, 1, bs->enckey[1])) {
+        if (rc == 0 && boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs->enckey[1])) {
             return BOOT_EBADIMAGE;
         }
     }
-    if (bootutil_img_validate(state->enc, image_index, hdr, fap, tmpbuf,
+#endif
+
+    if (bootutil_img_validate(BOOT_CURR_ENC(state), image_index, hdr, fap, tmpbuf,
                               BOOT_TMPBUF_SZ, NULL, 0, NULL)) {
         return BOOT_EBADIMAGE;
     }
-#endif
 
     return 0;
 }
@@ -929,11 +948,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
 
-#if (BOOT_IMAGE_NUMBER == 1)
-    swap_type = boot_swap_type();
-#else
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
-#endif
     switch (swap_type) {
     case BOOT_SWAP_TYPE_TEST:
     case BOOT_SWAP_TYPE_PERM:
@@ -1007,7 +1022,7 @@ boot_copy_sz(struct boot_loader_state *state, int last_sector_idx,
  * @return                      0 on success; nonzero on failure.
  */
 static inline int
-boot_erase_sector(const struct flash_area *fap, uint32_t off, uint32_t sz)
+boot_erase_region(const struct flash_area *fap, uint32_t off, uint32_t sz)
 {
     return flash_area_erase(fap, off, sz);
 }
@@ -1027,7 +1042,7 @@ boot_erase_sector(const struct flash_area *fap, uint32_t off, uint32_t sz)
  * @return                      0 on success; nonzero on failure.
  */
 static int
-boot_copy_sector(struct boot_loader_state *state,
+boot_copy_region(struct boot_loader_state *state,
                  const struct flash_area *fap_src,
                  const struct flash_area *fap_dst,
                  uint32_t off_src, uint32_t off_dst, uint32_t sz)
@@ -1037,6 +1052,7 @@ boot_copy_sector(struct boot_loader_state *state,
     int rc;
 #ifdef MCUBOOT_ENC_IMAGES
     uint32_t off;
+    uint32_t tlv_off;
     size_t blk_off;
     struct image_header *hdr;
     uint16_t idx;
@@ -1086,15 +1102,16 @@ boot_copy_sector(struct boot_loader_state *state,
                 } else {
                     blk_off = ((off + bytes_copied) - hdr->ih_hdr_size) & 0xf;
                 }
-                if (off + bytes_copied + chunk_sz > BOOT_TLV_OFF(hdr)) {
+                tlv_off = BOOT_TLV_OFF(hdr);
+                if (off + bytes_copied + chunk_sz > tlv_off) {
                     /* do not decrypt TLVs */
-                    if (off + bytes_copied >= BOOT_TLV_OFF(hdr)) {
+                    if (off + bytes_copied >= tlv_off) {
                         blk_sz = 0;
                     } else {
-                        blk_sz = BOOT_TLV_OFF(hdr) - (off + bytes_copied);
+                        blk_sz = tlv_off - (off + bytes_copied);
                     }
                 }
-                boot_encrypt(state->enc, image_index, fap_src,
+                boot_encrypt(BOOT_CURR_ENC(state), image_index, fap_src,
                         (off + bytes_copied + idx) - hdr->ih_hdr_size, blk_sz,
                         blk_off, &buf[idx]);
             }
@@ -1204,7 +1221,7 @@ boot_erase_trailer_sectors(const struct boot_loader_state *state,
     do {
         sz = boot_img_sector_size(state, slot, sector);
         off = boot_img_sector_off(state, slot, sector);
-        rc = boot_erase_sector(fap, off, sz);
+        rc = boot_erase_region(fap, off, sz);
         assert(rc == 0);
 
         sector--;
@@ -1282,7 +1299,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
     if (bs->state == BOOT_STATUS_STATE_0) {
         BOOT_LOG_DBG("erasing scratch area");
-        rc = boot_erase_sector(fap_scratch, 0, fap_scratch->fa_size);
+        rc = boot_erase_region(fap_scratch, 0, fap_scratch->fa_size);
         assert(rc == 0);
 
         if (bs->idx == BOOT_STATUS_IDX_0) {
@@ -1305,25 +1322,25 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
                 assert(rc == 0);
 
                 /* Erase the temporary trailer from the scratch area. */
-                rc = boot_erase_sector(fap_scratch, 0, fap_scratch->fa_size);
+                rc = boot_erase_region(fap_scratch, 0, fap_scratch->fa_size);
                 assert(rc == 0);
             }
         }
 
-        rc = boot_copy_sector(state, fap_secondary_slot, fap_scratch,
+        rc = boot_copy_region(state, fap_secondary_slot, fap_scratch,
                               img_off, 0, copy_sz);
         assert(rc == 0);
 
-        bs->state = BOOT_STATUS_STATE_1;
         rc = boot_write_status(state, bs);
+        bs->state = BOOT_STATUS_STATE_1;
         BOOT_STATUS_ASSERT(rc == 0);
     }
 
     if (bs->state == BOOT_STATUS_STATE_1) {
-        rc = boot_erase_sector(fap_secondary_slot, img_off, sz);
+        rc = boot_erase_region(fap_secondary_slot, img_off, sz);
         assert(rc == 0);
 
-        rc = boot_copy_sector(state, fap_primary_slot, fap_secondary_slot,
+        rc = boot_copy_region(state, fap_primary_slot, fap_secondary_slot,
                               img_off, img_off, copy_sz);
         assert(rc == 0);
 
@@ -1335,19 +1352,19 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
             assert(rc == 0);
         }
 
-        bs->state = BOOT_STATUS_STATE_2;
         rc = boot_write_status(state, bs);
+        bs->state = BOOT_STATUS_STATE_2;
         BOOT_STATUS_ASSERT(rc == 0);
     }
 
     if (bs->state == BOOT_STATUS_STATE_2) {
-        rc = boot_erase_sector(fap_primary_slot, img_off, sz);
+        rc = boot_erase_region(fap_primary_slot, img_off, sz);
         assert(rc == 0);
 
         /* NOTE: If this is the final sector, we exclude the image trailer from
          * this copy (copy_sz was truncated earlier).
          */
-        rc = boot_copy_sector(state, fap_scratch, fap_primary_slot,
+        rc = boot_copy_region(state, fap_scratch, fap_primary_slot,
                               0, img_off, copy_sz);
         assert(rc == 0);
 
@@ -1355,9 +1372,9 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
             scratch_trailer_off = boot_status_off(fap_scratch);
 
             /* copy current status that is being maintained in scratch */
-            rc = boot_copy_sector(state, fap_scratch, fap_primary_slot,
+            rc = boot_copy_region(state, fap_scratch, fap_primary_slot,
                         scratch_trailer_off, img_off + copy_sz,
-                        BOOT_STATUS_STATE_COUNT * BOOT_WRITE_SZ(state));
+                        (BOOT_STATUS_STATE_COUNT - 1) * BOOT_WRITE_SZ(state));
             BOOT_STATUS_ASSERT(rc == 0);
 
             rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_SCRATCH,
@@ -1397,13 +1414,13 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
         erase_scratch = bs->use_scratch;
         bs->use_scratch = 0;
 
+        rc = boot_write_status(state, bs);
         bs->idx++;
         bs->state = BOOT_STATUS_STATE_0;
-        rc = boot_write_status(state, bs);
         BOOT_STATUS_ASSERT(rc == 0);
 
         if (erase_scratch) {
-            rc = boot_erase_sector(fap_scratch, 0, sz);
+            rc = boot_erase_region(fap_scratch, 0, sz);
             assert(rc == 0);
         }
     }
@@ -1465,7 +1482,7 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
     sect_count = boot_img_num_sectors(state, BOOT_PRIMARY_SLOT);
     for (sect = 0, size = 0; sect < sect_count; sect++) {
         this_size = boot_img_sector_size(state, BOOT_PRIMARY_SLOT, sect);
-        rc = boot_erase_sector(fap_primary_slot, size, this_size);
+        rc = boot_erase_region(fap_primary_slot, size, this_size);
         assert(rc == 0);
 
         size += this_size;
@@ -1479,14 +1496,14 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
 
 #ifdef MCUBOOT_ENC_IMAGES
     if (IS_ENCRYPTED(boot_img_hdr(state, BOOT_SECONDARY_SLOT))) {
-        rc = boot_enc_load(state->enc, image_index,
+        rc = boot_enc_load(BOOT_CURR_ENC(state), image_index,
                 boot_img_hdr(state, BOOT_SECONDARY_SLOT),
                 fap_secondary_slot, bs->enckey[1]);
 
         if (rc < 0) {
             return BOOT_EBADIMAGE;
         }
-        if (rc == 0 && boot_enc_set_key(state->enc, 1, bs->enckey[1])) {
+        if (rc == 0 && boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs->enckey[1])) {
             return BOOT_EBADIMAGE;
         }
     }
@@ -1494,7 +1511,7 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
 
     BOOT_LOG_INF("Copying the secondary slot to the primary slot: 0x%zx bytes",
                  size);
-    rc = boot_copy_sector(state, fap_secondary_slot, fap_primary_slot, 0, 0, size);
+    rc = boot_copy_region(state, fap_secondary_slot, fap_primary_slot, 0, 0, size);
 
     /*
      * Erases header and trailer. The trailer is erased because when a new
@@ -1502,13 +1519,13 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
      * trailer that was left might trigger a new upgrade.
      */
     BOOT_LOG_DBG("erasing secondary header");
-    rc = boot_erase_sector(fap_secondary_slot,
+    rc = boot_erase_region(fap_secondary_slot,
                            boot_img_sector_off(state, BOOT_SECONDARY_SLOT, 0),
                            boot_img_sector_size(state, BOOT_SECONDARY_SLOT, 0));
     assert(rc == 0);
     last_sector = boot_img_num_sectors(state, BOOT_SECONDARY_SLOT) - 1;
     BOOT_LOG_DBG("erasing secondary trailer");
-    rc = boot_erase_sector(fap_secondary_slot,
+    rc = boot_erase_region(fap_secondary_slot,
                            boot_img_sector_off(state, BOOT_SECONDARY_SLOT,
                                last_sector),
                            boot_img_sector_size(state, BOOT_SECONDARY_SLOT,
@@ -1577,11 +1594,11 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
 #ifdef MCUBOOT_ENC_IMAGES
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
-            rc = boot_enc_load(state->enc, image_index, hdr, fap, bs->enckey[0]);
+            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs->enckey[0]);
             assert(rc >= 0);
 
             if (rc == 0) {
-                rc = boot_enc_set_key(state->enc, 0, bs->enckey[0]);
+                rc = boot_enc_set_key(BOOT_CURR_ENC(state), 0, bs->enckey[0]);
                 assert(rc == 0);
             } else {
                 rc = 0;
@@ -1601,11 +1618,11 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-            rc = boot_enc_load(state->enc, image_index, hdr, fap, bs->enckey[1]);
+            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs->enckey[1]);
             assert(rc >= 0);
 
             if (rc == 0) {
-                rc = boot_enc_set_key(state->enc, 1, bs->enckey[1]);
+                rc = boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs->enckey[1]);
                 assert(rc == 0);
             } else {
                 rc = 0;
@@ -1642,7 +1659,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
             }
 
             if (i != BOOT_ENC_KEY_SIZE) {
-                boot_enc_set_key(state->enc, slot, bs->enckey[slot]);
+                boot_enc_set_key(BOOT_CURR_ENC(state), slot, bs->enckey[slot]);
             }
         }
 #endif
@@ -1766,6 +1783,39 @@ out:
 
 #if (BOOT_IMAGE_NUMBER > 1)
 /**
+ * Check if the version of the image is not older than required.
+ *
+ * @param req         Required minimal image version.
+ * @param ver         Version of the image to be checked.
+ *
+ * @return            0 if the version is sufficient, nonzero otherwise.
+ */
+static int
+boot_is_version_sufficient(struct image_version *req,
+                           struct image_version *ver)
+{
+    if (ver->iv_major > req->iv_major) {
+        return 0;
+    }
+    if (ver->iv_major < req->iv_major) {
+        return BOOT_EBADVERSION;
+    }
+    /* The major version numbers are equal. */
+    if (ver->iv_minor > req->iv_minor) {
+        return 0;
+    }
+    if (ver->iv_minor < req->iv_minor) {
+        return BOOT_EBADVERSION;
+    }
+    /* The minor version numbers are equal. */
+    if (ver->iv_revision < req->iv_revision) {
+        return BOOT_EBADVERSION;
+    }
+
+    return 0;
+}
+
+/**
  * Check the image dependency whether it is satisfied and modify
  * the swap type if necessary.
  *
@@ -1774,16 +1824,18 @@ out:
  * @return                  0 on success; nonzero on failure.
  */
 static int
-boot_verify_single_dependency(struct boot_loader_state *state,
-                              struct image_dependency *dep)
+boot_verify_slot_dependency(struct boot_loader_state *state,
+                            struct image_dependency *dep)
 {
     struct image_version *dep_version;
     size_t dep_slot;
     int rc;
+    uint8_t swap_type;
 
     /* Determine the source of the image which is the subject of
      * the dependency and get it's version. */
-    dep_slot = (state->swap_type[dep->image_id] != BOOT_SWAP_TYPE_NONE) ?
+    swap_type = state->swap_type[dep->image_id];
+    dep_slot = (swap_type != BOOT_SWAP_TYPE_NONE && swap_type != BOOT_SWAP_TYPE_FAIL) ?
                 BOOT_SECONDARY_SLOT : BOOT_PRIMARY_SLOT;
     dep_version = &state->imgs[dep->image_id][dep_slot].hdr.ih_ver;
 
@@ -1820,10 +1872,9 @@ boot_verify_single_dependency(struct boot_loader_state *state,
  * @return                  0 on success; nonzero on failure.
  */
 static int
-boot_verify_all_dependency(struct boot_loader_state *state, uint32_t slot)
+boot_verify_slot_dependencies(struct boot_loader_state *state, uint32_t slot)
 {
     const struct flash_area *fap;
-    struct image_tlv_info info;
     struct image_tlv tlv;
     struct image_dependency dep;
     uint32_t off;
@@ -1839,21 +1890,10 @@ boot_verify_all_dependency(struct boot_loader_state *state, uint32_t slot)
         goto done;
     }
 
-    off = BOOT_TLV_OFF(boot_img_hdr(state, slot));
-
-    /* The TLV area always starts with an image_tlv_info structure. */
-    rc = flash_area_read(fap, off, &info, sizeof(info));
+    rc = boot_find_tlv_offs(boot_img_hdr(state, slot), fap, &off, &end);
     if (rc != 0) {
-        rc = BOOT_EFLASH;
         goto done;
     }
-
-    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
-        rc = BOOT_EBADIMAGE;
-        goto done;
-    }
-    end = off + info.it_tlv_tot;
-    off += sizeof(info);
 
     /* Traverse through all of the TLVs to find the dependency TLVs. */
     for (; off < end; off += sizeof(tlv) + tlv.it_len) {
@@ -1864,9 +1904,7 @@ boot_verify_all_dependency(struct boot_loader_state *state, uint32_t slot)
          }
 
         if (tlv.it_type == IMAGE_TLV_DEPENDENCY) {
-            if (!dep_tlvs_found) {
-                dep_tlvs_found = true;
-            }
+            dep_tlvs_found = true;
 
             if (tlv.it_len != sizeof(dep)) {
                 rc = BOOT_EBADIMAGE;
@@ -1879,8 +1917,13 @@ boot_verify_all_dependency(struct boot_loader_state *state, uint32_t slot)
                 goto done;
             }
 
+            if (dep.image_id >= BOOT_IMAGE_NUMBER) {
+                rc = BOOT_EBADARGS;
+                goto done;
+            }
+
             /* Verify dependency and modify the swap type if not satisfied. */
-            rc = boot_verify_single_dependency(state, &dep);
+            rc = boot_verify_slot_dependency(state, &dep);
             if (rc != 0) {
                 /* Dependency not satisfied. */
                 goto done;
@@ -1905,54 +1948,43 @@ done:
 }
 
 /**
- * Verify whether the image dependencies in the TLV area are
- * all satisfied and modify the swap type if necessary.
- *
- * @return                  0 if all dependencies are satisfied,
- *                          nonzero otherwise.
- */
-static int
-boot_verify_single_image_dependency(struct boot_loader_state *state)
-{
-    size_t slot;
-
-    /* Determine the source of the dependency TLVs. Those dependencies have to
-     * be checked which belong to the image that will be located in the primary
-     * slot after the firmware update process.
-     */
-    if (BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_NONE &&
-        BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_FAIL) {
-        slot = BOOT_SECONDARY_SLOT;
-    } else {
-        slot = BOOT_PRIMARY_SLOT;
-    }
-
-    return boot_verify_all_dependency(state, slot);
-}
-
-/**
  * Iterate over all the images and verify whether the image dependencies in the
  * TLV area are all satisfied and update the related swap type if necessary.
  */
-static void
-boot_verify_all_image_dependency(struct boot_loader_state *state)
+static int
+boot_verify_dependencies(struct boot_loader_state *state)
 {
     int rc;
+    uint8_t slot;
 
     BOOT_CURR_IMG(state) = 0;
     while (BOOT_CURR_IMG(state) < BOOT_IMAGE_NUMBER) {
-        rc = boot_verify_single_image_dependency(state);
+        if (BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_NONE &&
+            BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_FAIL) {
+            slot = BOOT_SECONDARY_SLOT;
+        } else {
+            slot = BOOT_PRIMARY_SLOT;
+        }
+
+        rc = boot_verify_slot_dependencies(state, slot);
         if (rc == 0) {
             /* All dependencies've been satisfied, continue with next image. */
             BOOT_CURR_IMG(state)++;
         } else if (rc == BOOT_EBADVERSION) {
-            /* Dependency check needs to be restarted. */
-            BOOT_CURR_IMG(state) = 0;
+            /* Cannot upgrade due to non-met dependencies, so disable all
+             * image upgrades.
+             */
+            for (int idx = 0; idx < BOOT_IMAGE_NUMBER; idx++) {
+                BOOT_CURR_IMG(state) = idx;
+                BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_NONE;
+            }
+            break;
         } else {
             /* Other error happened, images are inconsistent */
-            return;
+            return rc;
         }
     }
+    return rc;
 }
 #endif /* (BOOT_IMAGE_NUMBER > 1) */
 
@@ -2230,18 +2262,17 @@ boot_prepare_image_for_update(struct boot_loader_state *state,
                  * magic, so also run validation on the primary slot to be
                  * sure it's not OK.
                  */
-                 if (boot_check_header_erased(state, BOOT_PRIMARY_SLOT) == 0 ||
-                     boot_validate_slot(state, BOOT_PRIMARY_SLOT, bs) != 0) {
-                     if (boot_img_hdr(state,
-                          BOOT_SECONDARY_SLOT)->ih_magic == IMAGE_MAGIC &&
-                         boot_validate_slot(state, BOOT_SECONDARY_SLOT, bs) == 0)
-                     {
+                if (boot_check_header_erased(state, BOOT_PRIMARY_SLOT) == 0 ||
+                        boot_validate_slot(state, BOOT_PRIMARY_SLOT, bs) != 0) {
+                    if (boot_img_hdr(state,
+                            BOOT_SECONDARY_SLOT)->ih_magic == IMAGE_MAGIC &&
+                            boot_validate_slot(state, BOOT_SECONDARY_SLOT, bs) == 0) {
                         /* Set swap type to REVERT to overwrite the primary
                          * slot with the image contained in secondary slot
                          * and to trigger the explicit setting of the
                          * image_ok flag.
                          */
-                         BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_REVERT;
+                        BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_REVERT;
                     }
                 }
             }
@@ -2261,6 +2292,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     int rc = 0;
     int fa_id;
     int image_index;
+    bool has_upgrade;
 
     /* The array of slot sectors are defined here (as opposed to file scope) so
      * that they don't get allocated for non-boot-loader apps.  This is
@@ -2272,6 +2304,11 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     TARGET_STATIC boot_sector_t scratch_sectors[BOOT_MAX_IMG_SECTORS];
 
     memset(state, 0, sizeof(struct boot_loader_state));
+    has_upgrade = false;
+
+#if (BOOT_IMAGE_NUMBER == 1)
+    (void)has_upgrade;
+#endif
 
     /* Iterate over all the images. By the end of the loop the swap type has
      * to be determined for each image and all aborted swaps have to be
@@ -2284,7 +2321,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
          * another images). Therefore, mark them as invalid to force their reload
          * by boot_enc_load().
          */
-        boot_enc_mark_keys_invalid(state->enc);
+        boot_enc_zeroize(BOOT_CURR_ENC(state));
 #endif
 
         image_index = BOOT_CURR_IMG(state);
@@ -2309,13 +2346,28 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
 
         /* Determine swap type and complete swap if it has been aborted. */
         boot_prepare_image_for_update(state, &bs);
+
+        if (BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_NONE) {
+            has_upgrade = true;
+        }
     }
 
 #if (BOOT_IMAGE_NUMBER > 1)
-    /* Iterate over all the images and verify whether the image dependencies
-     * are all satisfied and update swap type if necessary.
-     */
-    boot_verify_all_image_dependency(state);
+    if (has_upgrade) {
+        /* Iterate over all the images and verify whether the image dependencies
+         * are all satisfied and update swap type if necessary.
+         */
+        rc = boot_verify_dependencies(state);
+        if (rc == BOOT_EBADVERSION) {
+            /*
+             * It was impossible to upgrade because the expected dependency version
+             * was not available. Here we already changed the swap_type so that
+             * instead of asserting the bootloader, we continue and no upgrade is
+             * performed.
+             */
+            rc = 0;
+        }
+    }
 #endif
 
     /* Iterate over all the images. At this point there are no aborted swaps
@@ -2330,7 +2382,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
          * another images). Therefore, mark them as invalid to force their reload
          * by boot_enc_load().
          */
-        boot_enc_mark_keys_invalid();
+        boot_enc_zeroize(BOOT_CURR_ENC(state));
 #endif /* MCUBOOT_ENC_IMAGES */
 
         /* Indicate that swap is not aborted */
@@ -2425,11 +2477,12 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     /* Always boot from the primary slot of Image 0. */
     BOOT_CURR_IMG(state) = 0;
 #endif
+
     rsp->br_flash_dev_id = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT)->fa_device_id;
     rsp->br_image_off = boot_img_slot_off(state, BOOT_PRIMARY_SLOT);
     rsp->br_hdr = boot_img_hdr(state, BOOT_PRIMARY_SLOT);
 
- out:
+out:
     IMAGES_ITER(BOOT_CURR_IMG(state)) {
         flash_area_close(BOOT_SCRATCH_AREA(state));
         for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {

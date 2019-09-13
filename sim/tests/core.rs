@@ -66,20 +66,75 @@ test_shell!(dependency_combos, r, {
 
 /// These are the variants of dependencies we will test.
 pub static TEST_DEPS: &[DepTest] = &[
-    // First is a sanity test, no dependencies should upgrade.
+    // A sanity test, no dependencies should upgrade.
     DepTest {
         depends: [DepType::Nothing, DepType::Nothing],
         upgrades: [UpgradeInfo::Upgraded, UpgradeInfo::Upgraded],
     },
 
-    // If all of the dependencies are unmet, there should be no upgrades.
-    // TODO: Disabled because it fails.
-    /*
+    // If all of the dependencies are met, we should also upgrade.
+    DepTest {
+        depends: [DepType::Correct, DepType::Correct],
+        upgrades: [UpgradeInfo::Upgraded, UpgradeInfo::Upgraded],
+    },
+
+    // If none of the dependencies are met, the images should be held.
     DepTest {
         depends: [DepType::Newer, DepType::Newer],
         upgrades: [UpgradeInfo::Held, UpgradeInfo::Held],
     },
-    */
+
+    // If the first image is not met, we should hold back on the
+    // dependencies (it is not well defined what the correct behavior is
+    // here, it could also be correct to upgrade only the second image).
+    DepTest {
+        depends: [DepType::Newer, DepType::Correct],
+        upgrades: [UpgradeInfo::Held, UpgradeInfo::Held],
+    },
+
+    // Test the variant in the other direction.
+    DepTest {
+        depends: [DepType::Correct, DepType::Newer],
+        upgrades: [UpgradeInfo::Held, UpgradeInfo::Held],
+    },
+
+    // Test where only the first image is upgraded, and there are no
+    // dependencies.
+    DepTest {
+        depends: [DepType::Nothing, DepType::NoUpgrade],
+        upgrades: [UpgradeInfo::Upgraded, UpgradeInfo::Held],
+    },
+
+    // Test one image with a valid dependency on the first image.
+    DepTest {
+        depends: [DepType::OldCorrect, DepType::NoUpgrade],
+        upgrades: [UpgradeInfo::Upgraded, UpgradeInfo::Held],
+    },
+
+    // Test one image with an invalid dependency on the first image.
+    DepTest {
+        depends: [DepType::Newer, DepType::NoUpgrade],
+        upgrades: [UpgradeInfo::Held, UpgradeInfo::Held],
+    },
+
+    // Test where only the second image is upgraded, and there are no
+    // dependencies.
+    DepTest {
+        depends: [DepType::NoUpgrade, DepType::Nothing],
+        upgrades: [UpgradeInfo::Held, UpgradeInfo::Upgraded],
+    },
+
+    // Test one image with a valid dependency on the second image.
+    DepTest {
+        depends: [DepType::NoUpgrade, DepType::OldCorrect],
+        upgrades: [UpgradeInfo::Held, UpgradeInfo::Upgraded],
+    },
+
+    // Test one image with an invalid dependency on the second image.
+    DepTest {
+        depends: [DepType::NoUpgrade, DepType::Newer],
+        upgrades: [UpgradeInfo::Held, UpgradeInfo::Held],
+    },
 ];
 
 /// Counter for the image number.
