@@ -23,6 +23,8 @@
 
 # Boot Loader
 
+
+
 ## Summary
 
 mcuboot comprises two packages:
