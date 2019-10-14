@@ -1,4 +1,32 @@
 if(CONFIG_BOOTLOADER_MCUBOOT)
+  function(generate_zip zip_out bin_file_list deps)
+    set(generate_zip_script
+      ${MCUBOOT_BASE}/../nrf/scripts/bootloader/generate_zip.py)
+    add_custom_command(
+      TARGET ${deps}
+      COMMAND
+      ${PYTHON_EXECUTABLE}
+      ${generate_zip_script}
+      --bin-file ${bin_file_list}
+      --output ${zip_out}
+      ${ARGN}
+      "board=${CONFIG_BOARD}"
+      "soc=${CONFIG_SOC}"
+      "format-version=1" # This must be bumped when new fields are added.
+      DEPENDS
+      ${generate_zip_script}
+      BYPRODUCTS ${zip_out}
+      )
+
+    add_custom_target(
+      genzip_${deps}
+      ALL
+      DEPENDS
+      ${deps}
+      ${zip_out}
+      )
+  endfunction()
+
   function(sign to_sign_hex output_prefix offset sign_depends signed_hex_out)
     set(op ${output_prefix})
     set(signed_hex ${op}_signed.hex)
@@ -133,6 +161,17 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
     mcuboot_sign_target
     )
 
+  if (CONFIG_GENERATE_DFU_ZIP)
+    generate_zip(
+      ${PROJECT_BINARY_DIR}/dfu_application.zip
+      ${PROJECT_BINARY_DIR}/app_update.bin
+      mcuboot_sign_target
+      "type=application"
+      "load_address=$<TARGET_PROPERTY:partition_manager,PM_APP_ADDRESS>"
+      "version_MCUBOOT=${CONFIG_MCUBOOT_IMAGE_VERSION}"
+      )
+  endif()
+
   if (CONFIG_MCUBOOT_BUILD_S1_VARIANT)
     # Secure Boot (B0) is enabled, and we have to build update candidates
     # for both S1 and S0.
@@ -183,5 +222,24 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
         signed_${parent_slot}_target
         )
     endforeach()
+    if (CONFIG_GENERATE_DFU_ZIP)
+      # Generate zip file with both update candidates
+      set(s0_bin_path
+        ${PROJECT_BINARY_DIR}/signed_by_mcuboot_and_b0_s0_image_update.bin)
+      get_filename_component(s0_name ${s0_bin_path} NAME)
+      set(s1_bin_path
+        ${PROJECT_BINARY_DIR}/signed_by_mcuboot_and_b0_s1_image_update.bin)
+      get_filename_component(s1_name ${s1_bin_path} NAME)
+      generate_zip(
+        ${PROJECT_BINARY_DIR}/dfu_mcuboot.zip
+        "${s0_bin_path};${s1_bin_path}"
+        "signed_s0_target;signed_s1_target"
+        "type=mcuboot"
+        "${s0_name}load_address=$<TARGET_PROPERTY:partition_manager,PM_S0_ADDRESS>"
+        "${s1_name}load_address=$<TARGET_PROPERTY:partition_manager,PM_S1_ADDRESS>"
+        "version_MCUBOOT=${CONFIG_MCUBOOT_IMAGE_VERSION}"
+        "version_B0=${CONFIG_FW_INFO_FIRMWARE_VERSION}"
+        )
+    endif()
   endif()
 endif()

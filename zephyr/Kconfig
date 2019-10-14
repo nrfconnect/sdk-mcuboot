@@ -2,6 +2,13 @@ menu "MCUboot"
 
 if BOOTLOADER_MCUBOOT
 
+config GENERATE_DFU_ZIP
+	bool "Generate DFU zip files"
+	help
+	  Generate DFU zip files for signed binary files.
+	  Stored in [build]/zephyr/dfu_*.zip
+	  Zip files are created for all updateable components.
+
 config MCUBOOT_CMAKELISTS_DIR
 	string "Path to the directory of the MCUBoot CMakeLists.txt file"
 	default "$MCUBOOT_BASE/boot/zephyr/"
