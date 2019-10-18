@@ -20,7 +20,7 @@ import click
 import getpass
 import imgtool.keys as keys
 import sys
-from imgtool import image
+from imgtool import image, imgtool_version
 from imgtool.version import decode_version
 
 
@@ -182,6 +182,8 @@ class BasedIntParamType(click.ParamType):
 
 @click.argument('outfile')
 @click.argument('infile')
+@click.option('-x', '--hex-addr', type=BasedIntParamType(), required=False,
+              help='Adjust address in hex output file.')
 @click.option('-L', '--load-addr', type=BasedIntParamType(), required=False,
               help='Load address for image when it is in its primary slot.')
 @click.option('-E', '--encrypt', metavar='filename',
@@ -212,11 +214,12 @@ class BasedIntParamType(click.ParamType):
                .hex extension, otherwise binary format is used''')
 def sign(key, align, version, header_size, pad_header, slot_size, pad,
          max_sectors, overwrite_only, endian, encrypt, infile, outfile,
-         dependencies, load_addr):
+         dependencies, load_addr, hex_addr):
     img = image.Image(version=decode_version(version), header_size=header_size,
                       pad_header=pad_header, pad=pad, align=int(align),
                       slot_size=slot_size, max_sectors=max_sectors,
-                      overwrite_only=overwrite_only, endian=endian, load_addr=load_addr)
+                      overwrite_only=overwrite_only, endian=endian,
+                      load_addr=load_addr)
     img.load(infile)
     key = load_key(key) if key else None
     enckey = load_key(encrypt) if encrypt else None
@@ -226,7 +229,7 @@ def sign(key, align, version, header_size, pad_header, slot_size, pad,
         if key and not isinstance(key, keys.RSA):
             raise Exception("Signing only available with private RSA key")
     img.create(key, enckey, dependencies)
-    img.save(outfile)
+    img.save(outfile, hex_addr)
 
 
 class AliasesGroup(click.Group):
@@ -249,6 +252,11 @@ class AliasesGroup(click.Group):
         return None
 
 
+@click.command(help='Print imgtool version information')
+def version():
+    print(imgtool_version)
+
+
 @click.command(cls=AliasesGroup,
                context_settings=dict(help_option_names=['-h', '--help']))
 def imgtool():
@@ -259,6 +267,7 @@ imgtool.add_command(keygen)
 imgtool.add_command(getpub)
 imgtool.add_command(verify)
 imgtool.add_command(sign)
+imgtool.add_command(version)
 
 
 if __name__ == '__main__':

@@ -52,9 +52,6 @@ const uint32_t boot_img_magic[] = {
 #define BOOT_MAGIC_ARR_SZ \
     (sizeof boot_img_magic / sizeof boot_img_magic[0])
 
-const uint32_t BOOT_MAGIC_SZ = sizeof boot_img_magic;
-const uint32_t BOOT_MAX_ALIGN = MAX_FLASH_ALIGN;
-
 struct boot_swap_table {
     uint8_t magic_primary_slot;
     uint8_t magic_secondary_slot;
@@ -408,7 +405,8 @@ boot_write_magic(const struct flash_area *fap)
     off = boot_magic_off(fap);
 
     BOOT_LOG_DBG("writing magic; fa_id=%d off=0x%lx (0x%lx)",
-                 fap->fa_id, off, fap->fa_off + off);
+                 fap->fa_id, (unsigned long)off,
+                 (unsigned long)(fap->fa_off + off));
     rc = flash_area_write(fap, off, boot_img_magic, BOOT_MAGIC_SZ);
     if (rc != 0) {
         return BOOT_EFLASH;
@@ -465,7 +463,8 @@ boot_write_copy_done(const struct flash_area *fap)
 
     off = boot_copy_done_off(fap);
     BOOT_LOG_DBG("writing copy_done; fa_id=%d off=0x%lx (0x%lx)",
-                 fap->fa_id, off, fap->fa_off + off);
+                 fap->fa_id, (unsigned long)off,
+                 (unsigned long)(fap->fa_off + off));
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
 }
 
@@ -476,7 +475,8 @@ boot_write_image_ok(const struct flash_area *fap)
 
     off = boot_image_ok_off(fap);
     BOOT_LOG_DBG("writing image_ok; fa_id=%d off=0x%lx (0x%lx)",
-                 fap->fa_id, off, fap->fa_off + off);
+                 fap->fa_id, (unsigned long)off,
+                 (unsigned long)(fap->fa_off + off));
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
 }
 
@@ -496,7 +496,8 @@ boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type,
     off = boot_swap_info_off(fap);
     BOOT_LOG_DBG("writing swap_info; fa_id=%d off=0x%lx (0x%lx), swap_type=0x%x"
                  " image_num=0x%x",
-                 fap->fa_id, off, fap->fa_off + off, swap_type, image_num);
+                 fap->fa_id, (unsigned long)off,
+                 (unsigned long)(fap->fa_off + off), swap_type, image_num);
     return boot_write_trailer(fap, off, (const uint8_t *) &swap_info, 1);
 }
 
@@ -507,7 +508,8 @@ boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size)
 
     off = boot_swap_size_off(fap);
     BOOT_LOG_DBG("writing swap_size; fa_id=%d off=0x%lx (0x%lx)",
-                 fap->fa_id, off, fap->fa_off + off);
+                 fap->fa_id, (unsigned long)off,
+                 (unsigned long)fap->fa_off + off);
     return boot_write_trailer(fap, off, (const uint8_t *) &swap_size, 4);
 }
 
@@ -720,4 +722,3 @@ done:
     flash_area_close(fap);
     return rc;
 }
-

@@ -73,7 +73,7 @@ assert_exists(TINYCRYPT_DIR)
 set(FIAT_DIR "${MCUBOOT_DIR}/ext/fiat")
 assert_exists(FIAT_DIR)
 # Path to mbed-tls' asn1 parser library.
-set(MBEDTLS_ASN1_DIR "${MCUBOOT_DIR}/ext/mbedtls")
+set(MBEDTLS_ASN1_DIR "${MCUBOOT_DIR}/ext/mbedtls-asn1")
 assert_exists(MBEDTLS_ASN1_DIR)
 set(NRF_DIR "${MCUBOOT_DIR}/ext/nrf")
 
@@ -117,6 +117,7 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/image_ec256.c
   ${BOOT_DIR}/bootutil/src/image_ed25519.c
   ${BOOT_DIR}/bootutil/src/caps.c
+  ${BOOT_DIR}/bootutil/src/tlv.c
   )
 
 if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256)

@@ -185,7 +185,7 @@ _Static_assert(BOOT_IMAGE_NUMBER > 0, "Invalid value for BOOT_IMAGE_NUMBER");
 #define BOOT_STATUS_SOURCE_SCRATCH      1
 #define BOOT_STATUS_SOURCE_PRIMARY_SLOT 2
 
-extern const uint32_t BOOT_MAGIC_SZ;
+#define BOOT_MAGIC_SZ (sizeof boot_img_magic)
 
 /**
  * Compatibility shim for flash sector type.
@@ -251,9 +251,41 @@ int boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
                        const uint8_t *enckey);
 int boot_read_enc_key(int image_index, uint8_t slot, uint8_t *enckey);
 #endif
-int boot_find_tlv_offs(const struct image_header *hdr,
-                       const struct flash_area *fap,
-                       uint32_t *off, uint32_t *end);
+
+/**
+ * Safe (non-overflowing) uint32_t addition.  Returns true, and stores
+ * the result in *dest if it can be done without overflow.  Otherwise,
+ * returns false.
+ */
+static inline bool boot_u32_safe_add(uint32_t *dest, uint32_t a, uint32_t b)
+{
+    /*
+     * "a + b <= UINT32_MAX", subtract 'b' from both sides to avoid
+     * the overflow.
+     */
+    if (a > UINT32_MAX - b) {
+        return false;
+    } else {
+        *dest = a + b;
+        return true;
+    }
+}
+
+/**
+ * Safe (non-overflowing) uint16_t addition.  Returns true, and stores
+ * the result in *dest if it can be done without overflow.  Otherwise,
+ * returns false.
+ */
+static inline bool boot_u16_safe_add(uint16_t *dest, uint16_t a, uint16_t b)
+{
+    uint32_t tmp = a + b;
+    if (tmp > UINT16_MAX) {
+        return false;
+    } else {
+        *dest = tmp;
+        return true;
+    }
+}
 
 /*
  * Accessors for the contents of struct boot_loader_state.

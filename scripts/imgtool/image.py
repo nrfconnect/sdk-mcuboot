@@ -35,6 +35,7 @@ IMAGE_HEADER_SIZE = 32
 BIN_EXT = "bin"
 INTEL_HEX_EXT = "hex"
 DEFAULT_MAX_SECTORS = 128
+MAX_ALIGN = 8
 DEP_IMAGES_KEY = "images"
 DEP_VERSIONS_KEY = "versions"
 
@@ -61,6 +62,7 @@ TLV_VALUES = {
 TLV_SIZE = 4
 TLV_INFO_SIZE = 4
 TLV_INFO_MAGIC = 0x6907
+TLV_PROT_INFO_MAGIC = 0x6908
 
 boot_magic = bytes([
     0x77, 0xc2, 0x95, 0xf3,
@@ -81,20 +83,28 @@ VerifyResult = Enum('VerifyResult',
 
 
 class TLV():
-    def __init__(self, endian):
+    def __init__(self, endian, magic=TLV_INFO_MAGIC):
+        self.magic = magic
         self.buf = bytearray()
         self.endian = endian
 
+    def __len__(self):
+        return TLV_INFO_SIZE + len(self.buf)
+
     def add(self, kind, payload):
-        """Add a TLV record.  Kind should be a string found in TLV_VALUES above."""
+        """
+        Add a TLV record.  Kind should be a string found in TLV_VALUES above.
+        """
         e = STRUCT_ENDIAN_DICT[self.endian]
         buf = struct.pack(e + 'BBH', TLV_VALUES[kind], 0, len(payload))
         self.buf += buf
         self.buf += payload
 
     def get(self):
+        if len(self.buf) == 0:
+            return bytes()
         e = STRUCT_ENDIAN_DICT[self.endian]
-        header = struct.pack(e + 'HH', TLV_INFO_MAGIC, TLV_INFO_SIZE + len(self.buf))
+        header = struct.pack(e + 'HH', self.magic, len(self))
         return header + bytes(self.buf)
 
 
@@ -116,6 +126,7 @@ class Image():
         self.base_addr = None
         self.load_addr = 0 if load_addr is None else load_addr
         self.payload = []
+        self.enckey = None
 
     def __repr__(self):
         return "<Image version={}, header_size={}, base_addr={}, load_addr={}, \
@@ -153,20 +164,26 @@ class Image():
 
         self.check()
 
-    def save(self, path):
+    def save(self, path, hex_addr=None):
         """Save an image from a given file"""
-        if self.pad:
-            self.pad_to(self.slot_size)
-
         ext = os.path.splitext(path)[1][1:].lower()
         if ext == INTEL_HEX_EXT:
             # input was in binary format, but HEX needs to know the base addr
-            if self.base_addr is None:
-                raise Exception("Input file does not provide a base address")
+            if self.base_addr is None and hex_addr is None:
+                raise Exception("No address exists in input file neither was "
+                                "it provided by user")
             h = IntelHex()
+            if hex_addr is not None:
+                self.base_addr = hex_addr
             h.frombytes(bytes=self.payload, offset=self.base_addr)
+            if self.pad:
+                magic_addr = (self.base_addr + self.slot_size) - \
+                    len(boot_magic)
+                h.puts(magic_addr, boot_magic)
             h.tofile(path, 'hex')
         else:
+            if self.pad:
+                self.pad_to(self.slot_size)
             with open(path, 'wb') as f:
                 f.write(self.payload)
 
@@ -179,7 +196,7 @@ class Image():
                 raise Exception("Padding requested, but image does not start with zeros")
         if self.slot_size > 0:
             tsize = self._trailer_size(self.align, self.max_sectors,
-                                       self.overwrite_only)
+                                       self.overwrite_only, self.enckey)
             padding = self.slot_size - (len(self.payload) + tsize)
             if padding < 0:
                 msg = "Image size (0x{:x}) + trailer (0x{:x}) exceeds requested size 0x{:x}".format(
@@ -187,6 +204,8 @@ class Image():
                 raise Exception(msg)
 
     def create(self, key, enckey, dependencies=None):
+        self.enckey = enckey
+
         if dependencies is None:
             dependencies_num = 0
             protected_tlv_size = 0
@@ -196,10 +215,15 @@ class Image():
             dependencies_num = len(dependencies[DEP_IMAGES_KEY])
             protected_tlv_size = (dependencies_num * 16) + TLV_INFO_SIZE
 
+        # At this point the image is already on the payload, this adds
+        # the header to the payload as well
         self.add_header(enckey, protected_tlv_size)
 
-        tlv = TLV(self.endian)
+        prot_tlv = TLV(self.endian, TLV_PROT_INFO_MAGIC)
 
+        # Protected TLVs must be added first, because they are also included
+        # in the hash calculation
+        protected_tlv_off = None
         if protected_tlv_size != 0:
             for i in range(dependencies_num):
                 e = STRUCT_ENDIAN_DICT[self.endian]
@@ -211,23 +235,12 @@ class Image():
                                 dependencies[DEP_VERSIONS_KEY][i].revision,
                                 dependencies[DEP_VERSIONS_KEY][i].build
                                 )
-                tlv.add('DEPENDENCY', payload)
-            # Full TLV size needs to be calculated in advance, because the
-            # header will be protected as well
-            tlv_header_size = 4
-            payload_digest_size = 32
-            keyhash_size = 32
-            cipherkey_size = 32
+                prot_tlv.add('DEPENDENCY', payload)
 
-            full_size = TLV_INFO_SIZE + len(tlv.buf) + tlv_header_size \
-                        + payload_digest_size
-            if key is not None:
-                full_size += tlv_header_size + keyhash_size \
-                             + tlv_header_size + key.sig_len()
-            if enckey is not None:
-                full_size += tlv_header_size + cipherkey_size
-            tlv_header = struct.pack(e + 'HH', TLV_INFO_MAGIC, full_size)
-            self.payload += tlv_header + bytes(tlv.buf)
+            protected_tlv_off = len(self.payload)
+            self.payload += prot_tlv.get()
+
+        tlv = TLV(self.endian)
 
         # Note that ecdsa wants to do the hashing itself, which means
         # we get to hash it twice.
@@ -253,6 +266,11 @@ class Image():
                 sig = key.sign_digest(digest)
             tlv.add(key.sig_tlv(), sig)
 
+        # At this point the image was hashed + signed, we can remove the
+        # protected TLVs from the payload (will be re-added later)
+        if protected_tlv_off is not None:
+            self.payload = self.payload[:protected_tlv_off]
+
         if enckey is not None:
             plainkey = os.urandom(16)
             cipherkey = enckey._get_public().encrypt(
@@ -267,10 +285,11 @@ class Image():
                             backend=default_backend())
             encryptor = cipher.encryptor()
             img = bytes(self.payload[self.header_size:])
-            self.payload[self.header_size:] = encryptor.update(img) + \
-                                              encryptor.finalize()
+            self.payload[self.header_size:] = \
+                encryptor.update(img) + encryptor.finalize()
 
-        self.payload += tlv.get()[protected_tlv_size:]
+        self.payload += prot_tlv.get()
+        self.payload += tlv.get()
 
     def add_header(self, enckey, protected_tlv_size):
         """Install the image header."""
@@ -296,9 +315,9 @@ class Image():
                 IMAGE_MAGIC,
                 self.load_addr,
                 self.header_size,
-                protected_tlv_size,  # TLV Info header + Dependency TLVs
-                len(self.payload) - self.header_size, # ImageSz
-                flags, # Flags
+                protected_tlv_size,  # TLV Info header + Protected TLVs
+                len(self.payload) - self.header_size,  # ImageSz
+                flags,
                 self.version.major,
                 self.version.minor or 0,
                 self.version.revision or 0,
@@ -307,22 +326,28 @@ class Image():
         self.payload = bytearray(self.payload)
         self.payload[:len(header)] = header
 
-    def _trailer_size(self, write_size, max_sectors, overwrite_only):
+    def _trailer_size(self, write_size, max_sectors, overwrite_only, enckey):
         # NOTE: should already be checked by the argument parser
+        magic_size = 16
         if overwrite_only:
-            return 8 * 2 + 16
+            return MAX_ALIGN * 2 + magic_size
         else:
             if write_size not in set([1, 2, 4, 8]):
                 raise Exception("Invalid alignment: {}".format(write_size))
             m = DEFAULT_MAX_SECTORS if max_sectors is None else max_sectors
-            return m * 3 * write_size + 8 * 2 + 16
+            trailer = m * 3 * write_size  # status area
+            if enckey is not None:
+                trailer += 16 * 2  # encryption keys
+            trailer += MAX_ALIGN * 4  # magic_ok/copy_done/swap_info/swap_size
+            trailer += magic_size
+            return trailer
 
     def pad_to(self, size):
         """Pad the image to the given size, with the given flash alignment."""
         tsize = self._trailer_size(self.align, self.max_sectors,
-                                   self.overwrite_only)
+                                   self.overwrite_only, self.enckey)
         padding = size - (len(self.payload) + tsize)
-        pbytes  = b'\xff' * padding
+        pbytes = b'\xff' * padding
         pbytes += b'\xff' * (tsize - len(boot_magic))
         pbytes += boot_magic
         self.payload += pbytes

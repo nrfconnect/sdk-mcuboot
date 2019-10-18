@@ -269,6 +269,18 @@ config BOOT_SERIAL_DETECT_PIN_VAL
 	  Logic value of the detect pin which triggers serial recovery
 	  mode.
 
+# Workaround for not being able to have commas in macro arguments
+DT_CHOSEN_Z_CONSOLE := zephyr,console
+
+config RECOVERY_UART_DEV_NAME
+	string "UART Device Name for Recovery UART"
+	default "$(dt_chosen_label,$(DT_CHOSEN_Z_CONSOLE))" if HAS_DTS
+	default "UART_0"
+	depends on BOOT_SERIAL_UART
+	help
+	  This option specifies the name of UART device to be used for
+	  serial recovery.
+
 endif # MCUBOOT_SERIAL
 
 endmenu
@@ -302,5 +314,11 @@ comment "Zephyr configuration options"
 config MULTITHREADING
 	default n if SOC_FAMILY_NRF
 	default y
+
+config UPDATEABLE_IMAGE_NUMBER
+	int "Number of updateable images"
+	default 1
+	help
+	  Enables support of multi image update.
 
 source "$ZEPHYR_BASE/Kconfig.zephyr"

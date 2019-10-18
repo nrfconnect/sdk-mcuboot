@@ -3,6 +3,35 @@
 - Table of Contents
 {:toc}
 
+## Version 1.4.0
+
+The 1.4.0 release of MCUboot primarily adds support for multi-image
+booting.  With this release, MCUboot can manage two images that can be
+updated independently.  With this, it also supports additions to the
+TLV that allow these dependencies to be specified.
+
+Multi-image support adds backward-incompatible changes to the format
+of the images: specifically adding support for protected TLV entries.
+If multiple images and dependencies are not used, the images will be
+compatible with previous releases of MCUboot.
+
+### About this release
+
+- Fixed CVE-2019-5477, and CVE-2019-16892.  These fix issue with
+  dependencies used in the generation of the documentation on github.
+- Numerous code cleanups and refactorings
+- Documentation updates for multi-image features
+- Update imgtool.py to support the new features
+- Updated the mbed TLS submodule to current stable version 2.16.3
+- Moved the mbed TLS submodule from within sim/mcuboot-sys to ext.
+  This will make it easier for other board supports to use this code.
+- Added some additional overflow and bound checks to data in the image
+  header, and TLV data.
+- Add a `-x` (or `--hex_addr`) flag to imgtool to set the base address
+  written to a hex-format image.  This allows the image to be flashed
+  at an offset, without having to use additional tools to modify the
+  image.
+
 ## Version 1.3.1
 
 The 1.3.1 release of MCUboot consists mostly of small bug fixes and updates.
