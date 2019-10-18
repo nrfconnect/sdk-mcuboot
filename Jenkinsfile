@@ -16,13 +16,17 @@ pipeline {
    string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job', defaultValue: INPUT_STATE)
   }
 
+  triggers {
+    cron(env.BRANCH_NAME == 'master' ? '0 */12 * * 1-6' : '') // Master branch will be build every 12 hours
+  }
+
   agent {
     docker {
       image IMAGE_TAG
       label AGENT_LABELS
-      args '-e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/.local/bin'
     }
   }
+
   options {
     // Checkout the repository to this folder instead of root
     checkoutToSubdirectory('mcuboot')
