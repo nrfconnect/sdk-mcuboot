@@ -64,7 +64,7 @@ pipeline {
               }
 
               COMMIT_RANGE = "$CI_STATE.MCUBOOT.MERGE_BASE..$CI_STATE.MCUBOOT.REPORT_SHA"
-              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.MCUBOOT.REPORT_SHA -g"
+              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.MCUBOOT.REPORT_SHA -g -e pylint"
               println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
             }
             else if (BUILD_TYPE == "TAG") {
