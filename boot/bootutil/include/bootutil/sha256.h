@@ -33,6 +33,7 @@
 
 #if (defined(MCUBOOT_USE_MBED_TLS) + \
      defined(MCUBOOT_USE_TINYCRYPT) + \
+     defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_CC310)) != 1
     #error "One crypto backend must be defined either CC310, MBED_TLS or TINYCRYPT"
 #endif
