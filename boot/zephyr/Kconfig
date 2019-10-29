@@ -104,7 +104,7 @@ config BOOT_CC310
 config BOOT_NRF_EXTERNAL_CRYPTO
 	bool "Use Shared Crypto from bootloader"
 	select BOOT_USE_NRF_EXTERNAL_CRYPTO
-	depends on SECURE_BOOT
+	depends on SECURE_BOOT_CRYPTO_CLIENT
 
 endchoice
 endif #BOOT_SIGNATURE_TYPE_ECDSA_P256
