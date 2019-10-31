@@ -26,12 +26,6 @@ mcuboot_scratch:
     after: app
     align: {start: DT_FLASH_ERASE_BLOCK_SIZE}
 
-mcuboot_storage:
-  size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_STORAGE
-  placement:
-    after: [mcuboot_scratch]
-    align: {start: DT_FLASH_ERASE_BLOCK_SIZE}
-
 # Padding placed before image to boot
 mcuboot_pad:
     # MCUboot pad must be placed before the 'spm' partition if that is present.
