@@ -72,17 +72,6 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
   # Build a second bootloader image
   set(MCUBOOT_BASE ${CMAKE_CURRENT_LIST_DIR}/..)
 
-  if (CONFIG_MCUBOOT_BUILD_S1_VARIANT)
-    # Inject this configuration from parent image to mcuboot.
-    set(conf_path "${ZEPHYR_BASE}/../nrf/subsys/bootloader/image/build_s1.conf")
-    string(FIND ${mcuboot_OVERLAY_CONFIG} ${conf_path} out)
-    if (${out} EQUAL -1)
-      set(mcuboot_OVERLAY_CONFIG
-        "${mcuboot_OVERLAY_CONFIG} ${conf_path}"
-        CACHE STRING "" FORCE)
-    endif()
-  endif()
-
   zephyr_add_executable(mcuboot require_build)
 
   if (${require_build})
