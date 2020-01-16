@@ -33,7 +33,4 @@ config BOOT_SIGNATURE_KEY_FILE
 	  with the public key information will be written in a format expected by
 	  MCUboot.
 
-config DT_FLASH_WRITE_BLOCK_SIZE
-	def_int $(dt_int_val,DT_FLASH_WRITE_BLOCK_SIZE)
-
 endmenu
