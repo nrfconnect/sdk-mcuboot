@@ -180,7 +180,7 @@ if(CONFIG_MCUBOOT_SERIAL)
 
   zephyr_link_libraries_ifdef(
 	CONFIG_TINYCBOR
-	${IMAGE}TINYCBOR
+	TINYCBOR
 	)
 
   zephyr_include_directories_ifdef(
