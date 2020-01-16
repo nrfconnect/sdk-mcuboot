@@ -8,11 +8,7 @@ cmake_minimum_required(VERSION 3.8.2)
 
 # Board-specific CONF_FILES should get merged into the build as well.
 # Default to qemu_x86 if no board has been specified.
-# If BOARD is already defined, mcuboot is being built in a multi image
-# context, and should default to its parent image BOARD.
-if (NOT BOARD)
-  set(BOARD qemu_x86)
-endif()
+set(BOARD qemu_x86)
 
 # Add a common dts overlay necessary to ensure mcuboot is linked into,
 # and fits inside, the boot partition. (If the user specified a
@@ -184,7 +180,7 @@ if(CONFIG_MCUBOOT_SERIAL)
 
   zephyr_link_libraries_ifdef(
 	CONFIG_TINYCBOR
-	TINYCBOR
+	${IMAGE}TINYCBOR
 	)
 
   zephyr_include_directories_ifdef(
@@ -199,14 +195,6 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
   else()
     set(KEY_FILE ${MCUBOOT_DIR}/${CONFIG_BOOT_SIGNATURE_KEY_FILE})
   endif()
-
-  set_property(
-	GLOBAL
-	PROPERTY
-	KEY_FILE
-	${KEY_FILE}
-	)
-
   set(GENERATED_PUBKEY ${ZEPHYR_BINARY_DIR}/autogen-pubkey.c)
   add_custom_command(
     OUTPUT ${GENERATED_PUBKEY}
@@ -221,3 +209,4 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
     )
   zephyr_library_sources(${GENERATED_PUBKEY})
 endif()
+
