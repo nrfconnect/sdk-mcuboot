@@ -391,18 +391,6 @@ boot_write_sz(struct boot_loader_state *state)
 static int
 boot_slots_compatible(struct boot_loader_state *state)
 {
-#ifdef PM_S1_ADDRESS
-    /* Patch needed for NCS. In this case, image 1 primary points to the other
-     * B1 slot (ie S0 or S1), and image 0 primary points to the app.
-     * With this configuration, image 0 and image 1 share the secondary slot.
-     * Hence, the primary slot of image 1 will be *smaller* than image 1's
-     * secondary slot. This is not allowed in upstream mcuboot, so we need
-     * this patch to allow it. Also, all of these checks are redundant when
-     * partition manager is in use, and since we have the same sector size
-     * in all of our flash.
-     */
-        return 1;
-#else
     size_t num_sectors_primary;
     size_t num_sectors_secondary;
     size_t sz0, sz1;
@@ -482,7 +470,6 @@ boot_slots_compatible(struct boot_loader_state *state)
     }
 
     return 1;
-#endif /* PM_S1_ADDRESS */
 }
 
 #ifndef MCUBOOT_USE_FLASH_AREA_GET_SECTORS
@@ -990,41 +977,6 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
     int rc;
-#ifdef PM_S1_ADDRESS
-    /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
-     * B1 slot S0 or S1) share the same secondary slot, we need to check
-     * whether the update candidate in the secondary slot is intended for
-     * image 0 or image 1 primary by looking at the address of the reset
-     * vector. Note that there are good reasons for not using img_num from
-     * the swap info.
-     */
-    const struct flash_area *secondary_fa =
-	    BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-    struct image_header *hdr =
-	    (struct image_header *)secondary_fa->fa_off;
-
-    if (hdr->ih_magic == IMAGE_MAGIC) {
-	    const struct flash_area *primary_fa;
-	    uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
-	    uint32_t *vtable = (uint32_t *)(vtable_addr);
-	    uint32_t reset_addr = vtable[1];
-	    rc = flash_area_open(
-			    flash_area_id_from_multi_image_slot(
-				    BOOT_CURR_IMG(state),
-				    BOOT_PRIMARY_SLOT),
-			    &primary_fa);
-	    if (rc != 0) {
-		    return BOOT_SWAP_TYPE_FAIL;
-	    }
-	    /* Get start and end of primary slot for current image */
-	    if (reset_addr < primary_fa->fa_off ||
-	        reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
-		    /* The image in the secondary slot is not intended for this image
-		    */
-		    return BOOT_SWAP_TYPE_NONE;
-	    }
-    }
-#endif
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -2513,24 +2465,11 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
-#ifdef PM_S1_ADDRESS
-	/* Patch needed for NCS. If secure boot is enabled, then mcuboot
-	 * will be stored in either partition S0 or S1. Image 1 primary
-	 * will point to the 'other' Sx partition. Hence, image 1 primary
-	 * does not contain a valid image until mcuboot has been upgraded.
-	 * Note that B0 will perform validation of the active mcuboot image,
-	 * so there is no security lost by skipping this check for image 1
-	 * primary.
-	 */
-	if (BOOT_CURR_IMG(state) == 0)
-#endif
-	{
-		rc = boot_validate_slot(state, BOOT_PRIMARY_SLOT, NULL);
-		if (rc != 0) {
-			rc = BOOT_EBADIMAGE;
-			goto out;
-		}
-	}
+        rc = boot_validate_slot(state, BOOT_PRIMARY_SLOT, NULL);
+        if (rc != 0) {
+            rc = BOOT_EBADIMAGE;
+            goto out;
+        }
 #else
         /* Even if we're not re-validating the primary slot, we could be booting
          * onto an empty flash chip. At least do a basic sanity check that
