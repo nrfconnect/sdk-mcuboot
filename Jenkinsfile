@@ -1,11 +1,24 @@
+//
+// Copyright (c) 2020 Nordic Semiconductor ASA. All Rights Reserved.
+//
+// The information contained herein is confidential property of Nordic Semiconductor ASA.
+// The use, copying, transfer or disclosure of such information is prohibited except by
+// express written agreement with Nordic Semiconductor ASA.
+//
 
 @Library("CI_LIB") _
 
-def AGENT_LABELS = lib_Main.getAgentLabels(JOB_NAME)
-def IMAGE_TAG    = lib_Main.getDockerImage(JOB_NAME)
-def TIMEOUT      = lib_Main.getTimeout(JOB_NAME)
-def INPUT_STATE  = lib_Main.getInputState(JOB_NAME)
-def CI_STATE = new HashMap()
+HashMap CI_STATE = lib_State.getConfig(JOB_NAME)
+
+properties([
+  pipelineTriggers([
+    parameterizedCron( [
+        ((JOB_NAME =~ /thst\/night\/.*\/cron_demo/).find() ? CI_STATE.CFG.CRON.NIGHTLY : ''),
+        ((JOB_NAME =~ /thst\/week\/.*\/cron_demo/).find() ? CI_STATE.CFG.CRON.WEEKLY : '')
+    ].join('    \n') )
+  ]),
+  ( JOB_NAME.contains('sub/') ? disableResume() :  disableConcurrentBuilds() )
+])
 
 pipeline {
 
@@ -13,24 +26,21 @@ pipeline {
    booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: false)
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
    booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
-   string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job', defaultValue: INPUT_STATE)
-  }
-
-  triggers {
-    cron(env.BRANCH_NAME == 'master' ? '0 */12 * * 1-6' : '') // Master branch will be build every 12 hours
+   string(      name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job', defaultValue: CI_STATE.CFG.INPUT_STATE_STR )
+   choice(      name: 'CRON', choices: ['COMMIT', 'NIGHTLY', 'WEEKLY'], description: 'Cron Test Phase')
   }
 
   agent {
     docker {
-      image IMAGE_TAG
-      label AGENT_LABELS
+      image CI_STATE.CFG.IMAGE_TAG
+      label CI_STATE.CFG.AGENT_LABELS
     }
   }
 
   options {
-    // Checkout the repository to this folder instead of root
     checkoutToSubdirectory('mcuboot')
-    timeout(time: TIMEOUT.time, unit: TIMEOUT.unit)
+    parallelsAlwaysFailFast()
+    timeout(time: CI_STATE.CFG.TIMEOUT.time, unit: CI_STATE.CFG.TIMEOUT.unit)
   }
 
   environment {
@@ -41,30 +51,30 @@ pipeline {
   }
 
   stages {
-    stage('Load') { steps { script { CI_STATE = lib_Stage.load('MCUBOOT') }}}
+    stage('Load') { steps { script { CI_STATE = lib_State.load('MCUBOOT', CI_STATE) }}}
     stage('Checkout') {
       steps { script {
-        lib_Main.cloneCItools(JOB_NAME)
-        CI_STATE.MCUBOOT.REPORT_SHA = lib_Main.checkoutRepo(CI_STATE.MCUBOOT.GIT_URL, "mcuboot", CI_STATE.MCUBOOT, false)
-        lib_West.AddManifestUpdate("MCUBOOT", 'mcuboot', CI_STATE.MCUBOOT.GIT_URL, CI_STATE.MCUBOOT.GIT_REF, CI_STATE)
+        CI_STATE.SELF.REPORT_SHA = lib_Main.checkoutRepo(CI_STATE.SELF.GIT_URL, "mcuboot", CI_STATE.SELF, false)
+        lib_West.AddManifestUpdate("MCUBOOT", 'mcuboot', CI_STATE.SELF.GIT_URL, CI_STATE.SELF.GIT_REF, CI_STATE)
+        lib_Main.checkoutRepo(CI_STATE.NRF.GIT_URL, "nrf", CI_STATE.NRF, true)
+        lib_West.InitUpdate('nrf', 'ci-tools')
       }}
     }
     stage('Run compliance check') {
-      when { expression { CI_STATE.MCUBOOT.RUN_TESTS } }
+      when { expression { CI_STATE.SELF.RUN_TESTS } }
       steps {
         script {
           lib_Status.set("PENDING", 'MCUBOOT', CI_STATE);
           dir('mcuboot') {
-
-            def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.MCUBOOT)
+            def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.SELF)
             if (BUILD_TYPE == "PR") {
 
-              if (CI_STATE.MCUBOOT.CHANGE_TITLE.toLowerCase().contains('[nrf mergeup]')) {
+              if (CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('[nrf mergeup]')) {
                 COMPLIANCE_ARGS = "$COMPLIANCE_ARGS --exclude-module Gitlint"
               }
 
-              COMMIT_RANGE = "$CI_STATE.MCUBOOT.MERGE_BASE..$CI_STATE.MCUBOOT.REPORT_SHA"
-              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.MCUBOOT.REPORT_SHA -g -e pylint"
+              COMMIT_RANGE = "$CI_STATE.SELF.MERGE_BASE..$CI_STATE.SELF.REPORT_SHA"
+              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g -e pylint"
               println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
             }
             else if (BUILD_TYPE == "TAG") {
@@ -82,7 +92,7 @@ pipeline {
 
             // Run the compliance check
             try {
-              sh "../ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE"
+              sh "../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE"
             }
             finally {
               junit 'compliance.xml'
@@ -92,28 +102,24 @@ pipeline {
         }
       }
     }
+
     stage('Build samples') {
-      when { expression { CI_STATE.MCUBOOT.RUN_BUILD } }
+      when { expression { CI_STATE.SELF.RUN_BUILD } }
       steps {
           echo "No Samples to build yet."
       }
     }
-    stage('Trigger testing build') {
-      when { expression { CI_STATE.MCUBOOT.RUN_DOWNSTREAM } }
-      steps {
-        script {
-          CI_STATE.MCUBOOT.WAITING = true
-          def DOWNSTREAM_JOBS = lib_Main.getDownStreamJobs(JOB_NAME)
-          def jobs = [:]
-          DOWNSTREAM_JOBS.each {
-            jobs["${it}"] = {
-              build job: "${it}", propagate: true, wait: true, parameters: [
-                        string(name: 'jsonstr_CI_STATE', value: lib_Util.HashMap2Str(CI_STATE))]
-            }
-          }
-          parallel jobs
-        }
-      }
+
+    stage('Trigger Downstream Jobs') {
+      when { expression { CI_STATE.SELF.RUN_DOWNSTREAM } }
+      steps { script { lib_Stage.runDownstream(JOB_NAME, CI_STATE) } }
+    }
+
+    stage('Report') {
+      when { expression { CI_STATE.SELF.RUN_TESTS } }
+      steps { script {
+          println 'no report generation yet'
+      } }
     }
 
   }
@@ -122,6 +128,7 @@ pipeline {
     // This is the order that the methods are run. {always->success/abort/failure/unstable->cleanup}
     always {
       echo "always"
+      script { if ( !CI_STATE.SELF.RUN_BUILD || !CI_STATE.SELF.RUN_TESTS ) { currentBuild.result = "UNSTABLE"}}
     }
     success {
       echo "success"
