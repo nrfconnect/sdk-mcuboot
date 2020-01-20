@@ -17,7 +17,7 @@
 #include <assert.h>
 #include <zephyr.h>
 #include <gpio.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <flash.h>
 #include <drivers/timer/system_timer.h>
 #include <usb/usb_device.h>
@@ -42,6 +42,26 @@ const struct boot_uart_funcs boot_funcs = {
 
 #ifdef CONFIG_BOOT_WAIT_FOR_USB_DFU
 #include <usb/class/usb_dfu.h>
+#endif
+
+#ifdef CONFIG_SOC_FAMILY_NRF
+#include <hal/nrf_power.h>
+
+static inline bool boot_skip_serial_recovery()
+{
+#if NRF_POWER_HAS_RESETREAS	
+    u32_t rr = nrf_power_resetreas_get(NRF_POWER);
+
+    return !(rr == 0 || (rr & NRF_POWER_RESETREAS_RESETPIN_MASK));
+#else
+    return false;
+#endif
+}
+#else
+static inline bool boot_skip_serial_recovery()
+{
+    return false;
+}
 #endif
 
 MCUBOOT_LOG_MODULE_REGISTER(mcuboot);
@@ -193,8 +213,8 @@ void main(void)
     rc = gpio_pin_read(detect_port, CONFIG_BOOT_SERIAL_DETECT_PIN,
                        &detect_value);
     __ASSERT(rc == 0, "Error of the reading the detect pin.\n");
-
-    if (detect_value == CONFIG_BOOT_SERIAL_DETECT_PIN_VAL) {
+    if (detect_value == CONFIG_BOOT_SERIAL_DETECT_PIN_VAL &&
+        !boot_skip_serial_recovery()) {
         BOOT_LOG_INF("Enter the serial recovery mode");
         rc = boot_console_init();
         __ASSERT(rc == 0, "Error initializing boot console.\n");

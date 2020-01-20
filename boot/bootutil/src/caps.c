@@ -40,14 +40,19 @@ uint32_t bootutil_get_caps(void)
 #endif
 #if defined(MCUBOOT_OVERWRITE_ONLY)
     res |= BOOTUTIL_CAP_OVERWRITE_UPGRADE;
+#elif defined(MCUBOOT_SWAP_USING_MOVE)
+    res |= BOOTUTIL_CAP_SWAP_USING_MOVE;
 #else
-    res |= BOOTUTIL_CAP_SWAP_UPGRADE;
+    res |= BOOTUTIL_CAP_SWAP_USING_SCRATCH;
 #endif
 #if defined(MCUBOOT_ENCRYPT_RSA)
     res |= BOOTUTIL_CAP_ENC_RSA;
 #endif
 #if defined(MCUBOOT_ENCRYPT_KW)
     res |= BOOTUTIL_CAP_ENC_KW;
+#endif
+#if defined(MCUBOOT_ENCRYPT_EC256)
+    res |= BOOTUTIL_CAP_ENC_EC256;
 #endif
 #if defined(MCUBOOT_VALIDATE_PRIMARY_SLOT)
     res |= BOOTUTIL_CAP_VALIDATE_PRIMARY_SLOT;

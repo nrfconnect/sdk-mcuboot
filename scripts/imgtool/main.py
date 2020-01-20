@@ -80,7 +80,8 @@ def get_password():
 @click.option('-p', '--password', is_flag=True,
               help='Prompt for password to protect key')
 @click.option('-t', '--type', metavar='type', required=True,
-              type=click.Choice(keygens.keys()))
+              type=click.Choice(keygens.keys()), prompt=True,
+              help='{}'.format('One of: {}'.format(', '.join(keygens.keys()))))
 @click.option('-k', '--key', metavar='filename', required=True)
 @click.command(help='Generate pub/private keypair')
 def keygen(type, key, password):
@@ -182,6 +183,9 @@ class BasedIntParamType(click.ParamType):
 
 @click.argument('outfile')
 @click.argument('infile')
+@click.option('-R', '--erased-val', type=click.Choice(['0', '0xff']),
+              required=False,
+              help='The value that is read back from erased flash.')
 @click.option('-x', '--hex-addr', type=BasedIntParamType(), required=False,
               help='Adjust address in hex output file.')
 @click.option('-L', '--load-addr', type=BasedIntParamType(), required=False,
@@ -214,20 +218,22 @@ class BasedIntParamType(click.ParamType):
                .hex extension, otherwise binary format is used''')
 def sign(key, align, version, header_size, pad_header, slot_size, pad,
          max_sectors, overwrite_only, endian, encrypt, infile, outfile,
-         dependencies, load_addr, hex_addr):
+         dependencies, load_addr, hex_addr, erased_val):
     img = image.Image(version=decode_version(version), header_size=header_size,
                       pad_header=pad_header, pad=pad, align=int(align),
                       slot_size=slot_size, max_sectors=max_sectors,
                       overwrite_only=overwrite_only, endian=endian,
-                      load_addr=load_addr)
+                      load_addr=load_addr, erased_val=erased_val)
     img.load(infile)
     key = load_key(key) if key else None
     enckey = load_key(encrypt) if encrypt else None
-    if enckey:
-        if not isinstance(enckey, (keys.RSA, keys.RSAPublic)):
-            raise Exception("Encryption only available with RSA key")
-        if key and not isinstance(key, keys.RSA):
-            raise Exception("Signing only available with private RSA key")
+    if enckey and key:
+        if ((isinstance(key, keys.ECDSA256P1) and
+             not isinstance(enckey, keys.ECDSA256P1Public))
+                or (isinstance(key, keys.RSA) and
+                    not isinstance(enckey, keys.RSAPublic))):
+            # FIXME
+            raise Exception("Signing and encryption must use the same type of key")
     img.create(key, enckey, dependencies)
     img.save(outfile, hex_addr)
 

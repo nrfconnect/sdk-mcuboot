@@ -82,8 +82,9 @@ struct flash_area;
 #define IMAGE_TLV_ED25519           0x24   /* ed25519 of hash output */
 #define IMAGE_TLV_ENC_RSA2048       0x30   /* Key encrypted with RSA-OAEP-2048 */
 #define IMAGE_TLV_ENC_KW128         0x31   /* Key encrypted with AES-KW-128 */
+#define IMAGE_TLV_ENC_EC256         0x32   /* Key encrypted with ECIES-EC256 */
 #define IMAGE_TLV_DEPENDENCY        0x40   /* Image depends on other image */
-#define IMAGE_TLV_ANY               0xff   /* Used to iterate over all TLV */
+#define IMAGE_TLV_ANY               0xffff /* Used to iterate over all TLV */
 
 struct image_version {
     uint8_t iv_major;
@@ -122,8 +123,7 @@ struct image_tlv_info {
 
 /** Image trailer TLV format. All fields in little endian. */
 struct image_tlv {
-    uint8_t  it_type;   /* IMAGE_TLV_[...]. */
-    uint8_t  _pad;
+    uint16_t it_type;   /* IMAGE_TLV_[...]. */
     uint16_t it_len;    /* Data length (not including TLV header). */
 };
 
@@ -149,7 +149,7 @@ int bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
 struct image_tlv_iter {
     const struct image_header *hdr;
     const struct flash_area *fap;
-    uint8_t type;
+    uint16_t type;
     bool prot;
     uint32_t prot_end;
     uint32_t tlv_off;
@@ -158,10 +158,10 @@ struct image_tlv_iter {
 
 int bootutil_tlv_iter_begin(struct image_tlv_iter *it,
                             const struct image_header *hdr,
-                            const struct flash_area *fap, uint8_t type,
+                            const struct flash_area *fap, uint16_t type,
                             bool prot);
 int bootutil_tlv_iter_next(struct image_tlv_iter *it, uint32_t *off,
-                           uint16_t *len, uint8_t *type);
+                           uint16_t *len, uint16_t *type);
 
 #ifdef __cplusplus
 }

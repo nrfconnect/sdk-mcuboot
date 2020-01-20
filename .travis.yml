@@ -14,7 +14,7 @@ matrix:
     - os: linux
       env: SINGLE_FEATURES="sig-ecdsa sig-ed25519 enc-kw bootstrap" TEST=sim
     - os: linux
-      env: SINGLE_FEATURES="none sig-rsa sig-rsa3072 overwrite-only validate-primary-slot" TEST=sim
+      env: SINGLE_FEATURES="none sig-rsa sig-rsa3072 overwrite-only validate-primary-slot swap-move" TEST=sim
     - os: linux
       env: SINGLE_FEATURES="enc-rsa" TEST=sim
 
@@ -23,19 +23,19 @@ matrix:
     # separated by ',' and each list of values is run sequentially in the
     # defined order.
     - os: linux
-      env: MULTI_FEATURES="sig-rsa overwrite-only,sig-ecdsa overwrite-only,multiimage overwrite-only" TEST=sim
+      env: MULTI_FEATURES="sig-rsa overwrite-only large-write,sig-ecdsa overwrite-only large-write,multiimage overwrite-only large-write" TEST=sim
     - os: linux
       env: MULTI_FEATURES="sig-rsa validate-primary-slot,sig-ecdsa validate-primary-slot,sig-rsa multiimage validate-primary-slot" TEST=sim
     - os: linux
-      env: MULTI_FEATURES="enc-kw overwrite-only,enc-rsa overwrite-only" TEST=sim
+      env: MULTI_FEATURES="enc-kw overwrite-only large-write,enc-rsa overwrite-only large-write" TEST=sim
     - os: linux
-      env: MULTI_FEATURES="sig-rsa enc-rsa validate-primary-slot" TEST=sim
+      env: MULTI_FEATURES="sig-rsa enc-rsa validate-primary-slot,swap-move enc-rsa sig-rsa validate-primary-slot" TEST=sim
     - os: linux
       env: MULTI_FEATURES="sig-rsa enc-kw validate-primary-slot bootstrap" TEST=sim
     - os: linux
       env: MULTI_FEATURES="sig-ecdsa enc-kw validate-primary-slot" TEST=sim
     - os: linux
-      env: MULTI_FEATURES="sig-rsa validate-primary-slot overwrite-only" TEST=sim
+      env: MULTI_FEATURES="sig-rsa validate-primary-slot overwrite-only large-write,sig-ecdsa enc-ec256 validate-primary-slot" TEST=sim
 
     - os: linux
       language: go

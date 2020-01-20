@@ -42,7 +42,7 @@ use crate::depends::{
     PairDep,
     UpgradeInfo,
 };
-use crate::tlv::{ManifestGen, TlvGen, TlvFlags, AES_SEC_KEY};
+use crate::tlv::{ManifestGen, TlvGen, TlvFlags};
 
 /// A builder for Images.  This describes a single run of the simulator,
 /// capturing the configuration of a particular set of devices, including
@@ -84,8 +84,14 @@ impl ImagesBuilder {
     /// Construct a new image builder for the given device.  Returns
     /// Some(builder) if is possible to test this configuration, or None if
     /// not possible (for example, if there aren't enough image slots).
-    pub fn new(device: DeviceName, align: u8, erased_val: u8) -> Option<Self> {
-        let (flash, areadesc) = Self::make_device(device, align, erased_val);
+    pub fn new(device: DeviceName, align: usize, erased_val: u8) -> Result<Self, String> {
+        let (flash, areadesc, unsupported_caps) = Self::make_device(device, align, erased_val);
+
+        for cap in unsupported_caps {
+            if cap.present() {
+                return Err(format!("unsupported {:?}", cap));
+            }
+        }
 
         let num_images = Caps::get_num_images();
 
@@ -100,7 +106,7 @@ impl ImagesBuilder {
             };
             let (primary_base, primary_len, primary_dev_id) = match areadesc.find(id0) {
                 Some(info) => info,
-                None => return None,
+                None => return Err("insufficient partitions".to_string()),
             };
             let id1 = match image {
                 0 => FlashId::Image1,
@@ -109,7 +115,7 @@ impl ImagesBuilder {
             };
             let (secondary_base, secondary_len, secondary_dev_id) = match areadesc.find(id1) {
                 Some(info) => info,
-                None => return None,
+                None => return Err("insufficient partitions".to_string()),
             };
 
             let offset_from_end = c::boot_magic_sz() + c::boot_max_align() * 4;
@@ -135,7 +141,7 @@ impl ImagesBuilder {
             slots.push([primary, secondary]);
         }
 
-        Some(ImagesBuilder {
+        Ok(ImagesBuilder {
             flash: flash,
             areadesc: areadesc,
             slots: slots,
@@ -146,11 +152,11 @@ impl ImagesBuilder {
         where F: Fn(Self)
     {
         for &dev in ALL_DEVICES {
-            for &align in &[1, 2, 4, 8] {
+            for &align in test_alignments() {
                 for &erased_val in &[0, 0xff] {
                     match Self::new(dev, align, erased_val) {
-                        Some(run) => f(run),
-                        None => warn!("Skipping {:?}, insufficient partitions", dev),
+                        Ok(run) => f(run),
+                        Err(msg) => warn!("Skipping {}: {}", dev, msg),
                     }
                 }
             }
@@ -227,7 +233,7 @@ impl ImagesBuilder {
     }
 
     /// Build the Flash and area descriptor for a given device.
-    pub fn make_device(device: DeviceName, align: u8, erased_val: u8) -> (SimMultiFlash, AreaDesc) {
+    pub fn make_device(device: DeviceName, align: usize, erased_val: u8) -> (SimMultiFlash, AreaDesc, &'static [Caps]) {
         match device {
             DeviceName::Stm32f4 => {
                 // STM style flash.  Large sectors, with a large scratch area.
@@ -244,7 +250,7 @@ impl ImagesBuilder {
 
                 let mut flash = SimMultiFlash::new();
                 flash.insert(dev_id, dev);
-                (flash, areadesc)
+                (flash, areadesc, &[Caps::SwapUsingMove])
             }
             DeviceName::K64f => {
                 // NXP style flash.  Small sectors, one small sector for scratch.
@@ -259,7 +265,7 @@ impl ImagesBuilder {
 
                 let mut flash = SimMultiFlash::new();
                 flash.insert(dev_id, dev);
-                (flash, areadesc)
+                (flash, areadesc, &[])
             }
             DeviceName::K64fBig => {
                 // Simulating an STM style flash on top of an NXP style flash.  Underlying flash device
@@ -275,7 +281,7 @@ impl ImagesBuilder {
 
                 let mut flash = SimMultiFlash::new();
                 flash.insert(dev_id, dev);
-                (flash, areadesc)
+                (flash, areadesc, &[Caps::SwapUsingMove])
             }
             DeviceName::Nrf52840 => {
                 // Simulating the flash on the nrf52840 with partitions set up so that the scratch size
@@ -291,7 +297,7 @@ impl ImagesBuilder {
 
                 let mut flash = SimMultiFlash::new();
                 flash.insert(dev_id, dev);
-                (flash, areadesc)
+                (flash, areadesc, &[])
             }
             DeviceName::Nrf52840SpiFlash => {
                 // Simulate nrf52840 with external SPI flash. The external SPI flash
@@ -310,7 +316,7 @@ impl ImagesBuilder {
                 let mut flash = SimMultiFlash::new();
                 flash.insert(0, dev0);
                 flash.insert(1, dev1);
-                (flash, areadesc)
+                (flash, areadesc, &[Caps::SwapUsingMove])
             }
             DeviceName::K64fMulti => {
                 // NXP style flash, but larger, to support multiple images.
@@ -327,7 +333,7 @@ impl ImagesBuilder {
 
                 let mut flash = SimMultiFlash::new();
                 flash.insert(dev_id, dev);
-                (flash, areadesc)
+                (flash, areadesc, &[])
             }
         }
     }
@@ -362,6 +368,10 @@ impl Images {
         self.verify_dep_images(&flash, deps)
     }
 
+    fn is_swap_upgrade(&self) -> bool {
+        Caps::SwapUsingScratch.present() || Caps::SwapUsingMove.present()
+    }
+
     pub fn run_basic_revert(&self) -> bool {
         if Caps::OverwriteUpgrade.present() {
             return false;
@@ -370,7 +380,7 @@ impl Images {
         let mut fails = 0;
 
         // FIXME: this test would also pass if no swap is ever performed???
-        if Caps::SwapUpgrade.present() {
+        if self.is_swap_upgrade() {
             for count in 2 .. 5 {
                 info!("Try revert: {}", count);
                 let flash = self.try_revert(count);
@@ -410,7 +420,7 @@ impl Images {
                 fails += 1;
             }
 
-            if Caps::SwapUpgrade.present() {
+            if self.is_swap_upgrade() {
                 if !self.verify_images(&flash, 1, 0) {
                     warn!("Secondary slot FAIL at step {} of {}",
                           i, total_flash_ops);
@@ -434,7 +444,7 @@ impl Images {
         info!("Random interruptions at reset points={:?}", total_counts);
 
         let primary_slot_ok = self.verify_images(&flash, 0, 1);
-        let secondary_slot_ok = if Caps::SwapUpgrade.present() {
+        let secondary_slot_ok = if self.is_swap_upgrade() {
             // TODO: This result is ignored.
             self.verify_images(&flash, 1, 0)
         } else {
@@ -472,7 +482,7 @@ impl Images {
 
         let mut fails = 0;
 
-        if Caps::SwapUpgrade.present() {
+        if self.is_swap_upgrade() {
             for i in 1 .. self.total_count.unwrap() {
                 info!("Try interruption at {}", i);
                 if self.try_revert_with_fail_at(i) {
@@ -652,7 +662,8 @@ impl Images {
 
     // FIXME: could get status sz from bootloader
     fn status_sz(&self, align: usize) -> usize {
-        let bias = if Caps::EncRsa.present() || Caps::EncKw.present() {
+        let bias = if Caps::EncRsa.present() || Caps::EncKw.present() ||
+                Caps::EncEc256.present() {
             32
         } else {
             0
@@ -1138,7 +1149,9 @@ fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: usize,
     let is_encrypted = (tlv.get_flags() & flag) == flag;
     let mut b_encimg = vec![];
     if is_encrypted {
-        let key = GenericArray::from_slice(AES_SEC_KEY);
+        tlv.generate_enc_key();
+        let enc_key = tlv.get_enc_key();
+        let key = GenericArray::from_slice(enc_key.as_slice());
         let nonce = GenericArray::from_slice(&[0; 16]);
         let mut cipher = Aes128Ctr::new(&key, &nonce);
         b_encimg = b_img.clone();
@@ -1146,30 +1159,33 @@ fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: usize,
     }
 
     // Build the TLV itself.
-    let mut b_tlv = if bad_sig {
-        let good_sig = &mut tlv.make_tlv();
-        vec![0; good_sig.len()]
-    } else {
-        tlv.make_tlv()
-    };
+    if bad_sig {
+        tlv.corrupt_sig();
+    }
+    let mut b_tlv = tlv.make_tlv();
 
     let dev = flash.get_mut(&dev_id).unwrap();
-
-    // Pad the block to a flash alignment (8 bytes).
-    while b_tlv.len() % 8 != 0 {
-        b_tlv.push(dev.erased_val());
-    }
 
     let mut buf = vec![];
     buf.append(&mut b_header.to_vec());
     buf.append(&mut b_img);
     buf.append(&mut b_tlv.clone());
 
+    // Pad the buffer to a multiple of the flash alignment.
+    let align = dev.align();
+    while buf.len() % align != 0 {
+        buf.push(dev.erased_val());
+    }
+
     let mut encbuf = vec![];
     if is_encrypted {
         encbuf.append(&mut b_header.to_vec());
         encbuf.append(&mut b_encimg);
         encbuf.append(&mut b_tlv);
+
+        while encbuf.len() % align != 0 {
+            encbuf.push(dev.erased_val());
+        }
     }
 
     // Since images are always non-encrypted in the primary slot, we first write
@@ -1258,6 +1274,9 @@ fn make_tlv() -> TlvGen {
         } else {
             TlvGen::new_enc_rsa()
         }
+    } else if Caps::EncEc256.present() {
+        //FIXME: should fail with RSA signature?
+        TlvGen::new_ecdsa_ecies_p256()
     } else {
         // The non-encrypted configuration.
         if Caps::RSA2048.present() {
@@ -1278,7 +1297,8 @@ impl ImageData {
     /// Find the image contents for the given slot.  This assumes that slot 0
     /// is unencrypted, and slot 1 is encrypted.
     fn find(&self, slot: usize) -> &Vec<u8> {
-        let encrypted = Caps::EncRsa.present() || Caps::EncKw.present();
+        let encrypted = Caps::EncRsa.present() || Caps::EncKw.present() ||
+            Caps::EncEc256.present();
         match (encrypted, slot) {
             (false, _) => &self.plain,
             (true, 0) => &self.plain,
@@ -1331,7 +1351,7 @@ fn verify_trailer(flash: &SimMultiFlash, slot: &SlotInfo,
 
     failed |= match magic {
         Some(v) => {
-            if v == 1 && &copy[24..] != MAGIC.unwrap() {
+            if v == 1 && &copy[24..] != MAGIC {
                 warn!("\"magic\" mismatch at {:#x}", offset);
                 true
             } else if v == 3 {
@@ -1461,10 +1481,10 @@ pub struct SlotInfo {
     pub dev_id: u8,
 }
 
-const MAGIC: Option<&[u8]> = Some(&[0x77, 0xc2, 0x95, 0xf3,
-                                    0x60, 0xd2, 0xef, 0x7f,
-                                    0x35, 0x52, 0x50, 0x0f,
-                                    0x2c, 0xb6, 0x79, 0x80]);
+const MAGIC: &[u8] = &[0x77, 0xc2, 0x95, 0xf3,
+                       0x60, 0xd2, 0xef, 0x7f,
+                       0x35, 0x52, 0x50, 0x0f,
+                       0x2c, 0xb6, 0x79, 0x80];
 
 // Replicates defines found in bootutil.h
 const BOOT_MAGIC_GOOD: Option<u8> = Some(1);
@@ -1476,13 +1496,30 @@ const BOOT_FLAG_UNSET: Option<u8> = Some(3);
 /// Write out the magic so that the loader tries doing an upgrade.
 pub fn mark_upgrade(flash: &mut SimMultiFlash, slot: &SlotInfo) {
     let dev = flash.get_mut(&slot.dev_id).unwrap();
+    let align = dev.align();
     let offset = slot.trailer_off + c::boot_max_align() * 4;
-    dev.write(offset, MAGIC.unwrap()).unwrap();
+    if offset % align != 0 || MAGIC.len() % align != 0 {
+        // The write size is larger than the magic value.  Fill a buffer
+        // with the erased value, put the MAGIC in it, and write it in its
+        // entirety.
+        let mut buf = vec![dev.erased_val(); align];
+        buf[(offset % align)..].copy_from_slice(MAGIC);
+        dev.write(offset - (offset % align), &buf).unwrap();
+    } else {
+        dev.write(offset, MAGIC).unwrap();
+    }
 }
 
 /// Writes the image_ok flag which, guess what, tells the bootloader
 /// the this image is ok (not a test, and no revert is to be performed).
 fn mark_permanent_upgrade(flash: &mut SimMultiFlash, slot: &SlotInfo) {
+    // Overwrite mode always is permanent, and only the magic is used in
+    // the trailer.  To avoid problems with large write sizes, don't try to
+    // set anything in this case.
+    if Caps::OverwriteUpgrade.present() {
+        return;
+    }
+
     let dev = flash.get_mut(&slot.dev_id).unwrap();
     let mut ok = [dev.erased_val(); 8];
     ok[0] = 1u8;
@@ -1512,4 +1549,14 @@ pub fn show_sizes() {
         let msize = c::boot_trailer_sz(*min);
         println!("{:2}: {} (0x{:x})", min, msize, msize);
     }
+}
+
+#[cfg(not(feature = "large-write"))]
+fn test_alignments() -> &'static [usize] {
+    &[1, 2, 4, 8]
+}
+
+#[cfg(feature = "large-write")]
+fn test_alignments() -> &'static [usize] {
+    &[1, 2, 4, 8, 128, 512]
 }

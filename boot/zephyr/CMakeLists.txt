@@ -4,11 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-cmake_minimum_required(VERSION 3.8.2)
-
-# Board-specific CONF_FILES should get merged into the build as well.
-# Default to qemu_x86 if no board has been specified.
-set(BOARD qemu_x86)
+cmake_minimum_required(VERSION 3.13.1)
 
 # Add a common dts overlay necessary to ensure mcuboot is linked into,
 # and fits inside, the boot partition. (If the user specified a
@@ -21,13 +17,6 @@ if(DTC_OVERLAY_FILE)
     )
 else()
   set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_LIST_DIR}/dts.overlay)
-endif()
-
-if (EXISTS ${CMAKE_CURRENT_LIST_DIR}/boards/${BOARD}.overlay)
-  set(DTC_OVERLAY_FILE
-    "${DTC_OVERLAY_FILE} ${CMAKE_CURRENT_LIST_DIR}/boards/${BOARD}.overlay"
-    CACHE STRING "" FORCE
-    )
 endif()
 
 # Enable Zephyr runner options which request mass erase if so
@@ -98,14 +87,17 @@ zephyr_library_sources(
 
 if(NOT DEFINED CONFIG_FLASH_PAGE_LAYOUT)
   zephyr_library_sources(
-	flash_map_legacy.c
-	)
+    flash_map_legacy.c
+    )
 endif()
 
 # Generic bootutil sources and includes.
 zephyr_library_include_directories(${BOOT_DIR}/bootutil/include)
 zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/loader.c
+  ${BOOT_DIR}/bootutil/src/swap_misc.c
+  ${BOOT_DIR}/bootutil/src/swap_scratch.c
+  ${BOOT_DIR}/bootutil/src/swap_move.c
   ${BOOT_DIR}/bootutil/src/bootutil_misc.c
   ${BOOT_DIR}/bootutil/src/image_validate.c
   ${BOOT_DIR}/bootutil/src/encrypted.c
@@ -116,28 +108,28 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/tlv.c
   )
 
-if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256)
+if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
   zephyr_library_include_directories(
-	${MBEDTLS_ASN1_DIR}/include
-  )
+    ${MBEDTLS_ASN1_DIR}/include
+    )
   zephyr_library_sources(
-	# Additionally pull in just the ASN.1 parser from mbedTLS.
-	${MBEDTLS_ASN1_DIR}/src/asn1parse.c
-	${MBEDTLS_ASN1_DIR}/src/platform_util.c
-	)
+    # Additionally pull in just the ASN.1 parser from mbedTLS.
+    ${MBEDTLS_ASN1_DIR}/src/asn1parse.c
+    ${MBEDTLS_ASN1_DIR}/src/platform_util.c
+    )
   if(CONFIG_BOOT_USE_TINYCRYPT)
   # When using ECDSA signatures, pull in our copy of the tinycrypt library.
   zephyr_library_include_directories(
-	 ${BOOT_DIR}/zephyr/include
-	   ${TINYCRYPT_DIR}/include
-	)
+    ${BOOT_DIR}/zephyr/include
+    ${TINYCRYPT_DIR}/include
+    )
 
   zephyr_library_sources(
-	${TINYCRYPT_DIR}/source/ecc.c
-	${TINYCRYPT_DIR}/source/ecc_dsa.c
-	${TINYCRYPT_DIR}/source/sha256.c
-	${TINYCRYPT_DIR}/source/utils.c
-  )
+    ${TINYCRYPT_DIR}/source/ecc.c
+    ${TINYCRYPT_DIR}/source/ecc_dsa.c
+    ${TINYCRYPT_DIR}/source/sha256.c
+    ${TINYCRYPT_DIR}/source/utils.c
+    )
   elseif(CONFIG_BOOT_USE_NRF_CC310_BL)
     zephyr_library_sources(${NRF_DIR}/cc310_glue.c)
     zephyr_library_include_directories(${NRF_DIR})
@@ -150,8 +142,8 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256)
   # to set MBEDTLS_CONFIG_FILE ourselves. When using Zephyr's copy, this
   # variable is set by its Kconfig in the Zephyr codebase.
   zephyr_library_compile_definitions(
-	MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_LIST_DIR}/include/mcuboot-mbedtls-cfg.h"
-	)
+    MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_LIST_DIR}/include/mcuboot-mbedtls-cfg.h"
+    )
 elseif(CONFIG_BOOT_SIGNATURE_TYPE_RSA)
   # Use mbedTLS provided by Zephyr for RSA signatures. (Its config file
   # is set using Kconfig.)
@@ -170,6 +162,16 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519)
   )
 endif()
 
+if(CONFIG_BOOT_ENCRYPT_EC256)
+  zephyr_library_sources(
+    ${TINYCRYPT_DIR}/source/aes_encrypt.c
+    ${TINYCRYPT_DIR}/source/aes_decrypt.c
+    ${TINYCRYPT_DIR}/source/ctr_mode.c
+    ${TINYCRYPT_DIR}/source/hmac.c
+    ${TINYCRYPT_DIR}/source/ecc_dh.c
+    )
+endif()
+
 if(CONFIG_MCUBOOT_SERIAL)
   zephyr_sources(${BOOT_DIR}/zephyr/serial_adapter.c)
   zephyr_sources(${BOOT_DIR}/boot_serial/src/boot_serial.c)
@@ -179,14 +181,14 @@ if(CONFIG_MCUBOOT_SERIAL)
   zephyr_include_directories(include)
 
   zephyr_link_libraries_ifdef(
-	CONFIG_TINYCBOR
-	TINYCBOR
-	)
+    CONFIG_TINYCBOR
+    TINYCBOR
+    )
 
   zephyr_include_directories_ifdef(
-	CONFIG_BOOT_ERASE_PROGRESSIVELY
-	${BOOT_DIR}/bootutil/src
-	)
+    CONFIG_BOOT_ERASE_PROGRESSIVELY
+    ${BOOT_DIR}/bootutil/src
+    )
 endif()
 
 if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
