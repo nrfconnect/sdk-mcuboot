@@ -66,15 +66,23 @@ pipeline {
         script {
           lib_Status.set("PENDING", 'MCUBOOT', CI_STATE);
           dir('mcuboot') {
+
             def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.SELF)
             if (BUILD_TYPE == "PR") {
 
-              if (CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('[nrf mergeup]')) {
-                COMPLIANCE_ARGS = "$COMPLIANCE_ARGS --exclude-module Gitlint"
+              if ( CI_STATE.SELF.CHANGE_TITLE.toLowerCase().contains('[nrf mergeup]') )  {
+                CI_STATE.SELF.IS_MERGEUP = true
+                println 'This is a MERGE-UP PR.   CI_STATE.SELF.IS_MERGEUP=' + CI_STATE.SELF.IS_MERGEUP
+                CI_STATE.SELF.MERGEUP_BASE = sh( script: "git log --oneline --grep='\\[nrf mergeup\\].*' -i -n 1 --pretty=format:'%h' | tr -d '\\n'" , returnStdout: true)
+                println "CI_STATE.SELF.MERGEUP_BASE = $CI_STATE.SELF.MERGEUP_BASE"
+                COMMIT_RANGE = "$CI_STATE.SELF.MERGEUP_BASE..$CI_STATE.SELF.REPORT_SHA"
+              } else {
+                CI_STATE.SELF.IS_MERGEUP = false
+                COMMIT_RANGE = "$CI_STATE.SELF.MERGE_BASE..$CI_STATE.SELF.REPORT_SHA"
               }
 
-              COMMIT_RANGE = "$CI_STATE.SELF.MERGE_BASE..$CI_STATE.SELF.REPORT_SHA"
-              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g -e pylint"
+              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g"
+              // COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g -e pylint"
               println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
             }
             else if (BUILD_TYPE == "TAG") {
