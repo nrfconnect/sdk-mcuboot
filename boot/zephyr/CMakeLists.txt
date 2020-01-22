@@ -73,8 +73,6 @@ if(CONFIG_BOOT_USE_NRF_CC310_BL)
 set(NRFXLIB_DIR ${MCUBOOT_DIR}/../nrfxlib)
 assert_exists(NRFXLIB_DIR)
 endif()
-set(NRF_EXTERNAL_CRYPTO_DIR "${MCUBOOT_DIR}/../nrf/subsys/bootloader/bl_crypto")
-assert_exists(NRF_EXTERNAL_CRYPTO_DIR)
 
 zephyr_library_include_directories(
   include
