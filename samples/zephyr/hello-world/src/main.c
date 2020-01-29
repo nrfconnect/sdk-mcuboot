@@ -5,7 +5,7 @@
  */
 
 #include <zephyr.h>
-#include <sys/printk.h>
+#include <misc/printk.h>
 
 void main(void)
 {
