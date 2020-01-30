@@ -147,6 +147,15 @@ boot_read_image_headers(struct boot_loader_state *state, bool require_all,
              *
              * Failure to read any headers is a fatal error.
              */
+#ifdef PM_S1_ADDRESS
+            /* Patch needed for NCS. The primary slot of the second image
+             * (image 1) will not contain a valid image header until an upgrade
+             * of mcuboot has happened (filling S1 with the new version).
+             */
+            if (BOOT_CURR_IMG(state) == 1 && i == 0) {
+                continue;
+            }
+#endif /* PM_S1_ADDRESS */
             if (i > 0 && !require_all) {
                 return 0;
             } else {
