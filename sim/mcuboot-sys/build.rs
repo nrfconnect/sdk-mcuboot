@@ -22,6 +22,7 @@ fn main() {
     let enc_ec256 = env::var("CARGO_FEATURE_ENC_EC256").is_ok();
     let bootstrap = env::var("CARGO_FEATURE_BOOTSTRAP").is_ok();
     let multiimage = env::var("CARGO_FEATURE_MULTIIMAGE").is_ok();
+    let downgrade_prevention = env::var("CARGO_FEATURE_DOWNGRADE_PREVENTION").is_ok();
 
     let mut conf = cc::Build::new();
     conf.define("__BOOTSIM__", None);
@@ -31,12 +32,20 @@ fn main() {
     conf.define("MCUBOOT_MAX_IMG_SECTORS", Some("128"));
     conf.define("MCUBOOT_IMAGE_NUMBER", Some(if multiimage { "2" } else { "1" }));
 
+    if downgrade_prevention && !overwrite_only {
+        panic!("Downgrade prevention requires overwrite only");
+    }
+
     if bootstrap {
         conf.define("MCUBOOT_BOOTSTRAP", None);
     }
 
     if validate_primary_slot {
         conf.define("MCUBOOT_VALIDATE_PRIMARY_SLOT", None);
+    }
+
+    if downgrade_prevention {
+        conf.define("MCUBOOT_DOWNGRADE_PREVENTION", None);
     }
 
     // Currently no more than one sig type can be used simultaneously.
@@ -51,10 +60,10 @@ fn main() {
         // they are used internally by "config-rsa.h"
         if sig_rsa {
             conf.define("MCUBOOT_SIGN_RSA_LEN", "2048");
-            conf.define("CONFIG_BOOT_SIGNATURE_TYPE_RSA_2048", None);
+            conf.define("CONFIG_BOOT_SIGNATURE_TYPE_RSA_LEN", "2048");
         } else {
             conf.define("MCUBOOT_SIGN_RSA_LEN", "3072");
-            conf.define("CONFIG_BOOT_SIGNATURE_TYPE_RSA_3072", None);
+            conf.define("CONFIG_BOOT_SIGNATURE_TYPE_RSA_LEN", "3072");
         }
         conf.define("MCUBOOT_USE_MBED_TLS", None);
 
@@ -178,6 +187,7 @@ fn main() {
         conf.define("MCUBOOT_ENCRYPT_EC256", None);
         conf.define("MCUBOOT_ENC_IMAGES", None);
         conf.define("MCUBOOT_USE_TINYCRYPT", None);
+        conf.define("MCUBOOT_SWAP_SAVE_ENCTLV", None);
 
         conf.file("../../boot/bootutil/src/encrypted.c");
         conf.file("csupport/keys.c");

@@ -1,3 +1,8 @@
+// Copyright (c) 2017-2020 Linaro LTD
+// Copyright (c) 2017-2020 JUUL Labs
+//
+// SPDX-License-Identifier: Apache-2.0
+
 //! TLV Support
 //!
 //! mcuboot images are followed immediately by a list of TLV items that contain integrity
@@ -98,10 +103,6 @@ pub trait ManifestGen {
 pub struct TlvGen {
     flags: u32,
     kinds: Vec<TlvKinds>,
-    /// The total size of the payload.
-    size: u16,
-    /// Extra bytes of the TLV that are protected.
-    protect_size: u16,
     payload: Vec<u8>,
     dependencies: Vec<Dependency>,
     enc_key: Vec<u8>,
@@ -123,7 +124,6 @@ impl TlvGen {
     pub fn new_hash_only() -> TlvGen {
         TlvGen {
             kinds: vec![TlvKinds::SHA256],
-            size: 4 + 32,
             ..Default::default()
         }
     }
@@ -132,7 +132,6 @@ impl TlvGen {
     pub fn new_rsa_pss() -> TlvGen {
         TlvGen {
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA2048],
-            size: 4 + 32 + 4 + 32 + 4 + 256,
             ..Default::default()
         }
     }
@@ -141,7 +140,6 @@ impl TlvGen {
     pub fn new_rsa3072_pss() -> TlvGen {
         TlvGen {
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA3072],
-            size: 4 + 32 + 4 + 32 + 4 + 384,
             ..Default::default()
         }
     }
@@ -150,7 +148,6 @@ impl TlvGen {
     pub fn new_ecdsa() -> TlvGen {
         TlvGen {
             kinds: vec![TlvKinds::SHA256, TlvKinds::ECDSA256],
-            size: 4 + 32 + 4 + 32 + 4 + 72,
             ..Default::default()
         }
     }
@@ -159,7 +156,6 @@ impl TlvGen {
     pub fn new_ed25519() -> TlvGen {
         TlvGen {
             kinds: vec![TlvKinds::SHA256, TlvKinds::ED25519],
-            size: 4 + 32 + 4 + 32 + 4 + 64,
             ..Default::default()
         }
     }
@@ -169,7 +165,6 @@ impl TlvGen {
         TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ENCRSA2048],
-            size: 4 + 32 + 4 + 256,
             ..Default::default()
         }
     }
@@ -179,7 +174,6 @@ impl TlvGen {
         TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA2048, TlvKinds::ENCRSA2048],
-            size: 4 + 32 + 4 + 32 + 4 + 256 + 4 + 256,
             ..Default::default()
         }
     }
@@ -189,7 +183,6 @@ impl TlvGen {
         TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ENCKW128],
-            size: 4 + 32 + 4 + 24,
             ..Default::default()
         }
     }
@@ -199,7 +192,6 @@ impl TlvGen {
         TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::RSA2048, TlvKinds::ENCKW128],
-            size: 4 + 32 + 4 + 32 + 4 + 256 + 4 + 24,
             ..Default::default()
         }
     }
@@ -209,7 +201,15 @@ impl TlvGen {
         TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ECDSA256, TlvKinds::ENCKW128],
-            size: 4 + 32 + 4 + 32 + 4 + 72 + 4 + 24,
+            ..Default::default()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_ecies_p256() -> TlvGen {
+        TlvGen {
+            flags: TlvFlags::ENCRYPTED as u32,
+            kinds: vec![TlvKinds::SHA256, TlvKinds::ENCEC256],
             ..Default::default()
         }
     }
@@ -219,14 +219,8 @@ impl TlvGen {
         TlvGen {
             flags: TlvFlags::ENCRYPTED as u32,
             kinds: vec![TlvKinds::SHA256, TlvKinds::ECDSA256, TlvKinds::ENCEC256],
-            size: 4 + 32 + 4 + 32 + 4 + 72 + 4 + 113,
             ..Default::default()
         }
-    }
-
-    /// Retrieve the size that the TLV will occupy.  This can be called at any time.
-    pub fn get_size(&self) -> u16 {
-        4 + self.size
     }
 }
 
@@ -246,18 +240,15 @@ impl ManifestGen for TlvGen {
     }
 
     fn protect_size(&self) -> u16 {
-        if self.protect_size == 0 {
+        if self.dependencies.is_empty() {
             0
         } else {
-            // Include the protected size, as well as the TLV header.
-            4 + self.protect_size
+            // Include the header and space for each dependency.
+            4 + (self.dependencies.len() as u16) * (4 + 4 + 8)
         }
     }
 
     fn add_dependency(&mut self, id: u8, version: &ImageVersion) {
-        let my_size = 4 + 4 + 8;
-        self.protect_size += my_size;
-        self.size += my_size;
         self.dependencies.push(Dependency {
             id: id,
             version: version.clone(),
@@ -272,10 +263,11 @@ impl ManifestGen for TlvGen {
     fn make_tlv(self: Box<Self>) -> Vec<u8> {
         let mut protected_tlv: Vec<u8> = vec![];
 
-        if self.protect_size > 0 {
+        if self.protect_size() > 0 {
             protected_tlv.push(0x08);
             protected_tlv.push(0x69);
-            protected_tlv.write_u16::<LittleEndian>(self.protect_size()).unwrap();
+            let size = self.protect_size();
+            protected_tlv.write_u16::<LittleEndian>(size).unwrap();
             for dep in &self.dependencies {
                 protected_tlv.write_u16::<LittleEndian>(TlvKinds::DEPENDENCY as u16).unwrap();
                 protected_tlv.write_u16::<LittleEndian>(12).unwrap();
@@ -290,6 +282,8 @@ impl ManifestGen for TlvGen {
                 protected_tlv.write_u16::<LittleEndian>(dep.version.revision).unwrap();
                 protected_tlv.write_u32::<LittleEndian>(dep.version.build_num).unwrap();
             }
+
+            assert_eq!(size, protected_tlv.len() as u16, "protected TLV length incorrect");
         }
 
         // Ring does the signature itself, which means that it must be
@@ -308,9 +302,11 @@ impl ManifestGen for TlvGen {
         result.extend_from_slice(&protected_tlv);
 
         // add non-protected payload
+        let npro_pos = result.len();
         result.push(0x07);
         result.push(0x69);
-        result.write_u16::<LittleEndian>(self.get_size()).unwrap();
+        // Placeholder for the size.
+        result.write_u16::<LittleEndian>(0).unwrap();
 
         if self.kinds.contains(&TlvKinds::SHA256) {
             // If a signature is not requested, corrupt the hash we are
@@ -553,6 +549,11 @@ impl ManifestGen for TlvGen {
             result.write_u16::<LittleEndian>(113).unwrap();
             result.extend_from_slice(&buf);
         }
+
+        // Patch the size back into the TLV header.
+        let size = (result.len() - npro_pos) as u16;
+        let mut size_buf = &mut result[npro_pos + 2 .. npro_pos + 4];
+        size_buf.write_u16::<LittleEndian>(size).unwrap();
 
         result
     }

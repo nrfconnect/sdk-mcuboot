@@ -285,7 +285,17 @@ boot_read_sectors(struct boot_loader_state *state)
 void
 boot_status_reset(struct boot_status *bs)
 {
-    memset(bs, 0, sizeof *bs);
+#ifdef MCUBOOT_ENC_IMAGES
+    memset(&bs->enckey, 0xff, BOOT_NUM_SLOTS * BOOT_ENC_KEY_SIZE);
+#if MCUBOOT_SWAP_SAVE_ENCTLV
+    memset(&bs->enctlv, 0xff, BOOT_NUM_SLOTS * BOOT_ENC_TLV_ALIGN_SIZE);
+#endif
+#endif /* MCUBOOT_ENC_IMAGES */
+
+    bs->use_scratch = 0;
+    bs->swap_size = 0;
+    bs->source = 0;
+
     bs->op = BOOT_STATUS_OP_MOVE;
     bs->idx = BOOT_STATUS_IDX_0;
     bs->state = BOOT_STATUS_STATE_0;
@@ -385,11 +395,11 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
 
 #ifdef MCUBOOT_ENC_IMAGES
     if (MUST_DECRYPT(fap, image_index, hdr)) {
-        rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs->enckey[1]);
+        rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
         if (rc < 0) {
             return BOOT_EBADIMAGE;
         }
-        if (rc == 0 && boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs->enckey[1])) {
+        if (rc == 0 && boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs)) {
             return BOOT_EBADIMAGE;
         }
     }
@@ -500,6 +510,42 @@ boot_check_header_erased(struct boot_loader_state *state, int slot)
     return 0;
 }
 
+#if (BOOT_IMAGE_NUMBER > 1) || \
+    (defined(MCUBOOT_OVERWRITE_ONLY) && defined(MCUBOOT_DOWNGRADE_PREVENTION))
+/**
+ * Check if the version of the image is not older than required.
+ *
+ * @param req         Required minimal image version.
+ * @param ver         Version of the image to be checked.
+ *
+ * @return            0 if the version is sufficient, nonzero otherwise.
+ */
+static int
+boot_is_version_sufficient(struct image_version *req,
+                           struct image_version *ver)
+{
+    if (ver->iv_major > req->iv_major) {
+        return 0;
+    }
+    if (ver->iv_major < req->iv_major) {
+        return BOOT_EBADVERSION;
+    }
+    /* The major version numbers are equal. */
+    if (ver->iv_minor > req->iv_minor) {
+        return 0;
+    }
+    if (ver->iv_minor < req->iv_minor) {
+        return BOOT_EBADVERSION;
+    }
+    /* The minor version numbers are equal. */
+    if (ver->iv_revision < req->iv_revision) {
+        return BOOT_EBADVERSION;
+    }
+
+    return 0;
+}
+#endif
+
 /*
  * Check that there is a valid image in a slot
  *
@@ -531,6 +577,24 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         goto out;
     }
 
+#if defined(MCUBOOT_OVERWRITE_ONLY) && defined(MCUBOOT_DOWNGRADE_PREVENTION)
+    if (slot != BOOT_PRIMARY_SLOT) {
+        /* Check if version of secondary slot is sufficient */
+        rc = boot_is_version_sufficient(
+                &boot_img_hdr(state, BOOT_PRIMARY_SLOT)->ih_ver,
+                &boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver);
+        if (rc != 0 && boot_check_header_erased(state, BOOT_PRIMARY_SLOT)) {
+            BOOT_LOG_ERR("insufficient version in secondary slot");
+            flash_area_erase(fap, 0, fap->fa_size);
+            /* Image in the secondary slot does not satisfy version requirement.
+             * Erase the image and continue booting from the primary slot.
+             */
+            rc = 1;
+            goto out;
+        }
+    }
+#endif
+
     if (!boot_is_header_valid(hdr, fap) || boot_image_check(state, hdr, fap, bs)) {
         if (slot != BOOT_PRIMARY_SLOT) {
             flash_area_erase(fap, 0, fap->fa_size);
@@ -542,7 +606,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         BOOT_LOG_ERR("Image in the %s slot is not valid!",
                      (slot == BOOT_PRIMARY_SLOT) ? "primary" : "secondary");
 #endif
-        rc = -1;
+        rc = 1;
         goto out;
     }
 
@@ -781,12 +845,12 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
     if (IS_ENCRYPTED(boot_img_hdr(state, BOOT_SECONDARY_SLOT))) {
         rc = boot_enc_load(BOOT_CURR_ENC(state), image_index,
                 boot_img_hdr(state, BOOT_SECONDARY_SLOT),
-                fap_secondary_slot, bs->enckey[1]);
+                fap_secondary_slot, bs);
 
         if (rc < 0) {
             return BOOT_EBADIMAGE;
         }
-        if (rc == 0 && boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs->enckey[1])) {
+        if (rc == 0 && boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs)) {
             return BOOT_EBADIMAGE;
         }
     }
@@ -870,11 +934,11 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
 #ifdef MCUBOOT_ENC_IMAGES
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
-            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs->enckey[0]);
+            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
             assert(rc >= 0);
 
             if (rc == 0) {
-                rc = boot_enc_set_key(BOOT_CURR_ENC(state), 0, bs->enckey[0]);
+                rc = boot_enc_set_key(BOOT_CURR_ENC(state), 0, bs);
                 assert(rc == 0);
             } else {
                 rc = 0;
@@ -894,11 +958,11 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs->enckey[1]);
+            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
             assert(rc >= 0);
 
             if (rc == 0) {
-                rc = boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs->enckey[1]);
+                rc = boot_enc_set_key(BOOT_CURR_ENC(state), 1, bs);
                 assert(rc == 0);
             } else {
                 rc = 0;
@@ -924,8 +988,8 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         copy_size = bs->swap_size;
 
 #ifdef MCUBOOT_ENC_IMAGES
-        for (slot = 0; slot <= 1; slot++) {
-            rc = boot_read_enc_key(image_index, slot, bs->enckey[slot]);
+        for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
+            rc = boot_read_enc_key(image_index, slot, bs);
             assert(rc == 0);
 
             for (i = 0; i < BOOT_ENC_KEY_SIZE; i++) {
@@ -935,7 +999,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
             }
 
             if (i != BOOT_ENC_KEY_SIZE) {
-                boot_enc_set_key(BOOT_CURR_ENC(state), slot, bs->enckey[slot]);
+                boot_enc_set_key(BOOT_CURR_ENC(state), slot, bs);
             }
         }
 #endif
@@ -956,39 +1020,6 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
 #endif
 
 #if (BOOT_IMAGE_NUMBER > 1)
-/**
- * Check if the version of the image is not older than required.
- *
- * @param req         Required minimal image version.
- * @param ver         Version of the image to be checked.
- *
- * @return            0 if the version is sufficient, nonzero otherwise.
- */
-static int
-boot_is_version_sufficient(struct image_version *req,
-                           struct image_version *ver)
-{
-    if (ver->iv_major > req->iv_major) {
-        return 0;
-    }
-    if (ver->iv_major < req->iv_major) {
-        return BOOT_EBADVERSION;
-    }
-    /* The major version numbers are equal. */
-    if (ver->iv_minor > req->iv_minor) {
-        return 0;
-    }
-    if (ver->iv_minor < req->iv_minor) {
-        return BOOT_EBADVERSION;
-    }
-    /* The minor version numbers are equal. */
-    if (ver->iv_revision < req->iv_revision) {
-        return BOOT_EBADVERSION;
-    }
-
-    return 0;
-}
-
 /**
  * Check the image dependency whether it is satisfied and modify
  * the swap type if necessary.
@@ -1656,6 +1687,13 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     /* Always boot from the primary slot of Image 0. */
     BOOT_CURR_IMG(state) = 0;
 #endif
+
+    /*
+     * Since the boot_status struct stores plaintext encryption keys, reset
+     * them here to avoid the possibility of jumping into an image that could
+     * easily recover them.
+     */
+    memset(&bs, 0, sizeof(struct boot_status));
 
     rsp->br_flash_dev_id = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT)->fa_device_id;
     rsp->br_image_off = boot_img_slot_off(state, BOOT_PRIMARY_SLOT);

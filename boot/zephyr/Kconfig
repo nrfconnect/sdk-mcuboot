@@ -140,7 +140,8 @@ config BOOT_UPGRADE_ONLY
 	  uses a much simpler code path.
 
 config BOOT_SWAP_USING_MOVE
-	bool "Swap mode that can run without a scratch partition [EXPERIMENTAL]"
+	bool "Swap mode that can run without a scratch partition"
+	default y if SOC_FAMILY_NRF
 	default n
 	help
 	  If y, the swap upgrade is done in two steps, where first every
@@ -158,6 +159,19 @@ config BOOT_BOOTSTRAP
 	help
 	  If y, enables bootstraping support. Bootstrapping allows an erased
 	  primary slot to be initialized from a valid image in the secondary slot.
+	  If unsure, leave at the default value.
+
+config BOOT_SWAP_SAVE_ENCTLV
+	bool "Save encrypted key TLVs instead of plaintext keys in swap metadata"
+	default n
+	help
+	  If y, instead of saving the encrypted image keys in plaintext in the
+	  swap resume metadata, save the encrypted image TLVs. This should be used
+	  when there is no security mechanism protecting the data in the primary
+	  slot from being dumped. If n is selected (default), the keys are written
+	  after being decrypted from the image TLVs and could be read by an
+	  attacker who has access to the flash contents of the primary slot (eg
+	  JTAG/SWD or primary slot in external flash).
 	  If unsure, leave at the default value.
 
 config BOOT_ENCRYPT_RSA
@@ -345,5 +359,15 @@ config UPDATEABLE_IMAGE_NUMBER
 	default 1
 	help
 	  Enables support of multi image update.
+
+config MCUBOOT_DOWNGRADE_PREVENTION
+	bool "Downgrade prevention"
+	depends on BOOT_UPGRADE_ONLY
+	help
+	  Prevent downgrades by enforcing incrementing version numbers.
+	  When this option is set, any upgrade must have greater major version
+	  or greater minor version with equal major version. This mechanism
+	  only protects against some attacks against version downgrades (for
+	  example, a JTAG could be used to write an older version).
 
 source "$ZEPHYR_BASE/Kconfig.zephyr"

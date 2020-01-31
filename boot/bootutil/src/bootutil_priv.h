@@ -85,6 +85,9 @@ struct boot_status {
     uint32_t swap_size;   /* Total size of swapped image */
 #ifdef MCUBOOT_ENC_IMAGES
     uint8_t enckey[BOOT_NUM_SLOTS][BOOT_ENC_KEY_SIZE];
+#if MCUBOOT_SWAP_SAVE_ENCTLV
+    uint8_t enctlv[BOOT_NUM_SLOTS][BOOT_ENC_TLV_ALIGN_SIZE];
+#endif
 #endif
     int source;           /* Which slot contains swap status metadata */
 };
@@ -251,6 +254,7 @@ int bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig,
                         size_t slen, uint8_t key_id);
 
 int boot_magic_compatible_check(uint8_t tbl_val, uint8_t val);
+uint32_t boot_status_sz(uint32_t min_write_sz);
 uint32_t boot_trailer_sz(uint32_t min_write_sz);
 int boot_status_entries(int image_index, const struct flash_area *fap);
 uint32_t boot_status_off(const struct flash_area *fap);
@@ -276,11 +280,12 @@ int boot_copy_region(struct boot_loader_state *state,
                      const struct flash_area *fap_dst,
                      uint32_t off_src, uint32_t off_dst, uint32_t sz);
 int boot_erase_region(const struct flash_area *fap, uint32_t off, uint32_t sz);
+bool boot_status_is_reset(const struct boot_status *bs);
 
 #ifdef MCUBOOT_ENC_IMAGES
 int boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
-                       const uint8_t *enckey);
-int boot_read_enc_key(int image_index, uint8_t slot, uint8_t *enckey);
+                       const struct boot_status *bs);
+int boot_read_enc_key(int image_index, uint8_t slot, struct boot_status *bs);
 #endif
 
 /**

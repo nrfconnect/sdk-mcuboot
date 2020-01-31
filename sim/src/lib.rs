@@ -1,3 +1,9 @@
+// Copyright (c) 2017-2019 Linaro LTD
+// Copyright (c) 2017-2019 JUUL Labs
+// Copyright (c) 2019 Arm Limited
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use docopt::Docopt;
 use log::{warn, error};
 use std::{
@@ -17,7 +23,9 @@ pub use crate::{
         DepTest,
         DepType,
         UpgradeInfo,
-        NO_DEPS,},
+        NO_DEPS,
+        REV_DEPS,
+    },
     image::{
         ImagesBuilder,
         Images,

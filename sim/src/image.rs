@@ -1,3 +1,9 @@
+// Copyright (c) 2019 Linaro LTD
+// Copyright (c) 2019-2020 JUUL Labs
+// Copyright (c) 2019 Arm Limited
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use byteorder::{
     LittleEndian, WriteBytesExt,
 };
@@ -39,6 +45,7 @@ use crate::depends::{
     Depender,
     DepTest,
     DepType,
+    NO_DEPS,
     PairDep,
     UpgradeInfo,
 };
@@ -171,7 +178,7 @@ impl ImagesBuilder {
             let dep: Box<dyn Depender> = if num_images > 1 {
                 Box::new(PairDep::new(num_images, image_num, deps))
             } else {
-                Box::new(BoringDep(image_num))
+                Box::new(BoringDep::new(image_num, deps))
             };
             let primaries = install_image(&mut flash, &slots[0], 42784, &*dep, false);
             let upgrades = match deps.depends[image_num] {
@@ -216,7 +223,7 @@ impl ImagesBuilder {
     pub fn make_bad_secondary_slot_image(self) -> Images {
         let mut bad_flash = self.flash;
         let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
-            let dep = BoringDep(image_num);
+            let dep = BoringDep::new(image_num, &NO_DEPS);
             let primaries = install_image(&mut bad_flash, &slots[0], 32784, &dep, false);
             let upgrades = install_image(&mut bad_flash, &slots[1], 41928, &dep, true);
             OneImage {
@@ -563,6 +570,37 @@ impl Images {
         fails > 0
     }
 
+    // Test that an upgrade is rejected.  Assumes that the image was build
+    // such that the upgrade is instead a downgrade.
+    pub fn run_nodowngrade(&self) -> bool {
+        if !Caps::DowngradePrevention.present() {
+            return false;
+        }
+
+        let mut flash = self.flash.clone();
+        let mut fails = 0;
+
+        info!("Try no downgrade");
+
+        // First, do a normal upgrade.
+        let (result, _) = c::boot_go(&mut flash, &self.areadesc, None, false);
+        if result != 0 {
+            warn!("Failed first boot");
+            fails += 1;
+        }
+
+        if !self.verify_images(&flash, 0, 0) {
+            warn!("Failed verification after downgrade rejection");
+            fails += 1;
+        }
+
+        if fails > 0 {
+            error!("Error testing downgrade rejection");
+        }
+
+        fails > 0
+    }
+
     // Tests a new image written to the primary slot that already has magic and
     // image_ok set while there is no image on the secondary slot, so no revert
     // should ever happen...
@@ -657,19 +695,11 @@ impl Images {
     }
 
     fn trailer_sz(&self, align: usize) -> usize {
-        c::boot_trailer_sz(align as u8) as usize
+        c::boot_trailer_sz(align as u32) as usize
     }
 
-    // FIXME: could get status sz from bootloader
     fn status_sz(&self, align: usize) -> usize {
-        let bias = if Caps::EncRsa.present() || Caps::EncKw.present() ||
-                Caps::EncEc256.present() {
-            32
-        } else {
-            0
-        };
-
-        self.trailer_sz(align) - (16 + 32 + bias)
+        c::boot_status_sz(align as u32) as usize
     }
 
     /// This test runs a simple upgrade with no fails in the images, but
@@ -1275,8 +1305,11 @@ fn make_tlv() -> TlvGen {
             TlvGen::new_enc_rsa()
         }
     } else if Caps::EncEc256.present() {
-        //FIXME: should fail with RSA signature?
-        TlvGen::new_ecdsa_ecies_p256()
+        if Caps::EcdsaP256.present() {
+            TlvGen::new_ecdsa_ecies_p256()
+        } else {
+            TlvGen::new_ecies_p256()
+        }
     } else {
         // The non-encrypted configuration.
         if Caps::RSA2048.present() {
@@ -1449,6 +1482,7 @@ fn install_ptable(flash: &mut SimMultiFlash, areadesc: &AreaDesc) {
 
 /// The image header
 #[repr(C)]
+#[derive(Debug)]
 pub struct ImageHeader {
     magic: u32,
     load_addr: u32,
