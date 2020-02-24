@@ -140,7 +140,7 @@ static void do_boot(struct boot_rsp *rsp)
     usb_disable();
 #endif
 
-#ifdef CONFIG_EXT_API_PROVIDE_EXT_API_REQUIRED
+#if defined(CONFIG_FW_INFO) && !defined(CONFIG_EXT_API_PROVIDE_EXT_API_UNUSED)
     bool provided = fw_info_ext_api_provide(fw_info_find((uint32_t)vt), true);
 
 #ifdef PM_S0_ADDRESS
