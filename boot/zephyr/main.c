@@ -138,6 +138,10 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #include <pm_config.h>
 #endif
 
+#if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
+#include <nrf_cleanup.h>
+#endif
+
 BOOT_LOG_MODULE_REGISTER(mcuboot);
 
 void os_heap_init(void);
@@ -198,7 +202,9 @@ static void do_boot(struct boot_rsp *rsp)
     }
 #endif
 #endif
-
+#if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
+    nrf_cleanup_peripheral();
+#endif
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     cleanup_arm_nvic(); /* cleanup NVIC registers */
 
