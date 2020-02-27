@@ -217,3 +217,9 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
     )
   zephyr_library_sources(${GENERATED_PUBKEY})
 endif()
+
+if(CONFIG_NRF_CLEANUP_PERIPHERAL)
+zephyr_library_sources(
+  ${BOOT_DIR}/zephyr/nrf_cleanup.c
+)
+endif()

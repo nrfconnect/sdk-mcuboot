@@ -53,6 +53,11 @@ const struct boot_uart_funcs boot_funcs = {
 #include <pm_config.h>
 
 #endif
+
+#if CONFIG_NRF_CLEANUP_PERIPHERAL
+#include <nrf_cleanup.h>
+#endif
+
 #ifdef CONFIG_SOC_FAMILY_NRF
 #include <hal/nrf_power.h>
 
@@ -123,7 +128,12 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 #endif
 
+#if CONFIG_NRF_CLEANUP_PERIPHERAL
+    nrf_cleanup_peripheral();
+    nrf_cleanup_nvic();
+#endif
     __set_MSP(vt->msp);
+    __set_CONTROL(0x00);
     ((void (*)(void))vt->reset)();
 }
 

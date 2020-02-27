@@ -127,6 +127,11 @@ endif #BOOT_SIGNATURE_TYPE_ECDSA_P256
 
 endchoice
 
+config NRF_CLEANUP_PERIPHERAL
+	bool "does peripheral cleanup before chain-load the application"
+	depends on SOC_FAMILY_NRF
+	default y
+
 config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
 
