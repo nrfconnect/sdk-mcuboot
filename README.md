@@ -6,7 +6,7 @@
 [coverity]: https://scan.coverity.com/projects/mcuboot
 [travis]: https://travis-ci.org/JuulLabs-OSS/mcuboot
 
-This is mcuboot version 1.4.0
+This is mcuboot version 1.5.0
 
 MCUboot is a secure bootloader for 32-bit MCUs. The goal of MCUboot is to
 define a common infrastructure for the bootloader, system flash layout on
@@ -58,7 +58,7 @@ For more information in the source, here are some pointers:
 Developers welcome!
 
 * Our developer mailing list:
-  http://lists.runtime.co/mailman/listinfo/dev-mcuboot_lists.runtime.co
+  https://groups.io/g/mcuboot
 * Our Slack channel: https://mcuboot.slack.com/ <br />
   Get your invite [here!](https://join.slack.com/t/mcuboot/shared_invite/MjE2NDcwMTQ2MTYyLTE1MDA4MTIzNTAtYzgyZTU0NjFkMg)
 * Our IRC channel: http://irc.freenode.net, #mcuboot
