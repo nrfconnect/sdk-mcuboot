@@ -30,10 +30,6 @@
 #include "bootutil/bootutil.h"
 #include "flash_map_backend/flash_map_backend.h"
 
-#ifdef CONFIG_FW_INFO
-#include <fw_info.h>
-#endif
-
 #ifdef CONFIG_MCUBOOT_SERIAL
 #include "boot_serial/boot_serial.h"
 #include "serial_adapter/serial_adapter.h"
@@ -110,19 +106,6 @@ static void do_boot(struct boot_rsp *rsp)
     /* Disable the USB to prevent it from firing interrupts */
     usb_disable();
 #endif
-
-#ifdef CONFIG_EXT_API_PROVIDE_EXT_API_REQUIRED
-    bool provided = fw_info_ext_api_provide(fw_info_find((uint32_t)vt), true);
-
-#ifdef PM_S0_ADDRESS
-    /* Only fail if the immutable bootloader is present. */
-    if (!provided) {
-        BOOT_LOG_ERR("Failed to provide EXT_APIs\n");
-        return;
-    }
-#endif
-#endif
-
     __set_MSP(vt->msp);
     ((void (*)(void))vt->reset)();
 }
