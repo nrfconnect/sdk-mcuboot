@@ -18,7 +18,7 @@
  */
 
 /*
- * Modifications are Copyright (c) 2019 Arm Limited.
+ * Modifications are Copyright (c) 2019-2020 Arm Limited.
  */
 
 #ifndef H_IMAGE_
@@ -74,6 +74,7 @@ struct flash_area;
  *   2nd one is the actual signature.
  */
 #define IMAGE_TLV_KEYHASH           0x01   /* hash of the public key */
+#define IMAGE_TLV_PUBKEY            0x02   /* public key */
 #define IMAGE_TLV_SHA256            0x10   /* SHA256 of image hdr and body */
 #define IMAGE_TLV_RSA2048_PSS       0x20   /* RSA2048 of hash output */
 #define IMAGE_TLV_ECDSA224          0x21   /* ECDSA of hash output */
@@ -83,7 +84,10 @@ struct flash_area;
 #define IMAGE_TLV_ENC_RSA2048       0x30   /* Key encrypted with RSA-OAEP-2048 */
 #define IMAGE_TLV_ENC_KW128         0x31   /* Key encrypted with AES-KW-128 */
 #define IMAGE_TLV_ENC_EC256         0x32   /* Key encrypted with ECIES-EC256 */
+#define IMAGE_TLV_ENC_X25519        0x33   /* Key encrypted with ECIES-X25519 */
 #define IMAGE_TLV_DEPENDENCY        0x40   /* Image depends on other image */
+#define IMAGE_TLV_SEC_CNT           0x50   /* security counter */
+#define IMAGE_TLV_BOOT_RECORD       0x60   /* measured boot record */
 #define IMAGE_TLV_ANY               0xffff /* Used to iterate over all TLV */
 
 struct image_version {
@@ -132,8 +136,8 @@ struct image_tlv {
     ((fap)->fa_id == FLASH_AREA_IMAGE_SECONDARY(idx) && IS_ENCRYPTED(hdr))
 
 #ifdef __ZEPHYR__
-BUILD_ASSERT_MSG(sizeof(struct image_header) == IMAGE_HEADER_SIZE,
-               "struct image_header not required size");
+BUILD_ASSERT(sizeof(struct image_header) == IMAGE_HEADER_SIZE,
+	     "struct image_header not required size");
 #else
 _Static_assert(sizeof(struct image_header) == IMAGE_HEADER_SIZE,
                "struct image_header not required size");
@@ -162,6 +166,10 @@ int bootutil_tlv_iter_begin(struct image_tlv_iter *it,
                             bool prot);
 int bootutil_tlv_iter_next(struct image_tlv_iter *it, uint32_t *off,
                            uint16_t *len, uint16_t *type);
+
+int32_t bootutil_get_img_security_cnt(struct image_header *hdr,
+                                      const struct flash_area *fap,
+                                      uint32_t *security_cnt);
 
 #ifdef __cplusplus
 }

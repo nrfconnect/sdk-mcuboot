@@ -145,7 +145,7 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_RSA)
   # Use mbedTLS provided by Zephyr for RSA signatures. (Its config file
   # is set using Kconfig.)
   zephyr_include_directories(include)
-elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519)
+elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
   if(CONFIG_BOOT_USE_TINYCRYPT)
     zephyr_library_include_directories(
       ${MBEDTLS_ASN1_DIR}/include
@@ -178,7 +178,7 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519)
   )
 endif()
 
-if(CONFIG_BOOT_ENCRYPT_EC256)
+if(CONFIG_BOOT_ENCRYPT_EC256 OR CONFIG_BOOT_ENCRYPT_X25519)
   zephyr_library_sources(
     ${TINYCRYPT_DIR}/source/aes_encrypt.c
     ${TINYCRYPT_DIR}/source/aes_decrypt.c
@@ -188,18 +188,21 @@ if(CONFIG_BOOT_ENCRYPT_EC256)
     )
 endif()
 
+if(CONFIG_BOOT_ENCRYPT_EC256)
+  zephyr_library_sources(
+    ${TINYCRYPT_DIR}/source/ecc_dh.c
+    )
+endif()
+
 if(CONFIG_MCUBOOT_SERIAL)
   zephyr_sources(${BOOT_DIR}/zephyr/serial_adapter.c)
   zephyr_sources(${BOOT_DIR}/boot_serial/src/boot_serial.c)
+  zephyr_sources(${BOOT_DIR}/boot_serial/src/serial_recovery_cbor.c)
+  zephyr_sources(${BOOT_DIR}/boot_serial/src/cbor_decode.c)
 
   zephyr_include_directories(${BOOT_DIR}/bootutil/include)
   zephyr_include_directories(${BOOT_DIR}/boot_serial/include)
   zephyr_include_directories(include)
-
-  zephyr_link_libraries_ifdef(
-    CONFIG_TINYCBOR
-    TINYCBOR
-    )
 
   zephyr_include_directories_ifdef(
     CONFIG_BOOT_ERASE_PROGRESSIVELY
@@ -228,3 +231,8 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
   zephyr_library_sources(${GENERATED_PUBKEY})
 endif()
 
+if(CONFIG_MCUBOOT_CLEANUP_ARM_CORE)
+zephyr_library_sources(
+  ${BOOT_DIR}/zephyr/arm_cleanup.c
+)
+endif()

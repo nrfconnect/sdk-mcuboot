@@ -44,6 +44,35 @@ const struct boot_uart_funcs boot_funcs = {
 #include <usb/class/usb_dfu.h>
 #endif
 
+#if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
+#include <arm_cleanup.h>
+#endif
+
+#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE)
+#ifdef CONFIG_LOG_PROCESS_THREAD
+#warning "The log internal thread for log processing can't transfer the log"\
+         "well for MCUBoot."
+#else
+#include <logging/log_ctrl.h>
+
+#define BOOT_LOG_PROCESSING_INTERVAL K_MSEC(30) /* [ms] */
+
+/* log are processing in custom routine */
+K_THREAD_STACK_DEFINE(boot_log_stack, CONFIG_MCUBOOT_LOG_THREAD_STACK_SIZE);
+struct k_thread boot_log_thread;
+volatile bool boot_log_stop = false;
+K_SEM_DEFINE(boot_log_sem, 1, 1);
+
+/* log processing need to be initalized by the application */
+#define ZEPHYR_BOOT_LOG_START() zephyr_boot_log_start()
+#define ZEPHYR_BOOT_LOG_STOP() zephyr_boot_log_stop()
+#endif /* CONFIG_LOG_PROCESS_THREAD */
+#else
+/* synchronous log mode doesn't need to be initalized by the application */
+#define ZEPHYR_BOOT_LOG_START() do { } while (false)
+#define ZEPHYR_BOOT_LOG_STOP() do { } while (false)
+#endif /* defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) */
+
 #ifdef CONFIG_SOC_FAMILY_NRF
 #include <hal/nrf_power.h>
 
@@ -101,7 +130,13 @@ static void do_boot(struct boot_rsp *rsp)
     /* Disable the USB to prevent it from firing interrupts */
     usb_disable();
 #endif
+#if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
+    cleanup_arm_nvic(); /* cleanup NVIC registers */
+#endif
     __set_MSP(vt->msp);
+#if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
+    __set_CONTROL(0x00); /* application will configures core on its own */
+#endif
     ((void (*)(void))vt->reset)();
 }
 
@@ -175,6 +210,62 @@ static void do_boot(struct boot_rsp *rsp)
 }
 #endif
 
+#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) &&\
+    !defined(CONFIG_LOG_PROCESS_THREAD)
+/* The log internal thread for log processing can't transfer log well as has too
+ * low priority.
+ * Dedicated thread for log processing below uses highest application
+ * priority. This allows to transmit all logs without adding k_sleep/k_yield
+ * anywhere else int the code.
+ */
+
+/* most simple log processing theread */
+void boot_log_thread_func(void *dummy1, void *dummy2, void *dummy3)
+{
+    (void)dummy1;
+    (void)dummy2;
+    (void)dummy3;
+
+     log_init();
+
+     while (1) {
+             if (log_process(false) == false) {
+                    if (boot_log_stop) {
+                        break;
+                    }
+                    k_sleep(BOOT_LOG_PROCESSING_INTERVAL);
+             }
+     }
+
+     k_sem_give(&boot_log_sem);
+}
+
+void zephyr_boot_log_start(void)
+{
+        /* start logging thread */
+        k_thread_create(&boot_log_thread, boot_log_stack,
+                K_THREAD_STACK_SIZEOF(boot_log_stack),
+                boot_log_thread_func, NULL, NULL, NULL,
+                K_HIGHEST_APPLICATION_THREAD_PRIO, 0,
+                BOOT_LOG_PROCESSING_INTERVAL);
+
+        k_thread_name_set(&boot_log_thread, "logging");
+}
+
+void zephyr_boot_log_stop(void)
+{
+    boot_log_stop = true;
+
+    /* wait until log procesing thread expired
+     * This can be reworked using a thread_join() API once a such will be
+     * available in zephyr.
+     * see https://github.com/zephyrproject-rtos/zephyr/issues/21500
+     */
+    (void)k_sem_take(&boot_log_sem, K_FOREVER);
+}
+#endif/* defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) &&\
+        !defined(CONFIG_LOG_PROCESS_THREAD) */
+
 void main(void)
 {
     struct boot_rsp rsp;
@@ -183,6 +274,8 @@ void main(void)
     BOOT_LOG_INF("Starting bootloader");
 
     os_heap_init();
+
+    ZEPHYR_BOOT_LOG_START();
 
 #if (!defined(CONFIG_XTENSA) && defined(DT_FLASH_DEV_NAME))
     if (!flash_device_get_binding(DT_FLASH_DEV_NAME)) {
@@ -216,7 +309,7 @@ void main(void)
 #else
                             GPIO_DIR_IN | GPIO_PUD_PULL_UP
 #endif
-	    );
+           );
     __ASSERT(rc == 0, "Error of boot detect pin initialization.\n");
 
 #ifdef GPIO_INPUT
@@ -259,6 +352,7 @@ void main(void)
                  rsp.br_image_off);
 
     BOOT_LOG_INF("Jumping to the first image slot");
+    ZEPHYR_BOOT_LOG_STOP();
     do_boot(&rsp);
 
     BOOT_LOG_ERR("Never should get here");

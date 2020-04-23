@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2018 Open Source Foundries Limited
- * Copyright (c) 2019 Arm Limited
+ * Copyright (c) 2019-2020 Arm Limited
+ * Copyright (c) 2019-2020 Linaro Limited
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -44,6 +45,10 @@
 #endif
 #endif
 
+#ifdef CONFIG_BOOT_HW_KEY
+#define MCUBOOT_HW_KEY
+#endif
+
 #ifdef CONFIG_BOOT_VALIDATE_SLOT0
 #define MCUBOOT_VALIDATE_PRIMARY_SLOT
 #endif
@@ -75,6 +80,11 @@
 #define MCUBOOT_ENCRYPT_EC256
 #endif
 
+#ifdef CONFIG_BOOT_ENCRYPT_X25519
+#define MCUBOOT_ENC_IMAGES
+#define MCUBOOT_ENCRYPT_X25519
+#endif
+
 #ifdef CONFIG_BOOT_BOOTSTRAP
 #define MCUBOOT_BOOTSTRAP 1
 #endif
@@ -91,6 +101,18 @@
 
 #ifdef CONFIG_MCUBOOT_DOWNGRADE_PREVENTION
 #define MCUBOOT_DOWNGRADE_PREVENTION 1
+#endif
+
+#ifdef CONFIG_MCUBOOT_HW_DOWNGRADE_PREVENTION
+#define MCUBOOT_HW_ROLLBACK_PROT
+#endif
+
+#ifdef CONFIG_MEASURED_BOOT
+#define MCUBOOT_MEASURED_BOOT
+#endif
+
+#ifdef CONFIG_BOOT_SHARE_DATA
+#define MCUBOOT_DATA_SHARING
 #endif
 
 /*

@@ -18,7 +18,7 @@
 -->
 
 <!--
-  Modifications are Copyright (c) 2019 Arm Limited.
+  Modifications are Copyright (c) 2019-2020 Arm Limited.
 -->
 
 # Boot Loader
@@ -107,8 +107,10 @@ struct image_tlv {
 #define IMAGE_TLV_ED25519           0x24   /* ED25519 of hash output */
 #define IMAGE_TLV_ENC_RSA2048       0x30   /* Key encrypted with RSA-OAEP-2048 */
 #define IMAGE_TLV_ENC_KW128         0x31   /* Key encrypted with AES-KW-128 */
-#define IMAGE_TLV_ENC_EC256         0x32   /* Key encrypted with ECIES P256 */
+#define IMAGE_TLV_ENC_EC256         0x32   /* Key encrypted with ECIES-P256 */
+#define IMAGE_TLV_ENC_X25519        0x33   /* Key encrypted with ECIES-X25519 */
 #define IMAGE_TLV_DEPENDENCY        0x40   /* Image depends on other image */
+#define IMAGE_TLV_SEC_CNT           0x50   /* security counter */
 ```
 
 Optional type-length-value records (TLVs) containing image metadata are placed
@@ -605,10 +607,10 @@ process is presented below.
 The boot loader swaps the contents of the two image slots for two reasons:
 
   * User has issued a "set pending" operation; the image in the secondary slot
-    should be run once (state II) or repeatedly (state III), depending on
+    should be run once (state I) or repeatedly (state II), depending on
     whether a permanent swap was specified.
   * Test image rebooted without being confirmed; the boot loader should
-    revert to the original image currently in the secondary slot (state IV).
+    revert to the original image currently in the secondary slot (state III).
 
 If the image trailers indicates that the image in the secondary slot should be
 run, the boot loader needs to copy it to the primary slot.  The image currently
@@ -656,7 +658,7 @@ according to the following procedure:
 The additional caveats in step 2f are necessary so that the secondary slot image
 trailer can be written by the user at a later time.  With the image trailer
 unwritten, the user can test the image in the secondary slot
-(i.e., transition to state II).
+(i.e., transition to state I).
 
 Note1: If the region being copied contains the last sector, then swap status is
 temporarily maintained on scratch for the duration of this operation, always
@@ -674,12 +676,14 @@ happened when a swap was requested:
         o Write primary_slot.copy_done = 1
         (swap caused the following values to be written:
             primary_slot.magic = BOOT_MAGIC
+            secondary_slot.magic = UNSET
             primary_slot.image_ok = Unset)
 
     * permanent:
         o Write primary_slot.copy_done = 1
         (swap caused the following values to be written:
             primary_slot.magic = BOOT_MAGIC
+            secondary_slot.magic = UNSET
             primary_slot.image_ok = 0x01)
 
     * revert:
@@ -946,7 +950,28 @@ see: [imgtool](imgtool.md).
 ## [Downgrade Prevention](#downgrade-prevention)
 
 Downgrade prevention is a feature which enforces that the new image must have a
-higher version number than the image it is replacing. This feature is enabled
-with the `MCUBOOT_DOWNGRADE_PREVENTION` option. Downgrade prevention is only
-available when the overwrite-based image update strategy is used
-(i.e. `MCUBOOT_OVERWRITE_ONLY` is set).
+higher version/security counter number than the image it is replacing, thus
+preventing the malicious downgrading of the device to an older and possibly
+vulnerable version of its firmware.
+
+### [SW Based Downgrade Prevention](#sw-downgrade-prevention)
+
+During the software based downgrade prevention the image version numbers are
+compared. This feature is enabled with the `MCUBOOT_DOWNGRADE_PREVENTION`
+option. In this case downgrade prevention is only available when the
+overwrite-based image update strategy is used (i.e. `MCUBOOT_OVERWRITE_ONLY`
+is set).
+
+### [HW Based Downgrade Prevention](#hw-downgrade-prevention)
+
+Each signed image can contain a security counter in its protected TLV area.
+During the hardware based downgrade prevention (alias rollback protection) the
+new image's security counter will be compared with the currently active security
+counter value which must be stored in a non-volatile and trusted component of
+the device. This feature is enabled with the `MCUBOOT_HW_ROLLBACK_PROT` option.
+It is beneficial to handle this counter independently from image version
+number:
+
+  * It does not need to increase with each software release,
+  * It makes it possible to do software downgrade to some extent: if the
+    security counter has the same value in the older image then it is accepted.
