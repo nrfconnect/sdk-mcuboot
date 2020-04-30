@@ -9,16 +9,7 @@
 @Library("CI_LIB") _
 
 HashMap CI_STATE = lib_State.getConfig(JOB_NAME)
-
-properties([
-  pipelineTriggers([
-    parameterizedCron( [
-        ((JOB_NAME =~ /thst\/night\/.*\/cron_demo/).find() ? CI_STATE.CFG.CRON.NIGHTLY : ''),
-        ((JOB_NAME =~ /thst\/week\/.*\/cron_demo/).find() ? CI_STATE.CFG.CRON.WEEKLY : '')
-    ].join('    \n') )
-  ]),
-  ( JOB_NAME.contains('sub/') ? disableResume() :  disableConcurrentBuilds() )
-])
+properties(lib_State.getTriggers())
 
 pipeline {
 
@@ -27,7 +18,7 @@ pipeline {
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
    booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
    string(      name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job', defaultValue: CI_STATE.CFG.INPUT_STATE_STR )
-   choice(      name: 'CRON', choices: ['COMMIT', 'NIGHTLY', 'WEEKLY'], description: 'Cron Test Phase')
+   choice(name: 'CRON', choices: CI_STATE.CFG.CRON_CHOICES, description: 'Cron Test Phase')
   }
 
   agent {
@@ -134,24 +125,16 @@ pipeline {
 
   post {
     // This is the order that the methods are run. {always->success/abort/failure/unstable->cleanup}
-    always {
-      echo "always"
-      script { if ( !CI_STATE.SELF.RUN_BUILD || !CI_STATE.SELF.RUN_TESTS ) { currentBuild.result = "UNSTABLE"}}
-    }
-    success {
-      echo "success"
-      script { lib_Status.set("SUCCESS", 'MCUBOOT', CI_STATE) }
-    }
-    aborted {
-      echo "aborted"
-      script { lib_Status.set("ABORTED", 'MCUBOOT', CI_STATE) }
-    }
-    unstable {
-      echo "unstable"
-    }
+    always { script {
+      lib_Status.set( "${currentBuild.currentResult}", 'MCUBOOT', CI_STATE)
+      if ( !CI_STATE.SELF.RUN_BUILD || !CI_STATE.SELF.RUN_TESTS ) { currentBuild.result = "UNSTABLE"}
+    }}
+    // Add if needed
+    // success {}
+    // aborted {}
+    // unstable {}
     failure {
       echo "failure"
-      script { lib_Status.set("FAILURE", 'MCUBOOT', CI_STATE) }
       script{
         if (env.BRANCH_NAME == 'master' || env.BRANCH_NAME.startsWith("PR"))
         {
@@ -167,9 +150,8 @@ pipeline {
       }
     }
     cleanup {
-        echo "cleanup"
-        // Clean up the working space at the end (including tracked files)
-        cleanWs()
+        echo "Pipeline Post: cleanup"
+        cleanWs disableDeferredWipeout: true, deleteDirs: true
     }
   }
 }
