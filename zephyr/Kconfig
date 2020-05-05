@@ -45,7 +45,5 @@ config BOOT_SIGNATURE_KEY_FILE
 
 config DT_FLASH_WRITE_BLOCK_SIZE
 	int
-	default $(dt_node_int_prop_int,/soc/flash-controller@4001e000/flash@0,write-block-size) if SOC_SERIES_NRF52X || SOC_SERIES_NRF51X
-	default $(dt_node_int_prop_int,/flash-controller@41080000/flash@1000000,write-block-size) if SOC_NRF5340_CPUNET
-	default $(dt_node_int_prop_int,/soc/peripheral@50000000/flash-controller@39000/flash@0,write-block-size) if SOC_NRF5340_CPUAPP || SOC_SERIES_NRF91X
+	default $(dt_node_int_prop_int,$(DT_CHOSEN_ZEPHYR_FLASH),write-block-size)
 endmenu
