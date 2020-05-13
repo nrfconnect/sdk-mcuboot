@@ -45,6 +45,10 @@
 #include "bootutil/security_cnt.h"
 #include "bootutil/boot_record.h"
 
+#ifdef CONFIG_SOC_SERIES_NRF53X
+#include "nrf53_cpunet_ctl.h"
+#endif
+
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
@@ -664,6 +668,16 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
     int rc;
+
+#if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_SERIES_NRF53X)
+    const struct flash_area *secondary_fa =
+	    BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
+    struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
+    uint32_t vtable_addr;
+    uint32_t *vtable;
+    uint32_t reset_addr;
+#endif
+
 #ifdef PM_S1_ADDRESS
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
@@ -672,21 +686,16 @@ boot_validated_swap_type(struct boot_loader_state *state,
      * vector. Note that there are good reasons for not using img_num from
      * the swap info.
      */
-    const struct flash_area *secondary_fa =
-	    BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-    struct image_header *hdr =
-	    (struct image_header *)secondary_fa->fa_off;
 
     if (hdr->ih_magic == IMAGE_MAGIC) {
 	    const struct flash_area *primary_fa;
-	    uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
-	    uint32_t *vtable = (uint32_t *)(vtable_addr);
-	    uint32_t reset_addr = vtable[1];
-	    rc = flash_area_open(
-			    flash_area_id_from_multi_image_slot(
-				    BOOT_CURR_IMG(state),
-				    BOOT_PRIMARY_SLOT),
-			    &primary_fa);
+	    vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
+	    vtable = (uint32_t *)(vtable_addr);
+	    reset_addr = vtable[1];
+	    rc = flash_area_open(flash_area_id_from_multi_image_slot(
+					BOOT_CURR_IMG(state),
+					BOOT_PRIMARY_SLOT),
+				 &primary_fa);
 	    if (rc != 0) {
 		    return BOOT_SWAP_TYPE_FAIL;
 	    }
@@ -703,14 +712,32 @@ boot_validated_swap_type(struct boot_loader_state *state,
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
         /* Boot loader wants to switch to the secondary slot.
-         * Ensure image is valid.
+         * Ensure image is valid. This checks header, hash/signature and trailer
          */
         rc = boot_validate_slot(state, BOOT_SECONDARY_SLOT, bs);
+	/* Check for network update type */
         if (rc == 1) {
             swap_type = BOOT_SWAP_TYPE_NONE;
         } else if (rc != 0) {
             swap_type = BOOT_SWAP_TYPE_FAIL;
         }
+
+	vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
+	vtable = (uint32_t *)(vtable_addr);
+	reset_addr = vtable[1];
+	if (reset_addr > PM_nrf5340pdk_nrf5340_cpunet_B0N_ADDRESS) {
+		uint32_t fw_size = hdr->ih_img_size;
+
+		BOOT_LOG_INF("Starting netowrk core update");
+		rc = do_network_core_update(NULL, vtable, fw_size);
+		if (rc != 0) {
+			swap_type = BOOT_SWAP_TYPE_FAIL;
+		} else {
+			BOOT_LOG_INF("Done updating network core");
+			BOOT_SWAP_TYPE(state) = swap_type = BOOT_SWAP_TYPE_NONE;
+			rc = swap_erase_trailer_sectors(state, secondary_fa);
+		}
+	}
     }
 
     return swap_type;

@@ -80,7 +80,15 @@ zephyr_library_sources(
   flash_map_extended.c
   os.c
   keys.c
-  )
+)
+
+zephyr_library_include_directories(
+	.
+)
+
+zephyr_library_sources(
+  nrf53_cpunet_ctl.c
+)
 
 if(NOT DEFINED CONFIG_FLASH_PAGE_LAYOUT)
   zephyr_library_sources(

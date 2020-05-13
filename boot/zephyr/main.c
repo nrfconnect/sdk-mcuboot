@@ -108,6 +108,10 @@ static inline bool boot_skip_serial_recovery()
 }
 #endif
 
+#ifdef CONFIG_SOC_SERIES_NRF53X
+#include <nrf53_cpunet_ctl.h>
+#endif
+
 MCUBOOT_LOG_MODULE_REGISTER(mcuboot);
 
 void os_heap_init(void);
@@ -326,6 +330,9 @@ void main(void)
     BOOT_LOG_INF("Starting bootloader");
 
     os_heap_init();
+#if defined(CONFIG_SOC_SERIES_NRF53X) && defined(CONFIG_DEBUG)
+    enable_network_core_debug_pins();
+#endif
 
     ZEPHYR_BOOT_LOG_START();
 
