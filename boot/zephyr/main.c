@@ -364,6 +364,18 @@ void main(void)
     }
 #endif
 
+    rc = boot_go(&rsp);
+    if (rc != 0) {
+        BOOT_LOG_ERR("Unable to find bootable image");
+        while (1)
+            ;
+    }
+
+    BOOT_LOG_INF("Bootloader chainload address offset: 0x%x",
+                 rsp.br_image_off);
+
+    BOOT_LOG_INF("Jumping to the first image slot");
+
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
 
 #ifdef PM_S1_ADDRESS
@@ -385,18 +397,8 @@ void main(void)
     }
 #endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
 
-    rc = boot_go(&rsp);
-    if (rc != 0) {
-        BOOT_LOG_ERR("Unable to find bootable image");
-        while (1)
-            ;
-    }
-
-    BOOT_LOG_INF("Bootloader chainload address offset: 0x%x",
-                 rsp.br_image_off);
-
-    BOOT_LOG_INF("Jumping to the first image slot");
     ZEPHYR_BOOT_LOG_STOP();
+
     do_boot(&rsp);
 
     BOOT_LOG_ERR("Never should get here");
