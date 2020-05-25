@@ -8,6 +8,8 @@
 
 This is mcuboot version 1.5.0
 
+
+
 MCUboot is a secure bootloader for 32-bit MCUs. The goal of MCUboot is to
 define a common infrastructure for the bootloader, system flash layout on
 microcontroller systems, and to provide a secure bootloader that enables
