@@ -85,6 +85,11 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #ifdef CONFIG_SOC_FAMILY_NRF
 #include <hal/nrf_power.h>
 
+#ifdef CONFIG_SW_VECTOR_RELAY
+extern void *_vector_table_pointer;
+#define VTOR _vector_table_pointer
+#endif
+
 static inline bool boot_skip_serial_recovery()
 {
 #if NRF_POWER_HAS_RESETREAS
@@ -155,6 +160,11 @@ static void do_boot(struct boot_rsp *rsp)
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     cleanup_arm_nvic(); /* cleanup NVIC registers */
 #endif
+
+#ifdef CONFIG_SW_VECTOR_RELAY
+    VTOR = vt;
+#endif
+
     __set_MSP(vt->msp);
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     __set_CONTROL(0x00); /* application will configures core on its own */
