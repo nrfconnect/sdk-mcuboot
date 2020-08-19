@@ -243,7 +243,8 @@ class BasedIntParamType(click.ParamType):
                    'keys. Enable when BOOT_SWAP_SAVE_ENCTLV config option '
                    'was set.')
 @click.option('-E', '--encrypt', metavar='filename',
-              help='Encrypt image using the provided public key')
+              help='Encrypt image using the provided public key. '
+                   '(Not supported in direct-xip mode.)')
 @click.option('-e', '--endian', type=click.Choice(['little', 'big']),
               default='little', help="Select little or big endian")
 @click.option('--overwrite-only', default=False, is_flag=True,
@@ -260,7 +261,8 @@ class BasedIntParamType(click.ParamType):
 @click.option('--pad', default=False, is_flag=True,
               help='Pad image to --slot-size bytes, adding trailer magic')
 @click.option('-S', '--slot-size', type=BasedIntParamType(), required=True,
-              help='Size of the slot where the image will be written')
+              help='Size of the slot. If the slots have different sizes, use '
+              'the size of the secondary slot.')
 @click.option('--pad-header', default=False, is_flag=True,
               help='Add --header-size zeroed bytes at the beginning of the '
                    'image')
