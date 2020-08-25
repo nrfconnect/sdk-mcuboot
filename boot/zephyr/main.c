@@ -330,10 +330,6 @@ void main(void)
     BOOT_LOG_INF("Starting bootloader");
 
     os_heap_init();
-#if defined(CONFIG_SOC_SERIES_NRF53X) && defined(CONFIG_DEBUG)
-    enable_network_core_debug_pins();
-#endif
-
     ZEPHYR_BOOT_LOG_START();
 
 #if (!defined(CONFIG_XTENSA) && defined(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL))
@@ -433,6 +429,9 @@ void main(void)
             ;
     }
 #endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
+#if defined(CONFIG_SOC_SERIES_NRF53X)
+    lock_ipc_ram_with_spu();
+#endif
 
     ZEPHYR_BOOT_LOG_STOP();
 

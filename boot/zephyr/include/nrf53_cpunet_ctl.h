@@ -1,17 +1,14 @@
-
 /*
  * Copyright (c) 2020 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef H_NRF53_CPUNET_CTL_
-#define H_NRF53_CPUNET_CTL_
-
-/**
- * Enable debug pins and uart output 
- */
-void enable_network_core_debug_pins(void);
+#ifndef __NRF53_CPUNET_CTL_H
+#define __NRF53_CPUNET_CTL_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Initiate a network core update
@@ -24,5 +21,14 @@ void enable_network_core_debug_pins(void);
  * @param len Length of the data which is to be copied into the network core.
  *
  */
-int do_network_core_update(void *addr, void *src_addr, size_t len);
+int do_network_core_update(void *src_addr, size_t len);
+
+/**
+ * Lock RAM used to communicate with network bootloader
+ */
+void lock_ipc_ram_with_spu();
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* NRF53_CPUNET_CTL */

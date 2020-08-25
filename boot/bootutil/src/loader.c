@@ -712,10 +712,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
         /* Boot loader wants to switch to the secondary slot.
-         * Ensure image is valid. This checks header, hash/signature and trailer
+         * Ensure image is valid.
          */
         rc = boot_validate_slot(state, BOOT_SECONDARY_SLOT, bs);
-	/* Check for network update type */
         if (rc == 1) {
             swap_type = BOOT_SWAP_TYPE_NONE;
         } else if (rc != 0) {
@@ -728,8 +727,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
 	if (reset_addr > PM_nrf5340pdk_nrf5340_cpunet_B0N_ADDRESS) {
 		uint32_t fw_size = hdr->ih_img_size;
 
-		BOOT_LOG_INF("Starting netowrk core update");
-		rc = do_network_core_update(NULL, vtable, fw_size);
+		BOOT_LOG_INF("Starting network core update");
+		rc = do_network_core_update(vtable, fw_size);
 		if (rc != 0) {
 			swap_type = BOOT_SWAP_TYPE_FAIL;
 		} else {
