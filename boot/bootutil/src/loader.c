@@ -724,7 +724,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 	vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
 	vtable = (uint32_t *)(vtable_addr);
 	reset_addr = vtable[1];
-	if (reset_addr > PM_nrf5340pdk_nrf5340_cpunet_B0N_ADDRESS) {
+	if (reset_addr > PM_CPUNET_B0N_ADDRESS) {
 		uint32_t fw_size = hdr->ih_img_size;
 
 		BOOT_LOG_INF("Starting network core update");
