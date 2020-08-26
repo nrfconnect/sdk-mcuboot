@@ -82,13 +82,11 @@ zephyr_library_sources(
   keys.c
 )
 
-zephyr_library_include_directories(
-	.
-)
-
+if(CONFIG_SOC_SERIES_NRF53X)
 zephyr_library_sources(
   nrf53_cpunet_ctl.c
 )
+endif()
 
 if(NOT DEFINED CONFIG_FLASH_PAGE_LAYOUT)
   zephyr_library_sources(
