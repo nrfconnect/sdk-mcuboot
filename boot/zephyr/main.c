@@ -55,6 +55,10 @@ const struct boot_uart_funcs boot_funcs = {
 #include <arm_cleanup.h>
 #endif
 
+#ifdef CONFIG_SOC_NRF5340_CPUAPP
+#include <dfu/pcd.h>
+#endif
+
 #if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) && \
     !defined(CONFIG_LOG_MINIMAL)
 #ifdef CONFIG_LOG_PROCESS_THREAD
@@ -448,6 +452,9 @@ void main(void)
             ;
     }
 #endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
+    pcd_lock_ram();
+#endif
 
     ZEPHYR_BOOT_LOG_STOP();
 
