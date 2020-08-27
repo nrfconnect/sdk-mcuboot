@@ -72,6 +72,10 @@ const struct boot_uart_funcs boot_funcs = {
 #include <zephyr/drivers/hwinfo.h>
 #endif
 
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
+#include <dfu/pcd.h>
+#endif
+
 /* CONFIG_LOG_MINIMAL is the legacy Kconfig property,
  * replaced by CONFIG_LOG_MODE_MINIMAL.
  */
@@ -681,6 +685,9 @@ void main(void)
             ;
     }
 
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
+    pcd_lock_ram();
+#endif
 #endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
 
     ZEPHYR_BOOT_LOG_STOP();
