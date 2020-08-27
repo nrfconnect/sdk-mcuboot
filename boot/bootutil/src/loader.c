@@ -45,6 +45,10 @@
 #include "bootutil/boot_record.h"
 #include "bootutil/fault_injection_hardening.h"
 
+#ifdef CONFIG_SOC_NRF5340_CPUAPP
+#include <dfu/pcd.h> 
+#endif
+
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
@@ -724,7 +728,15 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
     fih_int fih_rc = FIH_FAILURE;
-#ifdef PM_S1_ADDRESS
+    bool upgrade_valid = false;
+
+#if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP)
+    const struct flash_area *secondary_fa =
+        BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
+    struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
+    uint32_t vtable_addr = 0;
+    uint32_t *vtable = 0;
+    uint32_t reset_addr = 0;
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
      * whether the update candidate in the secondary slot is intended for
@@ -732,34 +744,31 @@ boot_validated_swap_type(struct boot_loader_state *state,
      * vector. Note that there are good reasons for not using img_num from
      * the swap info.
      */
-    const struct flash_area *secondary_fa =
-	    BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-    struct image_header *hdr =
-	    (struct image_header *)secondary_fa->fa_off;
 
     if (hdr->ih_magic == IMAGE_MAGIC) {
-	    const struct flash_area *primary_fa;
-	    uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
-	    uint32_t *vtable = (uint32_t *)(vtable_addr);
-	    uint32_t reset_addr = vtable[1];
-	    int rc = flash_area_open(
-			    flash_area_id_from_multi_image_slot(
-				    BOOT_CURR_IMG(state),
-				    BOOT_PRIMARY_SLOT),
-			    &primary_fa);
+        vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
+        vtable = (uint32_t *)(vtable_addr);
+        reset_addr = vtable[1];
+#ifdef PM_S1_ADDRESS
+        const struct flash_area *primary_fa;
+        int rc = flash_area_open(flash_area_id_from_multi_image_slot(
+                    BOOT_CURR_IMG(state),
+                    BOOT_PRIMARY_SLOT),
+                &primary_fa);
 
-	    if (rc != 0) {
-		    return BOOT_SWAP_TYPE_FAIL;
-	    }
-	    /* Get start and end of primary slot for current image */
-	    if (reset_addr < primary_fa->fa_off ||
-	        reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
-		    /* The image in the secondary slot is not intended for this image
-		    */
-		    return BOOT_SWAP_TYPE_NONE;
-	    }
+        if (rc != 0) {
+            return BOOT_SWAP_TYPE_FAIL;
+        }
+        /* Get start and end of primary slot for current image */
+        if (reset_addr < primary_fa->fa_off ||
+                reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
+            /* The image in the secondary slot is not intended for this image
+            */
+            return BOOT_SWAP_TYPE_NONE;
+        }
+#endif /* PM_S1_ADDRESS */
     }
-#endif
+#endif /* PM_S1_ADDRESS || CONFIG_SOC_NRF5340_CPUAPP */
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -773,7 +782,31 @@ boot_validated_swap_type(struct boot_loader_state *state,
             } else {
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             }
+        } else {
+            upgrade_valid = true;
         }
+
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
+        /* If the update is valid, and it targets the network core: perform the
+         * update and indicate to the caller of this function that no update is
+         * available
+         */
+        if (upgrade_valid && reset_addr > PM_CPUNET_B0N_ADDRESS) {
+            uint32_t fw_size = hdr->ih_img_size;
+
+            BOOT_LOG_INF("Starting network core update");
+            int rc = pcd_network_core_update(vtable, fw_size);
+
+            if (rc != 0) {
+                swap_type = BOOT_SWAP_TYPE_FAIL;
+            } else {
+                BOOT_LOG_INF("Done updating network core");
+                rc = swap_erase_trailer_sectors(state,
+                        secondary_fa);
+                swap_type = BOOT_SWAP_TYPE_NONE;
+            }
+        }
+#endif /* CONFIG_SOC_NRF5340_CPUAPP */
     }
 
     return swap_type;
