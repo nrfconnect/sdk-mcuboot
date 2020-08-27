@@ -98,8 +98,26 @@ const struct boot_uart_funcs boot_funcs = {
 #include <arm_cleanup.h>
 #endif
 
-#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_MODE_IMMEDIATE) && \
-    !defined(CONFIG_LOG_MODE_MINIMAL)
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
+#include <dfu/pcd.h>
+#endif
+
+/* CONFIG_LOG_MINIMAL is the legacy Kconfig property,
+ * replaced by CONFIG_LOG_MODE_MINIMAL.
+ */
+#if (defined(CONFIG_LOG_MODE_MINIMAL) || defined(CONFIG_LOG_MINIMAL))
+#define ZEPHYR_LOG_MODE_MINIMAL 1
+#endif
+
+/* CONFIG_LOG_IMMEDIATE is the legacy Kconfig property,
+ * replaced by CONFIG_LOG_MODE_IMMEDIATE.
+ */
+#if (defined(CONFIG_LOG_MODE_IMMEDIATE) || defined(CONFIG_LOG_IMMEDIATE))
+#define ZEPHYR_LOG_MODE_IMMEDIATE 1
+#endif
+
+#if defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
+    !defined(ZEPHYR_LOG_MODE_MINIMAL)
 #ifdef CONFIG_LOG_PROCESS_THREAD
 #warning "The log internal thread for log processing can't transfer the log"\
          "well for MCUBoot."
@@ -716,6 +734,9 @@ int main(void)
             ;
     }
 
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
+    pcd_lock_ram();
+#endif
 #endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
 
     ZEPHYR_BOOT_LOG_STOP();
