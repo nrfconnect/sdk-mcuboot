@@ -4,9 +4,13 @@
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
 
-#include <hal/nrf_rtc.h>
-#include <hal/nrf_uarte.h>
 #include <hal/nrf_clock.h>
+#if defined(NRF_UARTE0) || defined(NRF_UARTE1)
+    #include <hal/nrf_uarte.h>
+#endif
+#if defined(NRF_RTC0) || defined(NRF_RTC1) || defined(NRF_RTC2)
+    #include <hal/nrf_rtc.h>
+#endif
 
 #if defined(NRF_RTC0) || defined(NRF_RTC1) || defined(NRF_RTC2)
 static inline void nrf_cleanup_rtc(NRF_RTC_Type * rtc_reg)
