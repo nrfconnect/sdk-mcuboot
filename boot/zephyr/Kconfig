@@ -128,7 +128,6 @@ config BOOT_ECDSA_CC310
 config BOOT_NRF_EXTERNAL_CRYPTO
 	bool "Use Shared Crypto from bootloader"
 	select BOOT_USE_NRF_EXTERNAL_CRYPTO
-	depends on SECURE_BOOT_CRYPTO_CLIENT
 
 endchoice # Ecdsa implementation
 
