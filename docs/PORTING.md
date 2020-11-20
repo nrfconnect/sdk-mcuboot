@@ -144,14 +144,15 @@ int     flash_area_id_to_multi_image_slot(int image_index, int area_id);
 needs to provide this pair of function.
 
 To configure the what functions are called when allocating/deallocating
-memory `mbed TLS` uses the following call:
+memory `mbed TLS` uses the following call [^1]:
 
 ```
 int mbedtls_platform_set_calloc_free (void *(*calloc_func)(size_t, size_t),
                                       void (*free_func)(void *));
 ```
 
-For reference see [mbed TLS platform.h](https://tls.mbed.org/api/platform_8h.html).
-If your system already provides functions with compatible signatures, those can
-be used directly here, otherwise create new functions that glue to your
-`calloc/free` implementations.
+If your system already provides functions with compatible signatures, those
+can be used directly here, otherwise create new functions that glue to
+your `calloc/free` implementations.
+
+[^1]: ```https://tls.mbed.org/api/platform_8h.html```
