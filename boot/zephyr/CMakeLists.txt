@@ -282,9 +282,3 @@ zephyr_library_sources(
   ${BOOT_DIR}/zephyr/arm_cleanup.c
 )
 endif()
-
-if(CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL)
-zephyr_library_sources(
-  ${BOOT_DIR}/zephyr/nrf_cleanup.c
-)
-endif()
