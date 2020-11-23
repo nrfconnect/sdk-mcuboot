@@ -16,7 +16,6 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <inttypes.h>
@@ -82,7 +81,7 @@ done:
     return rc;
 }
 
-#if !defined(MCUBOOT_DIRECT_XIP)
+#if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
 /**
  * Reads the status of a partially-completed swap, if any.  This is necessary
  * to recover in case the boot lodaer was reset in the middle of a swap
@@ -111,13 +110,13 @@ swap_read_status_bytes(const struct flash_area *fap,
     found_idx = 0;
     invalid = 0;
     for (i = 0; i < max_entries; i++) {
-        rc = flash_area_read_is_empty(fap, off + i * BOOT_WRITE_SZ(state),
+        rc = flash_area_read(fap, off + i * BOOT_WRITE_SZ(state),
                 &status, 1);
         if (rc < 0) {
             return BOOT_EFLASH;
         }
 
-        if (rc == 1) {
+        if (bootutil_buffer_is_erased(fap, &status, 1)) {
             if (found && !found_idx) {
                 found_idx = i;
             }
@@ -724,6 +723,6 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
 }
 #endif /* !MCUBOOT_OVERWRITE_ONLY */
 
-#endif /* !MCUBOOT_DIRECT_XIP */
+#endif /* !MCUBOOT_DIRECT_XIP && !MCUBOOT_RAM_LOAD */
 
 #endif /* !MCUBOOT_SWAP_USING_MOVE */

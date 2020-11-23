@@ -58,8 +58,8 @@
 #define MCUBOOT_OVERWRITE_ONLY_FAST
 #endif
 
-#ifdef CONFIG_SINGLE_IMAGE_DFU
-#define MCUBOOT_SINGLE_IMAGE_DFU 1
+#ifdef CONFIG_SINGLE_APPLICATION_SLOT
+#define MCUBOOT_SINGLE_APPLICATION_SLOT 1
 #else
 
 #ifdef CONFIG_BOOT_SWAP_USING_MOVE
@@ -80,7 +80,7 @@
 #define MCUBOOT_SWAP_SAVE_ENCTLV 1
 #endif
 
-#endif /* CONFIG_SINGLE_IMAGE_DFU */
+#endif /* CONFIG_SINGLE_APPLICATION_SLOT */
 
 #ifdef CONFIG_LOG
 #define MCUBOOT_HAVE_LOGGING 1
@@ -125,6 +125,22 @@
 #define MCUBOOT_DATA_SHARING
 #endif
 
+#ifdef CONFIG_BOOT_FIH_PROFILE_OFF
+#define MCUBOOT_FIH_PROFILE_OFF
+#endif
+
+#ifdef CONFIG_BOOT_FIH_PROFILE_LOW
+#define MCUBOOT_FIH_PROFILE_LOW
+#endif
+
+#ifdef CONFIG_BOOT_FIH_PROFILE_MEDIUM
+#define MCUBOOT_FIH_PROFILE_MEDIUM
+#endif
+
+#ifdef CONFIG_BOOT_FIH_PROFILE_HIGH
+#define MCUBOOT_FIH_PROFILE_HIGH
+#endif
+
 /*
  * Enabling this option uses newer flash map APIs. This saves RAM and
  * avoids deprecated API usage.
@@ -138,9 +154,45 @@
 
 #endif /* !__BOOTSIM__ */
 
+#if CONFIG_BOOT_WATCHDOG_FEED
+#if CONFIG_NRFX_WDT
+#include <nrfx_wdt.h>
+
+#define FEED_WDT_INST(id)                                    \
+    do {                                                     \
+        nrfx_wdt_t wdt_inst_##id = NRFX_WDT_INSTANCE(id);    \
+        for (uint8_t i = 0; i < NRF_WDT_CHANNEL_NUMBER; i++) \
+        {                                                    \
+            nrf_wdt_reload_request_set(wdt_inst_##id.p_reg,  \
+                (nrf_wdt_rr_register_t)(NRF_WDT_RR0 + i));   \
+        }                                                    \
+    } while (0)
+#if defined(CONFIG_NRFX_WDT0) && defined(CONFIG_NRFX_WDT1)
+#define MCUBOOT_WATCHDOG_FEED() \
+    do {                        \
+        FEED_WDT_INST(0);       \
+        FEED_WDT_INST(1);       \
+    } while (0)
+#elif defined(CONFIG_NRFX_WDT0)
+#define MCUBOOT_WATCHDOG_FEED() \
+    FEED_WDT_INST(0);
+#else /* defined(CONFIG_NRFX_WDT0) && defined(CONFIG_NRFX_WDT1) */
+#error "No NRFX WDT instances enabled"
+#endif /* defined(CONFIG_NRFX_WDT0) && defined(CONFIG_NRFX_WDT1) */
+
+#else /* CONFIG_NRFX_WDT */
+#warning "MCUBOOT_WATCHDOG_FEED() is no-op"
+/* No vendor implementation, no-op for historical reasons */
 #define MCUBOOT_WATCHDOG_FEED()         \
     do {                                \
-        /* TODO: to be implemented */   \
     } while (0)
+#endif /* CONFIG_NRFX_WDT */
+#else  /* CONFIG_BOOT_WATCHDOG_FEED */
+/* Not enabled, no feed activity */
+#define MCUBOOT_WATCHDOG_FEED()         \
+    do {                                \
+    } while (0)
+
+#endif /* CONFIG_BOOT_WATCHDOG_FEED */
 
 #endif /* __MCUBOOT_CONFIG_H__ */

@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2017-2019 Linaro LTD
  * Copyright (c) 2016-2019 JUUL Labs
- * Copyright (c) 2019 Arm Limited
+ * Copyright (c) 2019-2020 Arm Limited
  *
  * Original license:
  *
@@ -25,7 +25,6 @@
  * under the License.
  */
 
-#include <assert.h>
 #include <string.h>
 #include <inttypes.h>
 #include <stddef.h>
@@ -37,6 +36,7 @@
 #include "bootutil/bootutil.h"
 #include "bootutil_priv.h"
 #include "bootutil/bootutil_log.h"
+#include "bootutil/fault_injection_hardening.h"
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
@@ -106,6 +106,49 @@ static const struct boot_swap_table boot_swap_tables[] = {
 
 #define BOOT_SWAP_TABLES_COUNT \
     (sizeof boot_swap_tables / sizeof boot_swap_tables[0])
+
+/**
+ * @brief Determine if the data at two memory addresses is equal
+ *
+ * @param s1    The first  memory region to compare.
+ * @param s2    The second memory region to compare.
+ * @param n     The amount of bytes to compare.
+ *
+ * @note        This function does not comply with the specification of memcmp,
+ *              so should not be considered a drop-in replacement. It has no
+ *              constant time execution. The point is to make sure that all the
+ *              bytes are compared and detect if loop was abused and some cycles
+ *              was skipped due to fault injection.
+ *
+ * @return      FIH_SUCCESS if memory regions are equal, otherwise FIH_FAILURE
+ */
+#ifdef MCUBOOT_FIH_PROFILE_OFF
+inline
+fih_int boot_fih_memequal(const void *s1, const void *s2, size_t n)
+{
+    return memcmp(s1, s2, n);
+}
+#else
+fih_int boot_fih_memequal(const void *s1, const void *s2, size_t n)
+{
+    size_t i;
+    uint8_t *s1_p = (uint8_t*) s1;
+    uint8_t *s2_p = (uint8_t*) s2;
+    fih_int ret = FIH_FAILURE;
+
+    for (i = 0; i < n; i++) {
+        if (s1_p[i] != s2_p[i]) {
+            goto out;
+        }
+    }
+    if (i == n) {
+        ret = FIH_SUCCESS;
+    }
+
+out:
+    FIH_RET(ret);
+}
+#endif
 
 static int
 boot_magic_decode(const uint32_t *magic)
@@ -248,6 +291,27 @@ boot_enc_key_off(const struct flash_area *fap, uint8_t slot)
 }
 #endif
 
+bool bootutil_buffer_is_erased(const struct flash_area *area,
+                               const void *buffer, size_t len)
+{
+    size_t i;
+    uint8_t *u8b;
+    uint8_t erased_val;
+
+    if (buffer == NULL || len == 0) {
+        return false;
+    }
+
+    erased_val = flash_area_erased_val(area);
+    for (i = 0, u8b = (uint8_t *)buffer; i < len; i++) {
+        if (u8b[i] != erased_val) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 int
 boot_read_swap_state(const struct flash_area *fap,
                      struct boot_swap_state *state)
@@ -258,18 +322,18 @@ boot_read_swap_state(const struct flash_area *fap,
     int rc;
 
     off = boot_magic_off(fap);
-    rc = flash_area_read_is_empty(fap, off, magic, BOOT_MAGIC_SZ);
+    rc = flash_area_read(fap, off, magic, BOOT_MAGIC_SZ);
     if (rc < 0) {
         return BOOT_EFLASH;
     }
-    if (rc == 1) {
+    if (bootutil_buffer_is_erased(fap, magic, BOOT_MAGIC_SZ)) {
         state->magic = BOOT_MAGIC_UNSET;
     } else {
         state->magic = boot_magic_decode(magic);
     }
 
     off = boot_swap_info_off(fap);
-    rc = flash_area_read_is_empty(fap, off, &swap_info, sizeof swap_info);
+    rc = flash_area_read(fap, off, &swap_info, sizeof swap_info);
     if (rc < 0) {
         return BOOT_EFLASH;
     }
@@ -278,30 +342,31 @@ boot_read_swap_state(const struct flash_area *fap,
     state->swap_type = BOOT_GET_SWAP_TYPE(swap_info);
     state->image_num = BOOT_GET_IMAGE_NUM(swap_info);
 
-    if (rc == 1 || state->swap_type > BOOT_SWAP_TYPE_REVERT) {
+    if (bootutil_buffer_is_erased(fap, &swap_info, sizeof swap_info) ||
+            state->swap_type > BOOT_SWAP_TYPE_REVERT) {
         state->swap_type = BOOT_SWAP_TYPE_NONE;
         state->image_num = 0;
     }
 
     off = boot_copy_done_off(fap);
-    rc = flash_area_read_is_empty(fap, off, &state->copy_done,
-            sizeof state->copy_done);
+    rc = flash_area_read(fap, off, &state->copy_done, sizeof state->copy_done);
     if (rc < 0) {
         return BOOT_EFLASH;
     }
-    if (rc == 1) {
+    if (bootutil_buffer_is_erased(fap, &state->copy_done,
+                sizeof state->copy_done)) {
         state->copy_done = BOOT_FLAG_UNSET;
     } else {
         state->copy_done = boot_flag_decode(state->copy_done);
     }
 
     off = boot_image_ok_off(fap);
-    rc = flash_area_read_is_empty(fap, off, &state->image_ok,
-                                  sizeof state->image_ok);
+    rc = flash_area_read(fap, off, &state->image_ok, sizeof state->image_ok);
     if (rc < 0) {
         return BOOT_EFLASH;
     }
-    if (rc == 1) {
+    if (bootutil_buffer_is_erased(fap, &state->image_ok,
+                sizeof state->image_ok)) {
         state->image_ok = BOOT_FLAG_UNSET;
     } else {
         state->image_ok = boot_flag_decode(state->image_ok);

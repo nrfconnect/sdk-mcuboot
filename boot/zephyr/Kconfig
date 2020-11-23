@@ -58,8 +58,8 @@ config NRF_CC310_BL
 
 menu "MCUBoot settings"
 
-config SINGLE_IMAGE_DFU
-	bool "Single image application"
+config SINGLE_APPLICATION_SLOT
+	bool "Single slot bootloader"
 	default n
 	help
 	  Single image area is used for application which means that
@@ -93,16 +93,19 @@ if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice
 	prompt "Ecdsa implementation"
 	default BOOT_ECDSA_TINYCRYPT
+
 config BOOT_ECDSA_TINYCRYPT
 	bool "Use tinycrypt"
 	select BOOT_USE_TINYCRYPT
-config BOOT_CC310
+
+config BOOT_ECDSA_CC310
 	bool "Use CC310"
-	select BOOT_USE_NRF_CC310_BL if HAS_HW_NRF_CC310
-	select NRF_CC310_BL if HAS_HW_NRF_CC310
-	select NRFXLIB_CRYPTO if SOC_FAMILY_NRF
+	depends on HAS_HW_NRF_CC310
+	select BOOT_USE_NRF_CC310_BL
+	select NRF_CC310_BL
+	select NRFXLIB_CRYPTO
 	select BOOT_USE_CC310
-endchoice
+endchoice # Ecdsa implementation
 endif
 
 config BOOT_SIGNATURE_TYPE_ED25519
@@ -126,6 +129,10 @@ endchoice
 
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
+	default "root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
+	default "root-ed25519.pem" if BOOT_SIGNATURE_TYPE_ED25519
+	default "root-rsa-3072.pem" if BOOT_SIGNATURE_TYPE_RSA && BOOT_SIGNATURE_TYPE_RSA_LEN=3072
+	default "root-rsa-2048.pem" if BOOT_SIGNATURE_TYPE_RSA && BOOT_SIGNATURE_TYPE_RSA_LEN=2048
 	default ""
 	help
 	  You can use either absolute or relative path.
@@ -140,7 +147,20 @@ config BOOT_SIGNATURE_KEY_FILE
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
 	depends on CPU_CORTEX_M
-	default y
+	default y if !ARCH_SUPPORTS_ARCH_HW_INIT
+	help
+	  This option instructs MCUboot to perform a clean-up of a set of
+	  architecture core HW registers before junping to the application
+	  firmware. The clean-up sets these registers to their warm-reset
+	  values as specified by the architecture.
+
+	  By default, this option is enabled only if the architecture does
+	  not have the functionality to perform such a register clean-up
+	  during application firmware boot.
+
+	  Zephyr applications on Cortex-M will perform this register clean-up
+	  by default, if they are chain-loadable by MCUboot, so MCUboot does
+	  not need to perform such a cleanup itself.
 
 config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
@@ -163,7 +183,7 @@ config BOOT_VALIDATE_SLOT0
 	  every boot, but can mitigate against some changes that are
 	  able to modify the flash image itself.
 
-if !SINGLE_IMAGE_DFU
+if !SINGLE_APPLICATION_SLOT
 choice
 	prompt "Image upgrade modes"
 	default BOOT_SWAP_USING_MOVE if SOC_FAMILY_NRF
@@ -206,7 +226,7 @@ config BOOT_DIRECT_XIP
 endchoice
 endif
 
-if !SINGLE_IMAGE_DFU
+if !SINGLE_APPLICATION_SLOT
 config BOOT_BOOTSTRAP
 	bool "Bootstrap erased the primary slot from the secondary slot"
 	default n
@@ -269,7 +289,7 @@ config BOOT_MAX_IMG_SECTORS
 
 config BOOT_ERASE_PROGRESSIVELY
 	bool "Erase flash progressively when receiving new firmware"
-	default y if SOC_NRF52840
+	default y if SOC_FAMILY_NRF
 	help
 	 If enabled, flash is erased as necessary when receiving new firmware,
 	 instead of erasing the whole image slot at once. This is necessary
@@ -287,6 +307,42 @@ config MEASURED_BOOT
 config BOOT_SHARE_DATA
 	bool "Save application specific data in shared memory area"
 	default n
+
+choice
+	prompt "Fault injection hardening profile"
+	default BOOT_FIH_PROFILE_OFF
+
+config BOOT_FIH_PROFILE_OFF
+	bool "No hardening against hardware level fault injection"
+	help
+	  No hardening in SW against hardware level fault injection: power or
+	  clock glitching, etc.
+
+config BOOT_FIH_PROFILE_LOW
+	bool "Moderate level hardening against hardware level fault injection"
+	help
+	  Moderate level hardening: Long global fail loop to avoid break out,
+	  control flow integrity check to discover discrepancy in expected code
+	  flow.
+
+config BOOT_FIH_PROFILE_MEDIUM
+	bool "Medium level hardening against hardware level fault injection"
+	help
+	  Medium level hardening: Long global fail loop to avoid break out,
+	  control flow integrity check to discover discrepancy in expected code
+	  flow, double variables to discover register or memory corruption.
+
+config BOOT_FIH_PROFILE_HIGH
+	bool "Maximum level hardening against hardware level fault injection"
+	select MBEDTLS
+	help
+	  Maximum level hardening: Long global fail loop to avoid break out,
+	  control flow integrity check to discover discrepancy in expected code
+	  flow, double variables to discover register or memory corruption, random
+	  delays to make code execution less predictable. Random delays requires an
+	  entropy source.
+
+endchoice
 
 config BOOT_WAIT_FOR_USB_DFU
 	bool "Wait for a prescribed duration to see if USB DFU is invoked"
@@ -386,7 +442,7 @@ config BOOT_SERIAL_DETECT_PIN
 	default 6 if BOARD_NRF9160DK_NRF9160
 	default 11 if BOARD_NRF52840DK_NRF52840
 	default 13 if BOARD_NRF52DK_NRF52832
-	default 23 if BOARD_NRF5340_DK_NRF5340_CPUAPP || BOARD_NRF5340_DK_NRF5340_CPUAPPNS
+	default 23 if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS
 	help
 	  Pin on the serial detect port which triggers serial recovery mode.
 
@@ -424,7 +480,7 @@ config BOOT_INTR_VEC_RELOC
 config UPDATEABLE_IMAGE_NUMBER
 	int "Number of updateable images"
 	default 1
-	range 1 1 if SINGLE_IMAGE_DFU
+	range 1 1 if SINGLE_APPLICATION_SLOT
 	help
 	  Enables support of multi image update.
 
@@ -451,6 +507,16 @@ config MCUBOOT_HW_DOWNGRADE_PREVENTION
 	  downgrade to some extent.
 
 endchoice
+
+config BOOT_WATCHDOG_FEED
+	bool "Feed the watchdog while doing swap"
+	default y if SOC_FAMILY_NRF
+	imply NRFX_WDT
+	imply NRFX_WDT0
+	imply NRFX_WDT1
+	help
+	  Enables implementation of MCUBOOT_WATCHDOG_FEED() macro which is
+	  used to feed watchdog while doing time consuming operations.
 
 endmenu
 
