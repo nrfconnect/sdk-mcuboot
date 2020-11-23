@@ -73,7 +73,7 @@ static struct boot_loader_state boot_data;
  * to just make those variables stack allocated.
  */
 #if !defined(__BOOTSIM__)
-#define TARGET_STATIC __aligned(4) static
+#define TARGET_STATIC static
 #else
 #define TARGET_STATIC
 #endif
