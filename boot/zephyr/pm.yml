@@ -19,7 +19,7 @@ mcuboot_secondary:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
     after: mcuboot_primary
 
-#if !defined(CONFIG_BOOT_SWAP_USING_MOVE) && !defined(CONFIG_SINGLE_IMAGE_DFU)
+#if !defined(CONFIG_BOOT_SWAP_USING_MOVE) && !defined(CONFIG_SINGLE_APPLICATION_SLOT)
 mcuboot_scratch:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
   placement:
