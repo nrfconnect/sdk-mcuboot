@@ -27,7 +27,8 @@ mcuboot_scratch:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
 #endif
 
-# Padding placed before image to boot
+# Padding placed before image to boot. This reserves space for the MCUboot image header
+# and it ensures that the boot image gets linked with the correct address offset in flash.
 mcuboot_pad:
     # MCUboot pad must be placed before the 'spm' partition if that is present.
     # If 'spm' partition is not present, it must be placed before the 'app'.
