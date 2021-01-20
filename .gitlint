@@ -10,7 +10,7 @@ debug = false
 
 # Set the extra-path where gitlint will search for user defined rules
 # See http://jorisroovers.github.io/gitlint/user_defined_rules for details
-extra-path=../tools/ci-tools/scripts/gitlint
+extra-path=../../zephyr/scripts/gitlint
 
 [title-max-length-no-revert]
 line-length=72
