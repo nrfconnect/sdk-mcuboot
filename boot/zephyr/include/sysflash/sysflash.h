@@ -7,7 +7,7 @@
 #include <pm_config.h>
 #include <mcuboot_config/mcuboot_config.h>
 
-#ifndef CONFIG_SINGLE_APPLICATION_SLOT
+#ifndef CONFIG_SINGLE_IMAGE_DFU
 
 #if (MCUBOOT_IMAGE_NUMBER == 1)
 
@@ -34,7 +34,7 @@ extern uint32_t _image_1_primary_slot_id[];
 #endif
 #define FLASH_AREA_IMAGE_SCRATCH    PM_MCUBOOT_SCRATCH_ID
 
-#else /* CONFIG_SINGLE_APPLICATION_SLOT */
+#else /* CONFIG_SINGLE_IMAGE_DFU */
 
 #define FLASH_AREA_IMAGE_PRIMARY(x)	PM_MCUBOOT_PRIMARY_ID
 #define FLASH_AREA_IMAGE_SECONDARY(x)	PM_MCUBOOT_PRIMARY_ID
@@ -44,7 +44,7 @@ extern uint32_t _image_1_primary_slot_id[];
  */
 #define FLASH_AREA_IMAGE_SCRATCH       0
 
-#endif /* CONFIG_SINGLE_APPLICATION_SLOT */
+#endif /* CONFIG_SINGLE_IMAGE_DFU */
 
 #else
 
