@@ -58,7 +58,7 @@ config BOOT_USE_CC310
 
 config BOOT_USE_NRF_CC310_BL
 	bool
-	select NRF_CC310_BL
+	default n
 
 config BOOT_USE_NRF_EXTERNAL_CRYPTO
 	bool
@@ -83,7 +83,6 @@ config SINGLE_APPLICATION_SLOT
 
 choice
 	prompt "Signature type"
-	default BOOT_SIGNATURE_TYPE_ECDSA_P256 if HAS_HW_NRF_CC310
 	default BOOT_SIGNATURE_TYPE_RSA
 
 config BOOT_SIGNATURE_TYPE_NONE
