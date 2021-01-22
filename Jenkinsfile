@@ -18,7 +18,7 @@ pipeline {
    booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
    booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
    string(      name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job', defaultValue: CI_STATE.CFG.INPUT_STATE_STR )
-   choice(name: 'TEST_CYCLE', choices: CI_STATE.CFG.CRON_CHOICES, description: 'Cron Test Phase')
+   choice(name: 'CRON', choices: CI_STATE.CFG.CRON_CHOICES, description: 'Cron Test Phase')
   }
 
   agent {
@@ -29,7 +29,7 @@ pipeline {
   }
 
   options {
-    checkoutToSubdirectory('bootloader/mcuboot')
+    checkoutToSubdirectory('mcuboot')
     parallelsAlwaysFailFast()
     timeout(time: CI_STATE.CFG.TIMEOUT.time, unit: CI_STATE.CFG.TIMEOUT.unit)
   }
@@ -38,34 +38,25 @@ pipeline {
       // This token is used to by check_compliance to comment on PRs and use checks
       GH_TOKEN = credentials('nordicbuilder-compliance-token')
       GH_USERNAME = "NordicBuilder"
+      COMPLIANCE_ARGS = "-r NordicPlayground/fw-nrfconnect-mcuboot"
   }
 
   stages {
     stage('Load') { steps { script { CI_STATE = lib_State.load('MCUBOOT', CI_STATE) }}}
     stage('Checkout') {
       steps { script {
-        println "Running on NODE: $NODE_NAME"
+        CI_STATE.SELF.REPORT_SHA = lib_Main.checkoutRepo(CI_STATE.SELF.GIT_URL, "mcuboot", CI_STATE.SELF, false)
+        lib_West.AddManifestUpdate("MCUBOOT", 'mcuboot', CI_STATE.SELF.GIT_URL, CI_STATE.SELF.GIT_REF, CI_STATE)
         lib_Main.checkoutRepo(CI_STATE.NRF.GIT_URL, "nrf", CI_STATE.NRF, true)
-        lib_West.InitUpdate('nrf')
-        dir('bootloader') {
-          CI_STATE.SELF.REPORT_SHA = lib_Main.checkoutRepo(CI_STATE.SELF.GIT_URL, "mcuboot", CI_STATE.SELF, false)
-          dir('mcuboot') {
-            sh "git log --graph --oneline --decorate -n 10"
-          }
-        }
+        lib_West.InitUpdate('nrf', 'ci-tools')
       }}
     }
     stage('Run compliance check') {
       when { expression { CI_STATE.SELF.RUN_TESTS } }
       steps {
         script {
-          println "Running on NODE: $NODE_NAME"
           lib_Status.set("PENDING", 'MCUBOOT', CI_STATE);
-          dir('bootloader/mcuboot') {
-
-            CI_STATE.SELF.ORG_AND_REPO = CI_STATE.SELF.GIT_URL.replace('.git','').replace('https://github.com/','')
-            CI_STATE.SELF.COMPLIANCE = new HashMap()
-            CI_STATE.SELF.COMPLIANCE.ARGS  = " -r $CI_STATE.SELF.ORG_AND_REPO "
+          dir('mcuboot') {
 
             def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.SELF)
             if (BUILD_TYPE == "PR") {
@@ -81,7 +72,8 @@ pipeline {
                 COMMIT_RANGE = "$CI_STATE.SELF.MERGE_BASE..$CI_STATE.SELF.REPORT_SHA"
               }
 
-              CI_STATE.SELF.COMPLIANCE.ARGS += " -p $CHANGE_ID "
+              COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g"
+              // COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g -e pylint"
               println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
             }
             else if (BUILD_TYPE == "TAG") {
@@ -97,16 +89,9 @@ pipeline {
                 assert condition : "Build fails because it is not a PR/Tag/Branch"
             }
 
-            CI_STATE.SELF.COMPLIANCE.ARGS += " -S $CI_STATE.SELF.REPORT_SHA "
-            CI_STATE.SELF.COMPLIANCE.ARGS += " --commits $COMMIT_RANGE "
-
             // Run the compliance check
             try {
-              sh """
-                echo $CI_STATE.SELF.COMPLIANCE.ARGS
-                source ../../zephyr/zephyr-env.sh
-                ../../zephyr/scripts/ci/check_compliance.py $CI_STATE.SELF.COMPLIANCE.ARGS
-              """
+              sh "../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE"
             }
             finally {
               junit 'compliance.xml'
@@ -151,7 +136,7 @@ pipeline {
     failure {
       echo "failure"
       script{
-        if ( env.JOB_NAME == 'latest/sdk-mcuboot/master' )
+        if (env.BRANCH_NAME == 'master' || env.BRANCH_NAME.startsWith("PR"))
         {
             emailext(to: 'anpu',
                 body: "${currentBuild.currentResult}\nJob ${env.JOB_NAME}\t\t build ${env.BUILD_NUMBER}\r\nLink: ${env.BUILD_URL}",
