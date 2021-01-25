@@ -14,6 +14,7 @@ config MCUBOOT
 	bool
 	select MPU_ALLOW_FLASH_WRITE if ARM_MPU
 	select USE_DT_CODE_PARTITION if HAS_FLASH_LOAD_OFFSET
+	select MCUBOOT_BOOTUTIL_LIB
 
 config BOOT_USE_MBEDTLS
 	bool
@@ -236,9 +237,19 @@ config BOOT_DIRECT_XIP
 	  mode results in a simpler code path and smaller code size.
 
 endchoice
-endif
 
-if !SINGLE_APPLICATION_SLOT
+config BOOT_DIRECT_XIP_REVERT
+	bool "Enable the revert mechanism in direct-xip mode"
+	depends on BOOT_DIRECT_XIP
+	default n
+	help
+	  If y, enables the revert mechanism in direct-xip similar to the one in
+	  swap mode. It requires the trailer magic to be added to the signed image.
+	  When a reboot happens without the image being confirmed at runtime, the
+	  bootloader considers the image faulty and erases it. After this it will
+	  attempt to boot the previous image. The images can also be made permanent
+	  (marked as confirmed in advance) just like in swap mode.
+
 config BOOT_BOOTSTRAP
 	bool "Bootstrap erased the primary slot from the secondary slot"
 	default n
@@ -288,7 +299,7 @@ config BOOT_ENCRYPT_X25519
 	  back when swapping from the primary slot to the secondary slot. The
 	  encryption mechanism used in this case is ECIES using primitives
 	  described under "ECIES-X25519 encryption" in docs/encrypted_images.md.
-endif
+endif # !SINGLE_APPLICATION_SLOT
 
 config BOOT_MAX_IMG_SECTORS
 	int "Maximum number of sectors per image slot"
@@ -454,7 +465,8 @@ config BOOT_SERIAL_DETECT_PIN
 	default 6 if BOARD_NRF9160DK_NRF9160
 	default 11 if BOARD_NRF52840DK_NRF52840
 	default 13 if BOARD_NRF52DK_NRF52832
-	default 23 if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS
+	default 23 if BOARD_NRF5340PDK_NRF5340_CPUAPP || BOARD_NRF5340PDK_NRF5340_CPUAPPNS || \
+		BOARD_NRF5340DK_NRF5340_CPUAPP || BOARD_NRF5340DK_NRF5340_CPUAPPNS
 	help
 	  Pin on the serial detect port which triggers serial recovery mode.
 
@@ -573,5 +585,10 @@ config LOG_PROCESS_THREAD
 # override USB device name
 config USB_DEVICE_PRODUCT
 	default "MCUBOOT"
+
+# use MCUboot's own log configuration
+config MCUBOOT_BOOTUTIL_LIB_OWN_LOG
+	bool
+	default n
 
 source "Kconfig.zephyr"

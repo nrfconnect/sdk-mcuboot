@@ -15,6 +15,9 @@ incremeting the numbers:
 
 We add pre-release tags of the format MAJOR.MINOR.PATCH-rc1.
 
+We mark in documentation an MCUBoot development version using
+the format MAJOR.MINOR.PATCH-dev.
+
 ## Release Notes
 
 Before making a release, be sure to update the `docs/release-notes.md`
@@ -38,10 +41,11 @@ imgtool is released through pypi.org (The Python package index) and
 requires that its version to be updated by editing
 `scripts/imgtool/__init__.py` and modifying the exported version:
 
-`imgtool_version = "X.Y.ZrcN"`
+`imgtool_version = "A.B.CrcN"`
 
-where `rcX`, `aX` and `bX` are accepted pre-release versions (just
-numbers for final releases). For more info see:
+This version should match the current release number of MCUboot; `rcN`
+(with no dash!) is accepted for pre-release version under test, and
+numbers only for final releases. For more info see:
 
 https://www.python.org/dev/peps/pep-0440/#pre-releases
 
@@ -80,5 +84,32 @@ release happen:
 git push origin HEAD:refs/heads/master
 git push origin va.b.c-rcn
 ```
+
+## Branching after a Release
+
+After the final (non-`rc`) a.b.0 release is made, a new branch must
+be created and pushed:
+
+``` bash
+git checkout va.b.c
+git checkout -b va.b-branch
+git push origin va.b-branch
+```
+
+This branch will be used to generate new incremental `PATCH` releases
+for bug fixes or required minor updates (eg, new `imgtool` features).
+
+## Post release actions
+
+Mark the MCUBoot version as a development version. The version number used
+should be specified for the next expected release.
+It should be larger than the last release version by incrementing the MAJOR or
+the MINOR number. It is not necessary to define the next version precisely as
+the next release version might still be different as it might be needed to do:
+
+- a patch release
+- a MINOR release while a MAJOR release was expected
+- a MAJOR release while a MINOR release was expected
+
 
 [semver]: http://semver.org/

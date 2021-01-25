@@ -3,6 +3,47 @@
 - Table of Contents
 {:toc}
 
+## Version 1.7.0
+
+The 1.7.0 release of MCUBoot adds support for the Mbed-OS platform,
+Equal slots (direct-xip) upgrade mode, RAM loading upgrade mode,
+hardening against hardware level fault injection and timing attacks
+and single image mode.
+There are bug fixes, and associated imgtool updates as well.
+
+### About this release
+
+- Initial support for the Mbed-OS platform.
+- Added possibility to enter deep sleep mode after mcuboot app execution
+  for cypress platform.
+- Added hardening against hardware level fault injection and timing attacks.
+- Introduced Abstract crypto primitives to simplify porting.
+- Added RAM-load upgrade mode.
+- Renamed single-image mode to single-slot mode.
+- Allow larger primary slot in swap-move
+- Fixed boostrapping in swap-move mode.
+- Fixed issue causing that interrupted swap-move operation might brick device
+  if the primary image was padded.
+- Abstracting mcuboot crypto functions for cleaner porting
+- Droped flash_area_read_is_empty() porting API.
+- boot/zephyr: Added watchdog feed on nRF devices.
+  See `CONFIG_BOOT_WATCHDOG_FEED` option.
+- boot/zephyr: Added patch for turning off cache for Cortex M7 before
+  chain-loading.
+- boot/zephyr: added option to relocate interrupts to application
+- boot/zephyr: clean ARM core configuration only when selected by user
+- boot/boot_serial: allow nonaligned last image data chunk
+- imgtool: added custom TLV support.
+- imgtool: added possibility to set confirm flag for hex files as well.
+- imgtool: Print image digest during verify.
+
+### Zephyr-RTOS Compatibility
+
+This release of MCUboot works with the Zephyr "master" at the time of the
+release. It was tested as of has 7a3b253ce. This version of MCUboot also
+works with the Zephyr v2.4.0, however it is recommended to enable
+`CONFIG_MCUBOOT_CLEANUP_ARM_CORE` while using that version.
+
 ## Version 1.6.0
 
 The 1.6.0 release of MCUboot adds support for the PSOC6 platform,
