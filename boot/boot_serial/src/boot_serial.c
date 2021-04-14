@@ -626,6 +626,7 @@ boot_serial_start(const struct boot_uart_funcs *f)
     while (1) {
         rc = f->read(in_buf + off, sizeof(in_buf) - off, &full_line);
         if (rc <= 0 && !full_line) {
+            k_yield();
             continue;
         }
         off += rc;
