@@ -33,11 +33,7 @@
 #ifdef MCUBOOT_USE_CC310
 #define NUM_ECC_BYTES (256 / 8)
 #endif
-#ifdef MCUBOOT_USE_NRF_EXTERNAL_CRYPTO
-#define NUM_ECC_BYTES (256 / 8)
-#endif
-#if defined (MCUBOOT_USE_TINYCRYPT) || defined (MCUBOOT_USE_CC310) \
-    || defined (MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
+#if defined (MCUBOOT_USE_TINYCRYPT) || defined (MCUBOOT_USE_CC310)
 #include "bootutil/sign_key.h"
 
 #include "mbedtls/oid.h"
