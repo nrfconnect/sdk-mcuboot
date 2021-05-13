@@ -35,6 +35,9 @@
 #include <sys/base64.h>
 #include <tinycbor/cbor.h>
 #include <tinycbor/cbor_buf_reader.h>
+#if defined(CONFIG_SETTINGS)
+#include <mgmt/settings_mgmt.h>
+#endif
 #else
 #include <bsp/bsp.h>
 #include <hal/hal_system.h>
@@ -448,6 +451,24 @@ bs_reset(char *buf, int len)
 #endif
 }
 
+#if defined(CONFIG_SETTINGS)
+static void
+bs_erase_storage(char *buf, int len)
+{
+    int rc = storage_erase();
+    if (rc == 0) {
+	// Return 1 as success as it would return 0 if empty_rsp is called.
+	rc = 1;
+    }
+
+    cbor_encoder_create_map(&bs_root, &bs_rsp, CborIndefiniteLength);
+    cbor_encode_text_stringz(&bs_rsp, "rc");
+    cbor_encode_int(&bs_rsp, rc);
+    cbor_encoder_close_container(&bs_root, &bs_rsp);
+    boot_serial_output();
+}
+#endif
+
 /*
  * Parse incoming line of input from console.
  * Expect newtmgr protocol with serial transport.
@@ -495,7 +516,13 @@ boot_serial_input(char *buf, int len)
         case NMGR_ID_RESET:
             bs_reset(buf, len);
             break;
+#if defined(CONFIG_SETTINGS)
+        case NMGR_ID_ERASE_STORAGE:
+            bs_erase_storage(buf, len);
+            break;
+#endif
         default:
+            bs_empty_rsp(buf, len);
             break;
         }
     }

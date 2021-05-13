@@ -46,6 +46,7 @@ extern "C" {
 
 #define NMGR_ID_CONS_ECHO_CTRL  1
 #define NMGR_ID_RESET           5
+#define NMGR_ID_ERASE_STORAGE   6
 
 struct nmgr_hdr {
     uint8_t  nh_op;             /* NMGR_OP_XXX */
