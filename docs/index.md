@@ -13,6 +13,12 @@ MCUboot works with both the Apache Mynewt, and Zephyr operating systems, but
 more ports are planned in the future. RIOT is currently supported as a boot
 target with a complete port planned.
 
+MCUboot is an open governance project.  See the [membership
+list](https://github.com/mcu-tools/mcuboot/wiki/Members) for current
+members, and the
+[charter](https://github.com/mcu-tools/mcuboot/wiki/MCUboot-Project-Charter)
+for more details.
+
 ## Contents
 
 - General - this document
@@ -55,13 +61,13 @@ Information and documentation on the bootloader is stored within the source.
 
 For more information in the source, here are some pointers:
 
-- [boot/bootutil](https://github.com/mcu-tools/mcuboot/tree/master/boot/bootutil): The core of the bootloader itself.
-- [boot/boot\_serial](https://github.com/mcu-tools/mcuboot/tree/master/boot/boot_serial): Support for serial upgrade within the bootloader itself.
-- [boot/zephyr](https://github.com/mcu-tools/mcuboot/tree/master/boot/zephyr): Port of the bootloader to Zephyr
-- [boot/mynewt](https://github.com/mcu-tools/mcuboot/tree/master/boot/mynewt): Mynewt bootloader app
-- [boot/mbed](https://github.com/mcu-tools/mcuboot/tree/master/boot/mbed): Port of the bootloader to Mbed-OS
-- [imgtool](https://github.com/mcu-tools/mcuboot/tree/master/scripts/imgtool.py): A tool to securely sign firmware images for booting by MCUboot.
-- [sim](https://github.com/mcu-tools/mcuboot/tree/master/sim): A bootloader simulator for testing and regression
+- [boot/bootutil](https://github.com/mcu-tools/mcuboot/tree/main/boot/bootutil): The core of the bootloader itself.
+- [boot/boot\_serial](https://github.com/mcu-tools/mcuboot/tree/main/boot/boot_serial): Support for serial upgrade within the bootloader itself.
+- [boot/zephyr](https://github.com/mcu-tools/mcuboot/tree/main/boot/zephyr): Port of the bootloader to Zephyr
+- [boot/mynewt](https://github.com/mcu-tools/mcuboot/tree/main/boot/mynewt): Mynewt bootloader app
+- [boot/mbed](https://github.com/mcu-tools/mcuboot/tree/main/boot/mbed): Port of the bootloader to Mbed-OS
+- [imgtool](https://github.com/mcu-tools/mcuboot/tree/main/scripts/imgtool.py): A tool to securely sign firmware images for booting by MCUboot.
+- [sim](https://github.com/mcu-tools/mcuboot/tree/main/sim): A bootloader simulator for testing and regression
 
 ## Joining
 
@@ -72,3 +78,5 @@ Developers welcome!
   Get your invite [here!](https://join.slack.com/t/mcuboot/shared_invite/MjE2NDcwMTQ2MTYyLTE1MDA4MTIzNTAtYzgyZTU0NjFkMg)
 * [Our IRC channel](http://irc.freenode.net), channel #mcuboot ([IRC
   link](irc://chat.freenode.net/#mcuboot)
+* [Current members](https://github.com/mcu-tools/mcuboot/wiki/Members)
+* [Project charter](https://github.com/mcu-tools/mcuboot/wiki/MCUboot-Project-Charter)

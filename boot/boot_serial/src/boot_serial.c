@@ -27,7 +27,7 @@
 #include "bootutil/bootutil_log.h"
 
 #ifdef __ZEPHYR__
-#include <power/reboot.h>
+#include <sys/reboot.h>
 #include <sys/byteorder.h>
 #include <sys/__assert.h>
 #include <drivers/flash.h>
@@ -436,7 +436,11 @@ bs_reset(char *buf, int len)
     bs_empty_rsp(buf, len);
 
 #ifdef __ZEPHYR__
+#ifdef CONFIG_MULTITHREADING
     k_sleep(K_MSEC(250));
+#else
+    k_busy_wait(250000);
+#endif
     sys_reboot(SYS_REBOOT_COLD);
 #else
     os_cputime_delay_usecs(250000);
