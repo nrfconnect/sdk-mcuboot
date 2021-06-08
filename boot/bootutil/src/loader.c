@@ -46,7 +46,7 @@
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/ramload.h"
 
-#ifdef CONFIG_SOC_NRF5340_CPUAPP
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_UPGRADE_NETWORK_CORE)
 #include <dfu/pcd.h> 
 #endif
 
