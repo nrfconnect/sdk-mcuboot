@@ -184,6 +184,17 @@ static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx,
     (void)ctx;
     (void)pk_len;
     (void)sig_len;
+
+	/* As described on the compact representation in IETF protocols,
+	 * the first byte of the key defines if the ECC points are
+	 * compressed (0x2 or 0x3) or uncompressed (0x4).
+	 * We only support uncompressed keys.
+	 */
+	if (pk[0] != 0x04)
+		return -1;
+
+	pk++;
+
     return bl_secp256r1_validate(hash, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE,
                                  pk, sig);
 }
