@@ -20,6 +20,7 @@ mcuboot_secondary:
   share_size: [mcuboot_primary]
   placement:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align_next: CONFIG_FPROTECT_BLOCK_SIZE
     after: mcuboot_primary
 #endif
 
