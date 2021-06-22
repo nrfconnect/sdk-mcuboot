@@ -25,6 +25,7 @@ mcuboot_secondary:
 #else
   placement:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align_next: CONFIG_FPROTECT_BLOCK_SIZE # Ensure that the next partition does not interfere with this image
     after: mcuboot_primary
 #endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
 #endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) */
