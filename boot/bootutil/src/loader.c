@@ -45,6 +45,7 @@
 #include "bootutil/boot_record.h"
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/ramload.h"
+#include "bootutil/boot_hooks.h"
 
 #ifdef CONFIG_SOC_NRF5340_CPUAPP
 #include <dfu/pcd.h> 
@@ -104,7 +105,13 @@ boot_read_image_headers(struct boot_loader_state *state, bool require_all,
     int i;
 
     for (i = 0; i < BOOT_NUM_SLOTS; i++) {
-        rc = boot_read_image_header(state, i, boot_img_hdr(state, i), bs);
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+        rc = boot_read_image_header_hook(BOOT_CURR_IMG(state), i, boot_img_hdr(state, i));
+        if (rc == BOOT_HOOK_REGULAR)
+#endif
+        {
+            rc = boot_read_image_header(state, i, boot_img_hdr(state, i), bs);
+        }
         if (rc != 0) {
             /* If `require_all` is set, fail on any single fail, otherwise
              * if at least the first slot's header was read successfully,
@@ -769,8 +776,13 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         }
     }
 #endif
-
-    FIH_CALL(boot_image_check, fih_rc, state, hdr, fap, bs);
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+    FIH_CALL(boot_image_check_hook, fih_rc, BOOT_CURR_IMG(state), slot);
+    if (fih_eq(fih_rc, BOOT_HOOK_REGULAR))
+#endif
+    {
+        FIH_CALL(boot_image_check, fih_rc, state, hdr, fap, bs);
+    }
     if (!boot_is_header_valid(hdr, fap) || fih_not_eq(fih_rc, FIH_SUCCESS)) {
         if ((slot != BOOT_PRIMARY_SLOT) || ARE_SLOTS_EQUIVALENT()) {
             flash_area_erase(fap, 0, fap->fa_size);
@@ -1181,6 +1193,15 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
 
 #if defined(MCUBOOT_OVERWRITE_ONLY_FAST)
     rc = boot_write_magic(fap_primary_slot);
+    if (rc != 0) {
+        return rc;
+    }
+#endif
+
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+    rc = boot_copy_region_post_hook(BOOT_CURR_IMG(state),
+                                    BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT),
+                                    size);
     if (rc != 0) {
         return rc;
     }
@@ -2042,7 +2063,15 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         case BOOT_SWAP_TYPE_TEST:          /* fallthrough */
         case BOOT_SWAP_TYPE_PERM:          /* fallthrough */
         case BOOT_SWAP_TYPE_REVERT:
-            rc = boot_perform_update(state, &bs);
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+            rc = boot_perform_update_hook(BOOT_CURR_IMG(state),
+                                    &(BOOT_IMG(state, 1).hdr),
+                                    BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT));
+            if (rc == BOOT_HOOK_REGULAR)
+#endif
+            {
+                rc = boot_perform_update(state, &bs);
+            }
             assert(rc == 0);
             break;
 
