@@ -59,6 +59,7 @@
 #endif
 
 #include "serial_recovery_cbor.h"
+#include "bootutil/boot_hooks.h"
 
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
@@ -171,16 +172,33 @@ bs_list(char *buf, int len)
             if (flash_area_open(area_id, &fap)) {
                 continue;
             }
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+            int rc = boot_read_image_header_hook(image_index, slot, &hdr);
+            if (rc == BOOT_HOOK_REGULAR)
+#endif
+            {
+                flash_area_read(fap, 0, &hdr, sizeof(hdr));
+            }
 
-            flash_area_read(fap, 0, &hdr, sizeof(hdr));
+            fih_int fih_rc = FIH_FAILURE;
 
-            if (hdr.ih_magic != IMAGE_MAGIC ||
-              bootutil_img_validate(NULL, 0, &hdr, fap, tmpbuf, sizeof(tmpbuf),
-                                    NULL, 0, NULL)) {
-                flash_area_close(fap);
+            if (hdr.ih_magic == IMAGE_MAGIC)
+            {
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+                FIH_CALL(boot_image_check_hook, fih_rc, image_index, slot);
+                if (fih_eq(fih_rc, BOOT_HOOK_REGULAR))
+#endif
+                {
+                    FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr, fap, tmpbuf, sizeof(tmpbuf),
+                                    NULL, 0, NULL);
+                }
+            }
+
+            flash_area_close(fap);
+
+            if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
                 continue;
             }
-            flash_area_close(fap);
 
             map_start_encode(&cbor_state, 20);
 
@@ -356,8 +374,8 @@ bs_upload(char *buf, int len)
 
     if (rc == 0) {
         curr_off += img_blen;
-#ifdef CONFIG_BOOT_ERASE_PROGRESSIVELY
         if (curr_off == img_size) {
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
             /* get the last sector offset */
             rc = flash_area_sector_from_off(boot_status_off(fap), &sector);
             if (rc) {
@@ -375,8 +393,12 @@ bs_upload(char *buf, int len)
                     goto out;
                 }
             }
-        }
 #endif
+#ifdef MCUBOOT_IMAGE_ACCESS_HOOKS
+            rc = boot_serial_uploaded_hook(img_num, fap, img_size);
+#endif
+
+        }
     } else {
     out_invalid_data:
         rc = MGMT_ERR_EINVAL;
