@@ -612,7 +612,16 @@ config RECOVERY_UART_DEV_NAME
 	  This option specifies the name of UART device to be used for
 	  serial recovery.
 
-config ENABLE_MGMT_PERUSER
+config BOOT_ERASE_PROGRESSIVELY
+	bool "Erase flash progressively when receiving new firmware"
+	default y if SOC_FAMILY_NRF
+	help
+	 If enabled, flash is erased as necessary when receiving new firmware,
+	 instead of erasing the whole image slot at once. This is necessary
+	 on some hardware that has long erase times, to prevent long wait
+	 times at the beginning of the DFU process.
+
+menuconfig ENABLE_MGMT_PERUSER
 	bool "Enable system specific mcumgr commands"
 	depends on BOOT_SERIAL_UART
 	help
@@ -622,6 +631,14 @@ config ENABLE_MGMT_PERUSER
 	  These are system specific command and system specific implementation
 	  function is required to process these commands.
 
+if ENABLE_MGMT_PERUSER
+config BOOT_MGMT_CUSTOM_IMG_LIST
+	bool "Enable custom image list command"
+	help
+	  The option enables command which returns versions and installation
+	  statuses (custom property) for all images.
+
+endif # ENABLE_MGMT_PERUSER
 endif # MCUBOOT_SERIAL
 
 config BOOT_INTR_VEC_RELOC
