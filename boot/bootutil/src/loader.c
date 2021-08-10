@@ -925,8 +925,14 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             } else {
                 BOOT_LOG_INF("Done updating network core");
+#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE)
+                /* swap_erase_trailer_sectors is undefined if upgrade only
+                 * method is used. There is no need to erase sectors, because
+                 * the image cannot be reverted.
+                 */
                 rc = swap_erase_trailer_sectors(state,
                         secondary_fa);
+#endif
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
         }
