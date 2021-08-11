@@ -21,7 +21,7 @@ Currently, the two image slots must be contiguous. If you are running
 MCUboot as your stage 1 bootloader, `boot_partition` must be configured
 so your SoC runs it out of reset. If there are multiple updateable images
 then the corresponding primary and secondary partitions must be defined for
-the rest of the images too (e.g. `image_1_primary_partition` and
+the rest of the images too (for example `image_1_primary_partition` and
 `image_1_secondary_partition` for Image 1).
 
 The flash partitions are typically defined in the Zephyr boards folder, in a
@@ -30,7 +30,7 @@ flash partitions defined is the frdm_k64f's in
 `boards/arm/frdm_k64f/frdm_k64f.dts`. Make sure the labels in your board's
 `.dts` file match the ones used there.
 
-## Installing Requirements and Dependencies
+## Installing requirements and dependencies
 
 Install additional packages required for development with mcuboot:
 
@@ -69,12 +69,12 @@ After building the bootloader, the binaries should reside in
 `build/zephyr/zephyr.{bin,hex,elf}`, where `build` is the build
 directory you chose when running `cmake`. Use the Zephyr build
 system `flash` target to flash these binaries, usually by running
-`make flash` (or `ninja flash`, etc.) from the build directory. Depending
+`make flash` (or `ninja flash`, or similar) from the build directory. Depending
 on the target and flash tool used, this might erase the whole of the flash
-memory (mass erase) or only the sectors where the boot loader resides prior to
+memory (mass erase) or only the sectors where the bootloader resides prior to
 programming the bootloader image itself.
 
-## Building Applications for the bootloader
+## Building applications for the bootloader
 
 In addition to flash partitions in DTS, some additional configuration
 is required to build applications for MCUboot.
@@ -108,7 +108,7 @@ repository.  See below on how to make your own signatures.
 Images can be signed with the `scripts/imgtool.py` script.  It is best
 to look at `samples/zephyr/Makefile` for examples on how to use this.
 
-### Flashing the application
+### Programming the application
 
 The application itself can flashed with regular flash tools, but will
 need to be programmed at the offset of the primary slot for this particular

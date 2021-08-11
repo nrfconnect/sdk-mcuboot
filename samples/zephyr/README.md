@@ -10,7 +10,7 @@ Please see the comments in the Makefile in this directory for more
 details on how to build and test this application.
 
 Note that this sample uses the "ninja" build tool, which can be
-installed on most systems using the system package manager, e.g., for
+installed on most systems using the system package manager, for example, for
 a Debian-based distro:
 
 ```

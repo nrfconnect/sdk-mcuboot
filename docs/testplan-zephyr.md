@@ -1,4 +1,4 @@
-# Zephyr Test Plan
+# Zephyr test plan
 
 The following roughly describes how mcuboot is tested on Zephyr.  The
 testing is done with the code in `samples/zephyr`.  These examples
@@ -23,15 +23,15 @@ Begin by doing a full erase, and programming the bootloader itself:
     $ pyocd erase --chip
     $ make flash_boot
 
-After it resets, look for "main: Starting bootloader", a few debug
-messages, and lastly: "main: Unable to find bootable image".
+After it resets, look for `main: Starting bootloader`, a few debug
+messages, and lastly: `main: Unable to find bootable image`.
 
 Then, load hello1:
 
     $ make flash_hello1
 
-This should print "main: Jumping to the first image slot", and you
-should get an image "hello1".
+This should print `main: Jumping to the first image slot`, and you
+should get an image `hello1`.
 
 Note that there are comments with each test target describing the
 intended behavior for each of these steps.  Sometimes an upgrade will
@@ -40,13 +40,13 @@ happen and sometimes it will not.
     $ make flash_hello2
 
 This should print a message: `boot_swap_type: Swap type: test`, and
-you should see "hello2".
+you should see `hello2`.
 
 Now reset the target::
 
     $ pyocd commander -c reset
 
-And you should see a revert and "hello1" running.
+And you should see a revert and `hello1` running.
 
 ## Testing that mark ok works
 
@@ -61,7 +61,7 @@ We should have just booted the hello2.  Mark this as OK:
     $ pyocd flash -a 0x7ffe8 image_ok.bin
     $ pyocd commander -c reset
 
-And make sure this stays in the "hello2" image.
+And make sure this stays in the `hello2` image.
 
 This step doesn't make sense on the tests where the upgrade doesn't
 happen.

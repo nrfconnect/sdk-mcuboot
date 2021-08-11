@@ -1,85 +1,97 @@
-# MCUboot Release Notes
+# MCUboot release notes
 
-- Table of Contents
-{:toc}
+- Table of Contents:
+  * [Version 1.7.0](#version-170)
+    + [About this release](#about-this-release)
+    + [Zephyr-RTOS Compatibility](#zephyr-rtos-compatibility)
+  * [Version 1.6.0](#version-160)
+    + [About this release](#about-this-release-1)
+    + [Security issues addressed](#security-issues-addressed)
+    + [Zephyr-RTOS Compatibility](#zephyr-rtos-compatibility-1)
+  * [Version 1.5.0](#version-150)
+    + [About this release](#about-this-release-2)
+    + [Known issues](#known-issues)
+  * [Version 1.4.0](#version-140)
+    + [About this release](#about-this-release-3)
+  * [Version 1.3.1](#version-131)
+    + [About this release](#about-this-release-4)
+  * [Version 1.3.0](#version-130)
+    + [About this release](#about-this-release-5)
+  * [Version 1.2.0](#version-120)
+    + [About this release](#about-this-release-6)
+    + [Known issues](#known-issues-1)
+  * [Version 1.1.0](#version-110)
+    + [About this release](#about-this-release-7)
+    + [Known issues](#known-issues-2)
+  * [Version 1.0.0](#version-100)
+    + [About this release](#about-this-release-8)
+    + [Known issues](#known-issues-3)
+  * [Version 0.9.0](#version-090)
+    + [About this release](#about-this-release-9)
+    + [Known issues](#known-issues-4)
 
 ## Version 1.7.0
 
-The 1.7.0 release of MCUBoot adds support for the Mbed-OS platform,
-Equal slots (direct-xip) upgrade mode, RAM loading upgrade mode,
-hardening against hardware level fault injection and timing attacks
-and single image mode.
+The 1.7.0 release of MCUBoot adds support for the Mbed-OS platform, Equal slots (direct-xip) upgrade mode, RAM loading upgrade mode, hardening against hardware-level fault injection and timing attacks and single image mode.
 There are bug fixes, and associated imgtool updates as well.
 
 ### About this release
 
 - Initial support for the Mbed-OS platform.
-- Added possibility to enter deep sleep mode after mcuboot app execution
-  for cypress platform.
-- Added hardening against hardware level fault injection and timing attacks.
+- Added possibility to enter deep sleep mode after mcuboot app execution for cypress platform.
+- Added hardening against hardware-level fault injection and timing attacks.
 - Introduced Abstract crypto primitives to simplify porting.
 - Added RAM-load upgrade mode.
 - Renamed single-image mode to single-slot mode.
 - Allow larger primary slot in swap-move
-- Fixed boostrapping in swap-move mode.
-- Fixed issue causing that interrupted swap-move operation might brick device
-  if the primary image was padded.
+- Fixed bootstrapping in swap-move mode.
+- Fixed issue causing that interrupted swap-move operation might brick the device if the primary image was padded.
 - Abstracting mcuboot crypto functions for cleaner porting
-- Droped flash_area_read_is_empty() porting API.
+- Dropped flash_area_read_is_empty() porting API.
 - boot/zephyr: Added watchdog feed on nRF devices.
   See `CONFIG_BOOT_WATCHDOG_FEED` option.
-- boot/zephyr: Added patch for turning off cache for Cortex M7 before
-  chain-loading.
+- boot/zephyr: Added patch for turning off cache for Cortex M7 before chain-loading.
 - boot/zephyr: added option to relocate interrupts to application
-- boot/zephyr: clean ARM core configuration only when selected by user
+- boot/zephyr: clean ARM core configuration only when selected by the user
 - boot/boot_serial: allow nonaligned last image data chunk
 - imgtool: added custom TLV support.
 - imgtool: added possibility to set confirm flag for hex files as well.
 - imgtool: Print image digest during verify.
 
-### Zephyr-RTOS Compatibility
+### Zephyr-RTOS compatibility
 
-This release of MCUboot works with the Zephyr "main" at the time of the
-release. It was tested as of has 7a3b253ce. This version of MCUboot also
-works with the Zephyr v2.4.0, however it is recommended to enable
-`CONFIG_MCUBOOT_CLEANUP_ARM_CORE` while using that version.
+This release of MCUboot works with the Zephyr "main" at the time of the release.
+It was tested as of has 7a3b253ce.
+This version of MCUboot also works with the Zephyr v2.4.0, however, it is recommended to enable `CONFIG_MCUBOOT_CLEANUP_ARM_CORE` while using that version.
 
 ## Version 1.6.0
 
-The 1.6.0 release of MCUboot adds support for the PSOC6 platform,
-X25519 encrypted images, rollback protection, hardware keys, and a
-shared boot record to communicate boot attestation information to
-later boot stages.  There are bug fixes, and associated imgtool
-updates as well.
+The 1.6.0 release of MCUboot adds support for the PSOC6 platform, X25519 encrypted images, rollback protection, hardware keys, and a shared boot record to communicate boot attestation information to later boot stages.
+There are bug fixes and associated imgtool updates as well.
 
 ### About this release
 
-- Initial support for the Cypress PSOC6 plaformt.  This platform
-  builds using the Cypress SDK, which has been added as submodules.
-- CBOR decoding in serial recovery replaced by code generated from a
-  CDDL description.
+- Initial support for the Cypress PSOC6 platform.
+  This platform builds using the Cypress SDK, which has been added as submodules.
+- CBOR decoding in serial recovery replaced by code generated from a CDDL description.
 - Add support for X25519 encrypted images.
-- Add rollback protection.  There is support for a HW rollback counter
-  (which must be provided as part of the platform), as well as a SW
-  solution that protects against some types of rollback.
-- Add an optional boot record in shared memory to communicate boot
-  attributes to later-run code.
+- Add rollback protection.
+  There is support for a hardware rollback counter (which must be provided as part of the platform), as well as a software solution that protects against some types of rollback.
+- Add an optional boot record in shared memory to communicate boot attributes to later-run code.
 - Add support for hardware keys.
 - Various fixes to work with the latest Zephyr version.
 
 ### Security issues addressed
 
-- CVE-2020-7595 "xmlStringLenDecodeEntities in parser.c in libxml2
-  2.9.10 has an infinite loop in a certain end-of-file situation." Fix
-  by updating a dependency in documentation generation.
+- CVE-2020-7595 "xmlStringLenDecodeEntities in parser.c in libxml2 2.9.10 has an infinite loop in a certain end-of-file situation." Fix by updating a dependency in documentation generation.
 
-### Zephyr-RTOS Compatibility
+### Zephyr-RTOS compatibility
 
 This release of MCUboot works the Zephyr "main" at the time of the
 release.  It was tested as of has 1a89ca1238.  When Zephyr v2.3.0 is
 released, there will be a possible 1.6.1 or similar release of Zephyr
 if needed to address any issues.  There also may be branch releases of
-MCUboot specifically for the current version of Zephyr, e.g.
+MCUboot specifically for the current version of Zephyr, for example,
 v1.6.0-zephyr-2.2.1.
 
 ## Version 1.5.0
@@ -88,11 +100,11 @@ The 1.5.0 release of MCUboot adds support for encrypted images using
 ECIES with secp256r1 as an Elliptic Curve alternative to RSA-OAEP. A
 new swap method was added which allows for upgrades without using a
 scratch partition. There are also lots of bug fixes, extra simulator
-testing coverage and some imgtool updates.
+testing coverage, and some imgtool updates.
 
 ### About this release
 
-- TLVs were updated to use 16-bit lengths (from previous 8). This
+- TLVs were updated to use 16-bit lengths (from the previous 8). This
   should work with no changes for little-endian targets, but will
   break compatibility with big-endian targets.
 - A benchmark framework was added to Zephyr
@@ -117,7 +129,7 @@ testing coverage and some imgtool updates.
 The 1.4.0 release of MCUboot primarily adds support for multi-image
 booting.  With this release, MCUboot can manage two images that can be
 updated independently.  With this, it also supports additions to the
-TLV that allow these dependencies to be specified.
+TLV that allows these dependencies to be specified.
 
 Multi-image support adds backward-incompatible changes to the format
 of the images: specifically adding support for protected TLV entries.
@@ -126,14 +138,14 @@ compatible with previous releases of MCUboot.
 
 ### About this release
 
-- Fixed CVE-2019-5477, and CVE-2019-16892.  These fix issue with
+- Fixed CVE-2019-5477, and CVE-2019-16892.  These fix an issue with
   dependencies used in the generation of the documentation on github.
 - Numerous code cleanups and refactorings
 - Documentation updates for multi-image features
 - Update imgtool.py to support the new features
-- Updated the mbed TLS submodule to current stable version 2.16.3
+- Updated the mbed TLS submodule to the current stable version 2.16.3
 - Moved the mbed TLS submodule from within sim/mcuboot-sys to ext.
-  This will make it easier for other board supports to use this code.
+  This will make it easier for other boards to use this code.
 - Added some additional overflow and bound checks to data in the image
   header, and TLV data.
 - Add a `-x` (or `--hex_addr`) flag to imgtool to set the base address
@@ -154,11 +166,11 @@ f51e3c296040f73bca0e8fe1051d5ee63ce18e0d.
 - Added ed25519 signing support
 - Added RSA-3072 signing support
 - Allow ec256 to run on CC310 interface
-- Some preparation work was done to allow for multi image support, which
+- Some preparation work was done to allow for multi-image support, which
   should land in 1.4.0. This includes a simulator update for testing
-  multi-images, and a new name for slot0/slot1 which are now called
+  multi-images and a new name for slot0/slot1 which are now called
   "primary slot" and "secondary slot".
-- Other minor bugfixes and improvements
+- Other minor bug fixes and improvements
 
 ## Version 1.3.0
 
@@ -220,7 +232,7 @@ in imgtool were changed (either removed or added or updated).
   + `--max-sectors` can be used to adjust the maximum amount of sectors that
     a swap can handle; this value must also be configured for the bootloader
   + `--pad-header` substitutes `--included-header` with reverted semantics,
-    so it's not required for firmware built by Zephyr build system
+    so it's not required for firmware built by the Zephyr build system
 
 ### Known issues
 
@@ -229,11 +241,11 @@ None
 ## Version 1.1.0
 
 The 1.1.0 release of MCUboot brings a lot of fixes/updates to its
-inner workings, specially to its testing infrastructure which now
+inner workings, especially to its testing infrastructure which now
 enables a more thorough quality assurance of many of the available
 options. As expected of the 1.x.x release cycle, no breaking changes
-were made. From the tooling perpective the main addition is
-newt/imgtool support for password protected keys.
+were made. From the tooling perpective, the main addition is
+newt/imgtool support for password-protected keys.
 
 ### About this release
 
@@ -246,7 +258,7 @@ newt/imgtool support for password protected keys.
 - tinycrypt 0.2.8 and the mbed-tls ASN1 parser are now bundled with
   mcuboot (eg secp256r1 is now free of external dependencies!)
 - Overwrite-only mode was updated to erase/copy only sectors that
-  actually store firmware
+  actually, store firmware
 - A lot of small code and documentation fixes and updates.
 
 ### Known issues
@@ -265,11 +277,12 @@ incompatible format changes throughout the 1.x.y release series.
 
 - Header format change.  This change was made to move all of the
   information about signatures out of the header and into the TLV
-  block appended to the image.  This allows
+  block appended to the image.
+  This allows the following:
   - The signature to be replaced without changing the image.
   - Multiple signatures to be applied.  This can be used, for example,
     to sign an image with two algorithms, to support different
-    bootloader configurations based on these image.
+    bootloader configurations based on these images.
   - The public key is referred to by its SHA1 hash (or a prefix of the
     hash), instead of an index that has to be maintained with the
     bootloader.
@@ -301,9 +314,9 @@ None
 
 This is the first release of MCUboot, a secure bootloader for 32-bit MCUs.
 It is designed to be operating system-agnostic and works over any transport -
-wired or wireless. It is also hardware independent, and relies  on hardware
+wired or wireless. It is also hardware-independent, and relies on hardware
 porting layers from the operating system it works with. For the first release,
-we have support for three open source operating systems: Apache Mynewt, Zephyr
+we have support for three open-source operating systems: Apache Mynewt, Zephyr
 and RIOT.
 
 ### About this release
@@ -317,8 +330,8 @@ and RIOT.
   - RSA 2048 and RSA PKCS#1 v1.5 or v2.1
   - Elliptic curve DSA with secp224r1 and secp256r1
 - Two firmware upgrade algorithms are provided:
-  - An overwrite only which upgrades slot 0 with the image in slot 1.
-  - A swapping upgrade which enables image test, allowing for rollback to a
+  - An overwrite only, which upgrades slot 0 with the image in slot 1.
+  - A swapping upgrade, which enables image test, allowing for rollback to a
     previous known good image.
 - Supports both mbed-TLS and tinycrypt as backend crypto libraries. One of them
   must be defined and the chosen signing algorithm will require a particular

@@ -22,8 +22,10 @@ Build and load good image in slot 0:
 * `newt create-image k64f_blinky 1.0.1 key_<sign-algo>.pem`
 * `newt load k64f_blinky`
 
-NOTE: If testing RSA/PSS `newt create-image` needs to be passed in the extra
-flag `--rsa-pss` eg:
+---
+**Note**
+
+If testing RSA/PSS `newt create-image` needs to be passed in the extra flag `--rsa-pss`, for example:
 
 `newt create-image k64f_blinky 1.0.1 key_rsa.pem --rsa-pss`
 
@@ -36,6 +38,8 @@ key_<sign-algo>.pem. Both others should be erased.
 * `newtmgr image upload k64f_blinky2`
 * `newtmgr image list`
 * `newtmgr image test <hash of slot 1>`
+
+---
 
 ### Image signed with more than one key
 
@@ -152,6 +156,6 @@ slot 0 and vice-versa.
 
         $ pyocd erase --chip
 
-* Flashing image in slot 1:
+* Programming the image in slot 1:
 
         $ pyocd flash -e sector -a 0x80000 ${IMG_FILE} bin

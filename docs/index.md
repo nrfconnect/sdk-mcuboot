@@ -1,23 +1,17 @@
 # MCUboot
 
+MCUboot is a secure bootloader for 32-bit MCUs.
+
 ## Overview
 
-MCUboot is a secure bootloader for 32-bit MCUs.   The goal of MCUboot is to
-define a common infrastructure for the bootloader, system flash layout on
-microcontroller systems, and to provide a secure bootloader that enables
-easy software upgrade.
+The goal of MCUboot is to define a common infrastructure for the bootloader, system flash layout on microcontroller systems, and to provide a secure bootloader that enables easy software upgrade.
 
-MCUboot is operating system and hardware independent and relies on
-hardware porting layers from the operating system it works with.  Currently
-MCUboot works with both the Apache Mynewt, and Zephyr operating systems, but
-more ports are planned in the future. RIOT is currently supported as a boot
-target with a complete port planned.
+MCUboot is operating system and hardware independent and relies on hardware porting layers from the operating system it works with.
+Currently MCUboot works with both the Apache Mynewt, and Zephyr operating systems, but more ports are planned in the future.
+RIOT is currently supported as a boot target with a complete port planned.
 
-MCUboot is an open governance project.  See the [membership
-list](https://github.com/mcu-tools/mcuboot/wiki/Members) for current
-members, and the
-[charter](https://github.com/mcu-tools/mcuboot/wiki/MCUboot-Project-Charter)
-for more details.
+MCUboot is an open governance project.
+See the [membership list](https://github.com/mcu-tools/mcuboot/wiki/Members) for current members, and the [charter (https://github.com/mcu-tools/mcuboot/wiki/MCUboot-Project-Charter) for more details.
 
 ## Contents
 
@@ -39,27 +33,21 @@ for more details.
   - [mynewt](testplan-mynewt.md) test plan
 - [Release process](release.md)
 
-There is also a document about [signed images](signed_images.md) that is out
-of date.  You should use `imgtool.py` instead of these documents.
+There is also a document about [signed images](signed_images.md) that is out of date.
+You should use `imgtool.py` instead of these documents.
 
 ## Roadmap
 
-The issues being planned and worked on are tracked using GitHub issues. To participate
-please visit:
+The issues being planned and worked on are tracked using GitHub issues.
+To participate please visit:
 
 [MCUboot Issues](https://github.com/mcu-tools/mcuboot/issues)
-
-~~Issues were previously tracked on [MCUboot JIRA](https://runtimeco.atlassian.net/projects/MCUB/summary)
-, but it is now deprecated.~~
 
 ## Browsing
 
 Information and documentation on the bootloader is stored within the source.
 
-~~It was previously also documented on confluence: [Confluence page](https://runtimeco.atlassian.net/wiki/discover/all-updates)
-, but it is now deprecated and not currently maintained~~
-
-For more information in the source, here are some pointers:
+For more information in the source, use the pointers below:
 
 - [boot/bootutil](https://github.com/mcu-tools/mcuboot/tree/main/boot/bootutil): The core of the bootloader itself.
 - [boot/boot\_serial](https://github.com/mcu-tools/mcuboot/tree/main/boot/boot_serial): Support for serial upgrade within the bootloader itself.
@@ -71,12 +59,10 @@ For more information in the source, here are some pointers:
 
 ## Joining
 
-Developers welcome!
+Developers are welcome:
 
 * [Our developer mailing list](https://groups.io/g/MCUBoot)
 * [Our Slack channel](https://mcuboot.slack.com/)<br />
-  Get your invite [here!](https://join.slack.com/t/mcuboot/shared_invite/MjE2NDcwMTQ2MTYyLTE1MDA4MTIzNTAtYzgyZTU0NjFkMg)
-* [Our IRC channel](http://irc.freenode.net), channel #mcuboot ([IRC
-  link](irc://chat.freenode.net/#mcuboot)
+  [Get your invite] (https://join.slack.com/t/mcuboot/shared_invite/MjE2NDcwMTQ2MTYyLTE1MDA4MTIzNTAtYzgyZTU0NjFkMg)
 * [Current members](https://github.com/mcu-tools/mcuboot/wiki/Members)
 * [Project charter](https://github.com/mcu-tools/mcuboot/wiki/MCUboot-Project-Charter)

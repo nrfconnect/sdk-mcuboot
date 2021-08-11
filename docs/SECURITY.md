@@ -1,6 +1,8 @@
 # MCUboot project security policy
 
-## Reporting Security Issues
+This page documents the security policy of the mcuboot process.
+
+## Reporting security issues
 
 The MCUboot team takes security, vulnerabilities, and weaknesses
 seriously.
@@ -9,7 +11,6 @@ Security issues should be sent to the current maintainers of the
 project:
 
 - David Brown: davidb@davidb.org or david.brown@linaro.org
-- Fabio Utzig: utzig@apache.org
 
 If you wish to send encrypted email, you may use these PGP keys:
 
@@ -34,7 +35,7 @@ We will make our best effort to respond within a timely manner.  Most
 vulnerabilities found within published code will undergo an embargo of
 90 days to allow time fixes to be developed and deployed.
 
-## Vulnerability Advisories
+## Vulnerability advisories
 
 Vulnerability reports and published fixes will be reported as follows:
 

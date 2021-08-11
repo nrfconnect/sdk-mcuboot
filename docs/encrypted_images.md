@@ -21,6 +21,8 @@
 
 # Encrypted images
 
+This page describes how the support for encrypted images has been implemented in MCUboot.
+
 ## [Rationale](#rationale)
 
 To provide confidentiality of image data while in transport to the

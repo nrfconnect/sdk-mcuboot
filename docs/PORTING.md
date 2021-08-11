@@ -1,4 +1,4 @@
-# Porting How-To
+# Porting how-to
 
 This document describes the requirements and necessary steps required to port
 `mcuboot` to a new target `OS`.
@@ -18,6 +18,12 @@ This document describes the requirements and necessary steps required to port
   used to provide functionality not existing in `tinycrypt`).
 
 # Steps to port
+
+These are the steps required to port `mcuboot`:
+  * [Main app and calling the bootloader](#main-app-and-calling-the-bootloader)
+  * [Configuration file](#configuration-file)
+  * [Flash map](#flash-map)
+  * [Memory management for mbed TLS](#memory-management-for-mbed-tls)
 
 ## Main app and calling the bootloader
 
@@ -67,7 +73,7 @@ in the following files:
 - boot/zephyr/include/mcuboot_config/mcuboot_config.h
 - boot/mynewt/mcuboot_config/include/mcuboot_config/mcuboot_config.h
 
-## Flash Map
+## Flash map
 
 The bootloader requires a `flash_map` to be able to know how the flash is
 partitioned. A `flash_map` consists of `struct flash_area` entries
@@ -132,7 +138,12 @@ int     flash_area_id_from_multi_image_slot(int image_index, int slot);
 int     flash_area_id_to_multi_image_slot(int image_index, int area_id);
 ```
 
-**Note:** As of writing, it is possible that mcuboot will open a flash area multiple times simultaneously (through nested calls to `flash_area_open`). As a result, mcuboot may call `flash_area_close` on a flash area that is still opened by another part of mcuboot. As a workaround when porting, it may be necessary to implement a counter of the number of times a given flash area has been opened by mcuboot. The `flash_area_close` implementation should only fully deinitialize the underlying flash area when the open counter is decremented to 0. See [this GitHub PR](https://github.com/mcu-tools/mcuboot/pull/894/) for a more detailed discussion.
+---
+**Note**
+
+As of writing, it is possible that mcuboot will open a flash area multiple times simultaneously (through nested calls to `flash_area_open`). As a result, mcuboot may call `flash_area_close` on a flash area that is still opened by another part of mcuboot. As a workaround when porting, it may be necessary to implement a counter of the number of times a given flash area has been opened by mcuboot. The `flash_area_close` implementation should only fully deinitialize the underlying flash area when the open counter is decremented to 0. See [this GitHub PR](https://github.com/mcu-tools/mcuboot/pull/894/) for a more detailed discussion.
+
+---
 
 ## Memory management for mbed TLS
 
