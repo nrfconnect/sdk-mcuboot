@@ -5,6 +5,15 @@ mcuboot:
   placement:
     before: [mcuboot_primary]
 
+#if (CONFIG_UPDATEABLE_IMAGE_NUMBER > 1)
+mcuboot_primary_1:
+#ifdef CONFIG_FLASH_SIMULATOR
+  region: ram_flash
+#endif
+  size: 0x40000 
+  span: [mcuboot_pad_1]
+#endif
+
 mcuboot_primary_app:
   # All images to be placed in MCUboot's slot 0 should be placed in this
   # partition
@@ -15,12 +24,35 @@ mcuboot_primary:
 
 # Partition for secondary slot is not created if building in single application
 # slot configuration.
+#
 #if !defined(CONFIG_SINGLE_APPLICATION_SLOT)
 mcuboot_secondary:
+  #if defined(CONFIG_PM_EXTERNAL_FLASH)
+  region: external_flash
+  size: 0xf0000
+  placement:
+    align: {start: 4}
+    after: mcuboot_secondary_1
+  #else
   share_size: [mcuboot_primary]
   placement:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
     after: mcuboot_primary
+  #endif
+#endif
+
+#if (CONFIG_UPDATEABLE_IMAGE_NUMBER > 1)
+mcuboot_secondary_1:
+  #ifdef CONFIG_PM_EXTERNAL_FLASH
+  region: external_flash
+  #endif
+  #ifdef CONFIG_FLASH_SIMULATOR
+  size: 0x40000  #256kb
+  #else
+  share_size: [mcuboot_primary_1]
+  #endif
+  placement:
+    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
 #endif
 
 #if !defined(CONFIG_BOOT_SWAP_USING_MOVE) && !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_UPGRADE_ONLY)
@@ -31,6 +63,20 @@ mcuboot_scratch:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
 #endif
 
+#if (CONFIG_UPDATEABLE_IMAGE_NUMBER > 1)
+mcuboot_pad_1:
+    # MCUboot pad must be placed before the 'spm' partition if that is present.
+    # If 'spm' partition is not present, it must be placed before the 'app'.
+#ifdef CONFIG_FLASH_SIMULATOR
+  region: ram_flash
+#endif
+  size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_PAD
+  placement:
+#if defined(CONFIG_FPROTECT) && !defined(CONFIG_FLASH_SIMULATOR)
+    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+#endif
+#endif
+#
 # Padding placed before image to boot. This reserves space for the MCUboot image header
 # and it ensures that the boot image gets linked with the correct address offset in flash.
 mcuboot_pad:
