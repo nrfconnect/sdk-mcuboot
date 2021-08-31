@@ -56,7 +56,7 @@ const struct boot_uart_funcs boot_funcs = {
 #include <arm_cleanup.h>
 #endif
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_UPGRADE_NETWORK_CORE)
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
 #include <dfu/pcd.h>
 #endif
 
