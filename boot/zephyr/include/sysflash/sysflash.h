@@ -16,7 +16,10 @@
 
 #elif (MCUBOOT_IMAGE_NUMBER == 2)
 
-#ifdef CONFIG_SECURE_BOOT
+/* If B0 is present then two bootloaders are present, and we must use
+ * a single secondary slot for both primary slots.
+ */
+#ifdef PM_B0_ADDRESS
 
 extern uint32_t _image_1_primary_slot_id[];
 
@@ -49,7 +52,7 @@ extern uint32_t _image_1_primary_slot_id[];
            PM_MCUBOOT_SECONDARY_1_ID: \
            255 )
 
-#endif /* CONFIG_SECURE_BOOT */
+#endif /* PM_B0_ADDRESS */
 
 #endif
 #define FLASH_AREA_IMAGE_SCRATCH    PM_MCUBOOT_SCRATCH_ID
