@@ -96,7 +96,6 @@ extern "C" {
 #define BOOT_ENOMEM      6
 #define BOOT_EBADARGS    7
 #define BOOT_EBADVERSION 8
-#define BOOT_EFLASH_SEC  9
 
 #define BOOT_HOOK_REGULAR 1
 /*

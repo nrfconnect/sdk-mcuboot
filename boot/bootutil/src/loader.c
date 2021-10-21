@@ -381,8 +381,7 @@ boot_read_sectors(struct boot_loader_state *state)
 
     rc = boot_initialize_area(state, FLASH_AREA_IMAGE_SECONDARY(image_index));
     if (rc != 0) {
-        /* We need to differentiate from the primary image issue */
-        return BOOT_EFLASH_SEC;
+        return BOOT_EFLASH;
     }
 
 #if MCUBOOT_SWAP_USING_SCRATCH
@@ -1759,11 +1758,7 @@ boot_prepare_image_for_update(struct boot_loader_state *state,
          * if there is one.
          */
         BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_NONE;
-        if (rc == BOOT_EFLASH)
-        {
-            /* Only return on error from the primary image flash */
-            return;
-        }
+        return;
     }
 
     /* Attempt to read an image header from each slot. */
