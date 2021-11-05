@@ -89,6 +89,12 @@ config BOOT_USE_NRF_EXTERNAL_CRYPTO
 	help
 	  Use Shared crypto for crypto primitives.
 
+config MCUBOOT_TFM_PRESENT
+	bool "TF-M is present"
+	help
+	  This option allows MCUBOOT perform configurations to allow
+	  compatibility with TF-M.
+
 menu "MCUBoot settings"
 
 config SINGLE_APPLICATION_SLOT
