@@ -8,6 +8,8 @@ mainmenu "MCUboot configuration"
 
 comment "MCUboot-specific configuration options"
 
+source "$(ZEPHYR_NRF_MODULE_DIR)/modules/mcuboot/boot/zephyr/Kconfig"
+
 # Hidden option to mark a project as MCUboot
 config MCUBOOT
 	default y
@@ -15,35 +17,6 @@ config MCUBOOT
 	select MPU_ALLOW_FLASH_WRITE if ARM_MPU
 	select USE_DT_CODE_PARTITION if HAS_FLASH_LOAD_OFFSET
 	select MCUBOOT_BOOTUTIL_LIB
-
-config BOOT_USE_MIN_PARTITION_SIZE
-	bool "Build for a minimal image size"
-
-partition=MCUBOOT_SCRATCH
-partition-size=0x1e000
-source "${ZEPHYR_BASE}/../nrf/subsys/partition_manager/Kconfig.template.partition_size"
-
-partition=MCUBOOT_PAD
-partition-size=0x200
-source "${ZEPHYR_BASE}/../nrf/subsys/partition_manager/Kconfig.template.partition_size"
-
-config PM_PARTITION_SIZE_MCUBOOT
-	hex
-	default FPROTECT_BLOCK_SIZE if (SOC_NRF5340_CPUAPP || SOC_NRF9160)
-	default 0x3e00
-	depends on (BOOT_NRF_EXTERNAL_CRYPTO && BOOT_USE_MIN_PARTITION_SIZE)
-
-config PM_PARTITION_SIZE_MCUBOOT
-	hex
-	default FPROTECT_BLOCK_SIZE if SOC_NRF9160
-	default 0x7c00
-	depends on BOOT_USE_MIN_PARTITION_SIZE
-
-config PM_PARTITION_SIZE_MCUBOOT
-	hex "Flash space allocated for the MCUboot partition." if !BOOT_USE_MIN_PARTITION_SIZE
-	default 0xc000
-	help
-	  Flash space set aside for the MCUboot partition.
 
 config BOOT_USE_MBEDTLS
 	bool
@@ -74,18 +47,15 @@ config BOOT_USE_CC310
 
 config BOOT_USE_NRF_CC310_BL
 	bool
-	select NRF_CC310_BL
-
-config BOOT_USE_NRF_EXTERNAL_CRYPTO
-	bool
-	# Hidden option
 	default n
-	# When building for ECDSA, we use our own copy of mbedTLS, so the
-	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
-	# will collide.
-	depends on ! MBEDTLS
-	help
-	  Use Shared crypto for crypto primitives.
+
+config NRFXLIB_CRYPTO
+	bool
+	default n
+
+config NRF_CC310_BL
+	bool
+	default n
 
 menu "MCUBoot settings"
 
@@ -99,7 +69,6 @@ config SINGLE_APPLICATION_SLOT
 
 choice BOOT_SIGNATURE_TYPE
 	prompt "Signature type"
-	default BOOT_SIGNATURE_TYPE_ECDSA_P256 if HAS_HW_NRF_CC310 && !BOARD_THINGY91_NRF9160 && !BOARD_THINGY91_NRF52840
 	default BOOT_SIGNATURE_TYPE_RSA
 
 config BOOT_SIGNATURE_TYPE_NONE
@@ -124,11 +93,9 @@ config BOOT_SIGNATURE_TYPE_ECDSA_P256
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice BOOT_ECDSA_IMPLEMENTATION
 	prompt "Ecdsa implementation"
-	default BOOT_NRF_EXTERNAL_CRYPTO if SECURE_BOOT
-	default BOOT_ECDSA_CC310 if HAS_HW_NRF_CC310
-	default BOOT_TINYCRYPT
+	default BOOT_ECDSA_TINYCRYPT
 
-config BOOT_TINYCRYPT
+config BOOT_ECDSA_TINYCRYPT
 	bool "Use tinycrypt"
 	select BOOT_USE_TINYCRYPT
 
@@ -139,14 +106,8 @@ config BOOT_ECDSA_CC310
 	select NRF_CC310_BL
 	select NRFXLIB_CRYPTO
 	select BOOT_USE_CC310
-
-config BOOT_NRF_EXTERNAL_CRYPTO
-	bool "Use Shared Crypto from bootloader"
-	select BOOT_USE_NRF_EXTERNAL_CRYPTO
-
 endchoice # Ecdsa implementation
-
-endif #BOOT_SIGNATURE_TYPE_ECDSA_P256
+endif
 
 config BOOT_SIGNATURE_TYPE_ED25519
 	bool "Edwards curve digital signatures using ed25519"
@@ -173,6 +134,7 @@ config BOOT_SIGNATURE_KEY_FILE
 	default "root-ed25519.pem" if BOOT_SIGNATURE_TYPE_ED25519
 	default "root-rsa-3072.pem" if BOOT_SIGNATURE_TYPE_RSA && BOOT_SIGNATURE_TYPE_RSA_LEN=3072
 	default "root-rsa-2048.pem" if BOOT_SIGNATURE_TYPE_RSA && BOOT_SIGNATURE_TYPE_RSA_LEN=2048
+	default ""
 	help
 	  You can use either absolute or relative path.
 	  In case relative path is used, the build system assumes that it starts
@@ -200,11 +162,6 @@ config MCUBOOT_CLEANUP_ARM_CORE
 	  Zephyr applications on Cortex-M will perform this register clean-up
 	  by default, if they are chain-loadable by MCUboot, so MCUboot does
 	  not need to perform such a cleanup itself.
-
-config MCUBOOT_NRF_CLEANUP_PERIPHERAL
-	bool "Perform peripheral cleanup before chain-load the application"
-	depends on SOC_FAMILY_NRF
-	default y
 
 config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
@@ -340,15 +297,6 @@ config BOOT_MAX_IMG_SECTORS
 	  the two image areas can contain. Smaller values reduce MCUboot's
 	  memory usage; larger values allow it to support larger images.
 	  If unsure, leave at the default value.
-
-config BOOT_ERASE_PROGRESSIVELY
-	bool "Erase flash progressively when receiving new firmware"
-	default y if SOC_FAMILY_NRF
-	help
-	 If enabled, flash is erased as necessary when receiving new firmware,
-	 instead of erasing the whole image slot at once. This is necessary
-	 on some hardware that has long erase times, to prevent long wait
-	 times at the beginning of the DFU process.
 
 config MEASURED_BOOT
 	bool "Store the boot state/measurements in shared memory"
