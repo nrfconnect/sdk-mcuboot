@@ -13,6 +13,15 @@ mcuboot_primary_app:
 mcuboot_primary:
   span: [mcuboot_pad, mcuboot_primary_app]
 
+#if defined(CONFIG_BOOT_SWAP_USING_MOVE)
+# This region is used to ensure that at least 1 page remains unused
+mcuboot_swap_area:
+  size: CONFIG_PM_ERASE_BLOCK_SIZE
+  placement:
+    after: app
+  inside: mcuboot_primary_app
+#endif /* defined(CONFIG_BOOT_SWAP_USING_MOVE) */
+
 # Partition for secondary slot is not created if building in single application
 # slot configuration.
 #if !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_DIRECT_XIP)
@@ -24,7 +33,6 @@ mcuboot_secondary:
     align: {start: 4}
 #else
   placement:
-    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
     align_next: CONFIG_FPROTECT_BLOCK_SIZE # Ensure that the next partition does not interfere with this image
     after: mcuboot_primary
 #endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
