@@ -553,15 +553,6 @@ config BOOT_SERIAL_DETECT_DELAY
 	  Useful for powering on when using the same button as
 	  the one used to place the device in bootloader mode.
 
-config BOOT_ERASE_PROGRESSIVELY
-	bool "Erase flash progressively when receiving new firmware"
-	default y if SOC_FAMILY_NRF
-	help
-	 If enabled, flash is erased as necessary when receiving new firmware,
-	 instead of erasing the whole image slot at once. This is necessary
-	 on some hardware that has long erase times, to prevent long wait
-	 times at the beginning of the DFU process.
-
 menuconfig ENABLE_MGMT_PERUSER
 	bool "Enable system specific mcumgr commands"
 	help
