@@ -298,6 +298,15 @@ config BOOT_MAX_IMG_SECTORS
 	  memory usage; larger values allow it to support larger images.
 	  If unsure, leave at the default value.
 
+config BOOT_ERASE_PROGRESSIVELY
+	bool "Erase flash progressively when receiving new firmware"
+	default y if SOC_FAMILY_NRF
+	help
+	 If enabled, flash is erased as necessary when receiving new firmware,
+	 instead of erasing the whole image slot at once. This is necessary
+	 on some hardware that has long erase times, to prevent long wait
+	 times at the beginning of the DFU process.
+
 config MEASURED_BOOT
 	bool "Store the boot state/measurements in shared memory"
 	default n
