@@ -63,10 +63,6 @@
 
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
-#ifndef BOOT_IMAGE_NUMBER
-#define BOOT_IMAGE_NUMBER MCUBOOT_IMAGE_NUMBER
-#endif
-
 #define BOOT_SERIAL_INPUT_MAX   512
 #define BOOT_SERIAL_OUT_MAX     (128 * MCUBOOT_IMAGE_NUMBER)
 
@@ -79,6 +75,10 @@ MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #define ntohs(x) sys_be16_to_cpu(x)
 #define htons(x) sys_cpu_to_be16(x)
+#endif
+
+#ifndef BOOT_IMAGE_NUMBER
+#define BOOT_IMAGE_NUMBER MCUBOOT_IMAGE_NUMBER
 #endif
 
 #if (BOOT_IMAGE_NUMBER > 1)
