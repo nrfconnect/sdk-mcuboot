@@ -92,12 +92,6 @@
 #endif
 
 /*
- * Currently there is no configuration option, for this platform,
- * that enables the system specific mcumgr commands in mcuboot
- */
-#define MCUBOOT_PERUSER_MGMT_GROUP_ENABLED 0
-
-/*
  * Logging
  */
 
