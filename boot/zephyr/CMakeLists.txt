@@ -90,7 +90,6 @@ zephyr_library_sources(
   flash_map_extended.c
   os.c
   keys.c
-  boot_serial_extensions.c
   )
 
 if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
