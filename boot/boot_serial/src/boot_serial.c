@@ -64,7 +64,7 @@
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #define BOOT_SERIAL_INPUT_MAX   512
-#define BOOT_SERIAL_OUT_MAX     (128 * MCUBOOT_IMAGE_NUMBER)
+#define BOOT_SERIAL_OUT_MAX     128
 
 #ifdef __ZEPHYR__
 /* base64 lib encodes data to null-terminated string */
