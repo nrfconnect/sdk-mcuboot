@@ -529,16 +529,6 @@ config BOOT_SERIAL_DETECT_DELAY
 	  Useful for powering on when using the same button as
 	  the one used to place the device in bootloader mode.
 
-config ENABLE_MGMT_PERUSER
-	bool "Enables system specific mcumgr commands"
-	depends on BOOT_SERIAL_UART
-	help
-	  The option enables processing of system specific mcumgr commands;
-	  system specific commands are within group MGMT_GROUP_ID_PERUSER (64)
-	  and above, as defined within mcumgr library.
-	  These are system specific command and system specific implementation
-	  function is required to process these commands.
-
 endif # MCUBOOT_SERIAL
 
 config BOOT_INTR_VEC_RELOC
