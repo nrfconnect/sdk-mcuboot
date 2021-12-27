@@ -203,7 +203,7 @@ static void do_boot(struct boot_rsp *rsp)
 #ifdef CONFIG_SYS_CLOCK_EXISTS
     sys_clock_disable();
 #endif
-#ifdef CONFIG_USB_DEVICE_STACK
+#ifdef CONFIG_USB
     /* Disable the USB to prevent it from firing interrupts */
     usb_disable();
 #endif
