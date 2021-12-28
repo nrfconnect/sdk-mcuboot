@@ -40,9 +40,6 @@
 #endif
 #if MYNEWT_VAL(BOOTUTIL_SIGN_EC256)
 #define MCUBOOT_SIGN_EC256 1
-  #ifndef MCUBOOT_USE_TINYCRYPT
-  #error "EC256 requires the use of tinycrypt."
-  #endif
 #endif
 #if MYNEWT_VAL(BOOTUTIL_SIGN_RSA)
 #define MCUBOOT_SIGN_RSA 1
@@ -88,6 +85,12 @@
 #if MYNEWT_VAL(BOOTUTIL_BOOTSTRAP)
 #define MCUBOOT_BOOTSTRAP 1
 #endif
+
+/*
+ * Currently there is no configuration option, for this platform,
+ * that enables the system specific mcumgr commands in mcuboot
+ */
+#define MCUBOOT_PERUSER_MGMT_GROUP_ENABLED 0
 
 #define MCUBOOT_MAX_IMG_SECTORS       MYNEWT_VAL(BOOTUTIL_MAX_IMG_SECTORS)
 

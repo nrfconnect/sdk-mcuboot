@@ -2,19 +2,19 @@
 
 ### Disclaimer
 
-Given solution is included in `mcuboot` repository with purpose to demonstrate basic consepts and features of MCUBoot library on Cypress PSoC 6 device. Applications are created per mcuboot library maintainers requirements. Implemetation differs from conventional and recomended by Cypress Semiconductors development flow for PSoC 6 devices. These applications are not recomended as a starting point for development and should not be considered as supported examples for PSoC 6 devices.
+Given solution is included in `MCUboot` repository with purpose to demonstrate basic consepts and features of MCUboot library on Cypress PSoC 6 device. Applications are created per MCUboot library maintainers requirements. Implemetation differs from conventional and recomended by Cypress Semiconductors development flow for PSoC 6 devices. These applications are not recomended as a starting point for development and should not be considered as supported examples for PSoC 6 devices.
 
-Examples provided to use with **ModusToolbox® Software Environment** are a recommended reference point to start development of MCUBoot based bootloaders for PSoC 6 devices.
+Examples provided to use with **ModusToolbox® Software Environment** are a recommended reference point to start development of MCUboot based bootloaders for PSoC 6 devices.
 
 Refer to **Cypress Semiconductors** [github](https://github.com/cypresssemiconductorco) page to find examples.
 
 1. MCUboot-Based Basic Bootloader [mtb-example-psoc6-mcuboot-basic](https://github.com/cypresssemiconductorco/mtb-example-psoc6-mcuboot-basic)
 2. MCUboot-Based Bootloader with Rollback to Factory App in External Flash [mtb-example-anycloud-mcuboot-rollback](https://github.com/cypresssemiconductorco/mtb-example-anycloud-mcuboot-rollback)
 
-### Solution Description
+### Solution description
 
 There are two applications implemented:
-* MCUBootApp - PSoC6 MCUBoot-based bootloading application;
+* MCUBootApp - PSoC6 MCUboot-based bootloading application;
 * BlinkyApp - simple PSoC6 blinking LED application which is a target of BOOT/UPGRADE;
 
 The default flash map for MCUBootApp implemented is next:
@@ -29,15 +29,15 @@ The flash map is defined through sysflash.h and cy_flash_map.c.
 It is also possible to place secondary (upgrade) slots in external memory module. In this case primary slot can be doubled in size.
 For more details about External Memory usage, please refer to separate guiding document `MCUBootApp/ExternalMemory.md`.
 
-MCUBootApp checks image integrity with SHA256, image authenticity with EC256 digital signature verification and uses either completely software implementation of cryptographic functions or accelerated by hardware - both based on mbedTLS Library.
+MCUBootApp checks image integrity with SHA256, image authenticity with EC256 digital signature verification and uses either completely software implementation of cryptographic functions or accelerated by hardware - both based on Mbed TLS Library.
 
-### Downloading Solution's Assets
+### Downloading solution's assets
 
 There is a set assets required:
 
 * MCUBooot Library (root repository)
 * PSoC6 Peripheral Drivers Library (PDL)
-* mbedTLS Cryptographic Library
+* Mbed TLS Cryptographic Library
 
 Those are represented as submodules.
 
@@ -52,15 +52,15 @@ Submodules can also be updated and initialized separately:
 
 
 
-### Building Solution
+### Building solution
 
 Root directory for build is **boot/cypress.**
 
-This folder contains make files infrastructure for building both MCUBoot Bootloader and sample BlinkyApp application used for Bootloader demo functionality.
+This folder contains make files infrastructure for building both MCUboot Bootloader and sample BlinkyApp application used for Bootloader demo functionality.
 
 Instructions on how to build and upload MCUBootApp bootloader application and sample user applocation are located in `Readme.md` files in corresponding folders.
 
-Supported platforms for `MCUBoot`, `BlinkyApp`:
+Supported platforms for `MCUboot`, `BlinkyApp`:
 
 * PSOC_062_2M
 * PSOC_062_1M

@@ -28,7 +28,7 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
-MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
+BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE)
 int
@@ -46,7 +46,7 @@ swap_erase_trailer_sectors(const struct boot_loader_state *state,
     uint8_t image_index;
     int rc;
 
-    BOOT_LOG_DBG("erasing trailer; fa_id=%d", fap->fa_id);
+    BOOT_LOG_DBG("erasing trailer; fa_id=%d", flash_area_get_id(fap));
 
     image_index = BOOT_CURR_IMG(state);
     fa_id_primary = flash_area_id_from_multi_image_slot(image_index,
@@ -54,9 +54,9 @@ swap_erase_trailer_sectors(const struct boot_loader_state *state,
     fa_id_secondary = flash_area_id_from_multi_image_slot(image_index,
             BOOT_SECONDARY_SLOT);
 
-    if (fap->fa_id == fa_id_primary) {
+    if (flash_area_get_id(fap) == fa_id_primary) {
         slot = BOOT_PRIMARY_SLOT;
-    } else if (fap->fa_id == fa_id_secondary) {
+    } else if (flash_area_get_id(fap) == fa_id_secondary) {
         slot = BOOT_SECONDARY_SLOT;
     } else {
         return BOOT_EFLASH;
@@ -94,7 +94,7 @@ swap_status_init(const struct boot_loader_state *state,
 
     image_index = BOOT_CURR_IMG(state);
 
-    BOOT_LOG_DBG("initializing status; fa_id=%d", fap->fa_id);
+    BOOT_LOG_DBG("initializing status; fa_id=%d", flash_area_get_id(fap));
 
     rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_SECONDARY(image_index),
             &swap_state);
@@ -166,7 +166,8 @@ swap_read_status(struct boot_loader_state *state, struct boot_status *bs)
         off = boot_swap_info_off(fap);
         rc = flash_area_read(fap, off, &swap_info, sizeof swap_info);
         if (rc != 0) {
-            return BOOT_EFLASH;
+            rc = BOOT_EFLASH;
+            goto done;
         }
 
         if (bootutil_buffer_is_erased(fap, &swap_info, sizeof swap_info)) {
@@ -178,6 +179,7 @@ swap_read_status(struct boot_loader_state *state, struct boot_status *bs)
         bs->swap_type = BOOT_GET_SWAP_TYPE(swap_info);
     }
 
+done:
     flash_area_close(fap);
 
     return rc;

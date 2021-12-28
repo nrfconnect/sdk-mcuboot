@@ -28,7 +28,7 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
-MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
+BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #if !defined(MCUBOOT_SWAP_USING_MOVE)
 
@@ -53,7 +53,7 @@ boot_read_image_header(struct boot_loader_state *state, int slot,
 {
     const struct flash_area *fap;
     int area_id;
-    int rc;
+    int rc = 0;
 
     (void)bs;
 
@@ -62,22 +62,17 @@ boot_read_image_header(struct boot_loader_state *state, int slot,
 #endif
 
     area_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), slot);
+
     rc = flash_area_open(area_id, &fap);
-    if (rc != 0) {
-        rc = BOOT_EFLASH;
-        goto done;
+    if (rc == 0) {
+        rc = flash_area_read(fap, 0, out_hdr, sizeof *out_hdr);
+        flash_area_close(fap);
     }
 
-    rc = flash_area_read(fap, 0, out_hdr, sizeof *out_hdr);
     if (rc != 0) {
         rc = BOOT_EFLASH;
-        goto done;
     }
 
-    rc = 0;
-
-done:
-    flash_area_close(fap);
     return rc;
 }
 
@@ -554,7 +549,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
     if (bs->state == BOOT_STATUS_STATE_0) {
         BOOT_LOG_DBG("erasing scratch area");
-        rc = boot_erase_region(fap_scratch, 0, fap_scratch->fa_size);
+        rc = boot_erase_region(fap_scratch, 0, flash_area_get_size(fap_scratch));
         assert(rc == 0);
 
         if (bs->idx == BOOT_STATUS_IDX_0) {
@@ -577,7 +572,8 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
                 assert(rc == 0);
 
                 /* Erase the temporary trailer from the scratch area. */
-                rc = boot_erase_region(fap_scratch, 0, fap_scratch->fa_size);
+                rc = boot_erase_region(fap_scratch, 0,
+                        flash_area_get_size(fap_scratch));
                 assert(rc == 0);
             }
         }

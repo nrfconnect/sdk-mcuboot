@@ -1,20 +1,20 @@
-# Porting How-To
+# Porting how-to
 
 This document describes the requirements and necessary steps required to port
-`mcuboot` to a new target `OS`.
+`MCUboot` to a new target `OS`.
 
 # Requirements
 
-* `mcuboot` requires a configuration file, which can be included as
+* `MCUboot` requires a configuration file, which can be included as
    mcuboot_config/mcuboot_config.h, which configures various options
    (that begin with MCUBOOT_).
 
-* `mcuboot` requires that the target provides a `flash` API with ability to
+* `MCUboot` requires that the target provides a `flash` API with ability to
   get the flash's minimum write size, and read/write/erase individual sectors.
 
-* `mcuboot` doesn't bundle a cryptographic library, which means the target
+* `MCUboot` doesn't bundle a cryptographic library, which means the target
   OS must already have it bundled. The supported libraries at the moment are
-  either `mbed TLS` or the set `tinycrypt` + `mbed TLS` (where `mbed TLS` is
+  either `Mbed TLS` or the set `tinycrypt` + `Mbed TLS` (where `Mbed TLS` is
   used to provide functionality not existing in `tinycrypt`).
 
 # Steps to port
@@ -69,10 +69,25 @@ in the following files:
 
 ## Flash Map
 
-The bootloader requires a `flash_map` to be able to know how the flash is
-partitioned. A `flash_map` consists of `struct flash_area` entries
-specifying the partitions, where a `flash_area` defined as follows:
+The bootloader requires to be able to address flash regions where the code
+for MCUboot and images of applications are stored, in system-agnostic way.
+For that purpose the MCUboot uses ID, which is integer (uint8_t) number
+that should uniquely identify each flash region.
+Such flash regions are served by object of `const struct flash_area` type while
+layout of these objects is gathered under `flash_map`.
+The common code of MCUboot, that is non-system specific, does not directly
+access contents of that object and never modifies it, instead it calls
+`flash_area_` API to perform any actions on that object.
+This way systems are free to implement internal logic of flash map or define
+`struct flash_area` as they wish; the only restriction is that ID should be
+uniquely tied to region characterized by device, offset and size.
 
+Changes to common MCUboot code should not affect system specific internals
+of flash map, on the other side system specific code, within MCUboot, is
+is not restricted from directly accessing `struct flash_area` elements.
+
+
+An implementation of `struct flash_area` may take form of:
 ```c
 struct flash_area {
     uint8_t  fa_id;         /** The slot/scratch identification */
@@ -82,8 +97,25 @@ struct flash_area {
     uint32_t fa_size;       /** The size of this sector */
 };
 ```
+The above example of structure hold all information that is currently required
+by MCUboot, although the MCUboot will not be trying to access them directly,
+instead a system is required to provide following mandatory getter functions:
 
-`fa_id` is can be one of the following options:
+```c
+/*< Obtains ID of the flash area characterized by `fa` */
+int     flash_area_get_id(const struct flash_area *fa);
+/*< Obtains ID of a device the flash area `fa` described region resides on */
+int     flash_area_get_device_id(const struct flash_area *fa)
+/*< Obtains offset, from the beginning of a device, the flash area described
+ * region starts at */
+uint32_t flash_area_get_off(const struct flash_area *fa)
+/*< Obtains size, from the offset, of the flash area `fa` characterized region */
+uint32_t flash_area_get_size(const struct flash_area *fa)
+
+```
+
+The MCUboot common code uses following defines that should be defined by system
+specific header files and are used to identify destination of flash area by ID:
 
 ```c
 /* Independent from multiple image boot */
@@ -101,7 +133,11 @@ struct flash_area {
 #define FLASH_AREA_IMAGE_SECONDARY    6
 ```
 
-The functions that must be defined for working with the `flash_area`s are:
+The numbers, given above, are provided as an example and depend on system
+implementation.
+
+The main, also required, set of API functions that perform operations on
+flash characterized by `struct flash_area` objects is as follows:
 
 ```c
 /*< Opens the area for use. id is one of the `fa_id`s */
@@ -132,23 +168,28 @@ int     flash_area_id_from_multi_image_slot(int image_index, int slot);
 int     flash_area_id_to_multi_image_slot(int image_index, int area_id);
 ```
 
-**Note:** As of writing, it is possible that mcuboot will open a flash area multiple times simultaneously (through nested calls to `flash_area_open`). As a result, mcuboot may call `flash_area_close` on a flash area that is still opened by another part of mcuboot. As a workaround when porting, it may be necessary to implement a counter of the number of times a given flash area has been opened by mcuboot. The `flash_area_close` implementation should only fully deinitialize the underlying flash area when the open counter is decremented to 0. See [this GitHub PR](https://github.com/mcu-tools/mcuboot/pull/894/) for a more detailed discussion.
+---
+***Note***
 
-## Memory management for mbed TLS
+*As of writing, it is possible that MCUboot will open a flash area multiple times simultaneously (through nested calls to `flash_area_open`). As a result, MCUboot may call `flash_area_close` on a flash area that is still opened by another part of MCUboot. As a workaround when porting, it may be necessary to implement a counter of the number of times a given flash area has been opened by MCUboot. The `flash_area_close` implementation should only fully deinitialize the underlying flash area when the open counter is decremented to 0. See [this GitHub PR](https://github.com/mcu-tools/mcuboot/pull/894/) for a more detailed discussion.*
 
-`mbed TLS` employs dynamic allocation of memory, making use of the pair
-`calloc/free`. If `mbed TLS` is to be used for crypto, your target RTOS
+---
+
+## Memory management for Mbed TLS
+
+`Mbed TLS` employs dynamic allocation of memory, making use of the pair
+`calloc/free`. If `Mbed TLS` is to be used for crypto, your target RTOS
 needs to provide this pair of function.
 
 To configure the what functions are called when allocating/deallocating
-memory `mbed TLS` uses the following call:
+memory `Mbed TLS` uses the following call:
 
 ```
 int mbedtls_platform_set_calloc_free (void *(*calloc_func)(size_t, size_t),
                                       void (*free_func)(void *));
 ```
 
-For reference see [mbed TLS platform.h](https://tls.mbed.org/api/platform_8h.html).
+For reference see [Mbed TLS platform.h](https://tls.mbed.org/api/platform_8h.html).
 If your system already provides functions with compatible signatures, those can
 be used directly here, otherwise create new functions that glue to your
 `calloc/free` implementations.

@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2020 Linaro LTD
+// Copyright (c) 2017-2021 Linaro LTD
 // Copyright (c) 2017-2020 JUUL Labs
 // Copyright (c) 2021 Arm Limited
 //
@@ -17,6 +17,8 @@
 use byteorder::{
     LittleEndian, WriteBytesExt,
 };
+use cipher::FromBlockCipher;
+use crate::caps::Caps;
 use crate::image::ImageVersion;
 use log::info;
 use ring::{digest, rand, agreement, hkdf, hmac};
@@ -28,14 +30,16 @@ use ring::signature::{
     ECDSA_P256_SHA256_ASN1_SIGNING,
     Ed25519KeyPair,
 };
-use aes_ctr::{
+use aes::{
+    Aes128,
     Aes128Ctr,
+    Aes256,
     Aes256Ctr,
-    stream_cipher::{
-        generic_array::GenericArray,
-        NewStreamCipher,
-        SyncStreamCipher,
-    },
+    NewBlockCipher
+};
+use cipher::{
+    generic_array::GenericArray,
+    StreamCipher,
 };
 use mcuboot_sys::c;
 use typenum::{U16, U32};
@@ -63,8 +67,8 @@ pub enum TlvFlags {
     PIC = 0x01,
     NON_BOOTABLE = 0x02,
     ENCRYPTED_AES128 = 0x04,
-    RAM_LOAD = 0x20,
     ENCRYPTED_AES256 = 0x08,
+    RAM_LOAD = 0x20,
 }
 
 /// A generator for manifests.  The format of the manifest can be either a
@@ -91,6 +95,11 @@ pub trait ManifestGen {
     /// Set an internal flag indicating that the next `make_tlv` should
     /// corrupt the signature.
     fn corrupt_sig(&mut self);
+
+    /// Estimate the size of the TLV.  This can be called before the payload is added (but after
+    /// other information is added).  Some of the signature algorithms can generate variable sized
+    /// data, and therefore, this can slightly overestimate the size.
+    fn estimate_size(&self) -> usize;
 
     /// Construct the manifest for this payload.
     fn make_tlv(self: Box<Self>) -> Vec<u8>;
@@ -295,7 +304,12 @@ impl ManifestGen for TlvGen {
 
     /// Retrieve the header flags for this configuration.  This can be called at any time.
     fn get_flags(&self) -> u32 {
-        self.flags
+        // For the RamLoad case, add in the flag for this feature.
+        if Caps::RamLoad.present() {
+            self.flags | (TlvFlags::RAM_LOAD as u32)
+        } else {
+            self.flags
+        }
     }
 
     /// Add bytes to the covered hash.
@@ -323,8 +337,67 @@ impl ManifestGen for TlvGen {
         self.gen_corrupted = true;
     }
 
+    fn estimate_size(&self) -> usize {
+        // Begin the estimate with the 4 byte header.
+        let mut estimate = 4;
+        // A very poor estimate.
+
+        // Estimate the size of the image hash.
+        if self.kinds.contains(&TlvKinds::SHA256) {
+            estimate += 4 + 32;
+        }
+
+        // Add an estimate in for each of the signature algorithms.
+        if self.kinds.contains(&TlvKinds::RSA2048) {
+            estimate += 4 + 32; // keyhash
+            estimate += 4 + 256; // RSA2048
+        }
+        if self.kinds.contains(&TlvKinds::RSA3072) {
+            estimate += 4 + 32; // keyhash
+            estimate += 4 + 384; // RSA3072
+        }
+        if self.kinds.contains(&TlvKinds::ECDSA256) {
+            estimate += 4 + 32; // keyhash
+
+            // ECDSA signatures are encoded as ASN.1 with the x and y values stored as signed
+            // integers.  As such, the size can vary by 2 bytes, if the 256-bit value has the high
+            // bit, it takes an extra 0 byte to avoid it being seen as a negative number.
+            estimate += 4 + 72; // ECDSA256 (varies)
+        }
+        if self.kinds.contains(&TlvKinds::ED25519) {
+            estimate += 4 + 32; // keyhash
+            estimate += 4 + 64; // ED25519 signature.
+        }
+
+        // Estimate encryption.
+        let flag = TlvFlags::ENCRYPTED_AES256 as u32;
+        let aes256 = (self.get_flags() & flag) == flag;
+
+        if self.kinds.contains(&TlvKinds::ENCRSA2048) {
+            estimate += 4 + 256;
+        }
+        if self.kinds.contains(&TlvKinds::ENCKW) {
+            estimate += 4 + if aes256 { 40 } else { 24 };
+        }
+        if self.kinds.contains(&TlvKinds::ENCEC256) {
+            estimate += 4 + if aes256 { 129 } else { 113 };
+        }
+        if self.kinds.contains(&TlvKinds::ENCX25519) {
+            estimate += 4 + if aes256 { 96 } else { 80 };
+        }
+
+        // Gather the size of the dependency information.
+        if self.protect_size() > 0 {
+            estimate += 4 + (16 * self.dependencies.len());
+        }
+
+        estimate
+    }
+
     /// Compute the TLV given the specified block of data.
     fn make_tlv(self: Box<Self>) -> Vec<u8> {
+        let size_estimate = self.estimate_size();
+
         let mut protected_tlv: Vec<u8> = vec![];
 
         if self.protect_size() > 0 {
@@ -616,11 +689,13 @@ impl ManifestGen for TlvGen {
             let mut cipherkey = self.get_enc_key();
             if aes256 {
                 let key: &GenericArray<u8, U32> = GenericArray::from_slice(&derived_key[..32]);
-                let mut cipher = Aes256Ctr::new(&key, &nonce);
+                let block = Aes256::new(&key);
+                let mut cipher = Aes256Ctr::from_block_cipher(block, &nonce);
                 cipher.apply_keystream(&mut cipherkey);
             } else {
                 let key: &GenericArray<u8, U16> = GenericArray::from_slice(&derived_key[..16]);
-                let mut cipher = Aes128Ctr::new(&key, &nonce);
+                let block = Aes128::new(&key);
+                let mut cipher = Aes128Ctr::from_block_cipher(block, &nonce);
                 cipher.apply_keystream(&mut cipherkey);
             }
 
@@ -651,6 +726,25 @@ impl ManifestGen for TlvGen {
         let size = (result.len() - npro_pos) as u16;
         let mut size_buf = &mut result[npro_pos + 2 .. npro_pos + 4];
         size_buf.write_u16::<LittleEndian>(size).unwrap();
+
+        // ECDSA is stored as an ASN.1 integer.  For a 128-bit value, this maximally results in 33
+        // bytes of storage for each of the two values.  If the high bit is zero, it will take 32
+        // bytes, if the top 8 bits are zero, it will take 31 bits, and so on.  The smaller size
+        // will occur with decreasing likelihood.  We'll allow this to get a bit smaller, hopefully
+        // allowing the tests to pass with false failures rare.  For this case, we'll handle up to
+        // the top 16 bits of both numbers being all zeros (1 in 2^32).
+        if !Caps::has_ecdsa() {
+            if size_estimate != result.len() {
+                panic!("Incorrect size estimate: {} (actual {})", size_estimate, result.len());
+            }
+        } else {
+            if size_estimate < result.len() || size_estimate > result.len() + 6 {
+                panic!("Incorrect size estimate: {} (actual {})", size_estimate, result.len());
+            }
+        }
+        if size_estimate != result.len() {
+            log::warn!("Size off: {} actual {}", size_estimate, result.len());
+        }
 
         result
     }

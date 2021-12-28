@@ -103,17 +103,13 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #endif
 
 #ifdef CONFIG_SOC_FAMILY_NRF
-#include <hal/nrf_power.h>
+#include <helpers/nrfx_reset_reason.h>
 
 static inline bool boot_skip_serial_recovery()
 {
-#if NRF_POWER_HAS_RESETREAS
-    uint32_t rr = nrf_power_resetreas_get(NRF_POWER);
+    uint32_t rr = nrfx_reset_reason_get();
 
-    return !(rr == 0 || (rr & NRF_POWER_RESETREAS_RESETPIN_MASK));
-#else
-    return false;
-#endif
+    return !(rr == 0 || (rr & NRFX_RESET_REASON_RESETPIN_MASK));
 }
 #else
 static inline bool boot_skip_serial_recovery()
@@ -122,7 +118,7 @@ static inline bool boot_skip_serial_recovery()
 }
 #endif
 
-MCUBOOT_LOG_MODULE_REGISTER(mcuboot);
+BOOT_LOG_MODULE_REGISTER(mcuboot);
 
 #ifdef CONFIG_MCUBOOT_INDICATION_LED
 /*
@@ -180,8 +176,6 @@ struct arm_vector_table {
     uint32_t reset;
 };
 
-extern void sys_clock_disable(void);
-
 static void do_boot(struct boot_rsp *rsp)
 {
     struct arm_vector_table *vt;
@@ -200,10 +194,9 @@ static void do_boot(struct boot_rsp *rsp)
                                      rsp->br_image_off +
                                      rsp->br_hdr->ih_hdr_size);
 
-#ifdef CONFIG_SYS_CLOCK_EXISTS
     sys_clock_disable();
-#endif
-#ifdef CONFIG_USB
+
+#ifdef CONFIG_USB_DEVICE_STACK
     /* Disable the USB to prevent it from firing interrupts */
     usb_disable();
 #endif

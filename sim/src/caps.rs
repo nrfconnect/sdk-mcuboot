@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2019 Linaro LTD
+// Copyright (c) 2017-2021 Linaro LTD
 // Copyright (c) 2019 JUUL Labs
 // Copyright (c) 2019-2021 Arm Limited
 //
@@ -26,6 +26,8 @@ pub enum Caps {
     EncX25519            = (1 << 13),
     Bootstrap            = (1 << 14),
     Aes256               = (1 << 15),
+    RamLoad              = (1 << 16),
+    DirectXip            = (1 << 17),
 }
 
 impl Caps {
@@ -34,10 +36,21 @@ impl Caps {
         (caps as u32) & (self as u32) != 0
     }
 
+    /// Does this build have ECDSA of some type enabled for signatures.
+    pub fn has_ecdsa() -> bool {
+        Caps::EcdsaP256.present() || Caps::EcdsaP224.present()
+    }
+
     /// Query for the number of images that have been configured into this
     /// MCUboot build.
     pub fn get_num_images() -> usize {
         (unsafe { bootutil_get_num_images() }) as usize
+    }
+
+    /// Query if this configuration performs some kind of upgrade by writing to flash.
+    pub fn modifies_flash() -> bool {
+        // All other configurations perform upgrades by writing to flash.
+        !(Self::RamLoad.present() || Self::DirectXip.present())
     }
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2019 Linaro LTD
+// Copyright (c) 2017-2021 Linaro LTD
 // Copyright (c) 2017-2019 JUUL Labs
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -58,6 +58,10 @@ sim_test!(norevert, make_image(&NO_DEPS, true), run_norevert());
 sim_test!(status_write_fails_complete, make_image(&NO_DEPS, true), run_with_status_fails_complete());
 sim_test!(status_write_fails_with_reset, make_image(&NO_DEPS, true), run_with_status_fails_with_reset());
 sim_test!(downgrade_prevention, make_image(&REV_DEPS, true), run_nodowngrade());
+
+sim_test!(direct_xip_first, make_no_upgrade_image(&NO_DEPS), run_direct_xip());
+sim_test!(ram_load_first, make_no_upgrade_image(&NO_DEPS), run_ram_load());
+sim_test!(ram_load_split, make_no_upgrade_image(&NO_DEPS), run_split_ram_load());
 
 // Test various combinations of incorrect dependencies.
 test_shell!(dependency_combos, r, {

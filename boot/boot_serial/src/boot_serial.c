@@ -28,7 +28,7 @@
 #include "cbor_encode.h"
 
 #ifdef __ZEPHYR__
-#include <power/reboot.h>
+#include <sys/reboot.h>
 #include <sys/byteorder.h>
 #include <sys/__assert.h>
 #include <drivers/flash.h>
@@ -54,16 +54,17 @@
 #include "boot_serial/boot_serial.h"
 #include "boot_serial_priv.h"
 
-#ifdef CONFIG_BOOT_ERASE_PROGRESSIVELY
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
 #include "bootutil_priv.h"
 #endif
 
 #include "serial_recovery_cbor.h"
+#include "bootutil/boot_hooks.h"
 
-MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
+BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #define BOOT_SERIAL_INPUT_MAX   512
-#define BOOT_SERIAL_OUT_MAX     128
+#define BOOT_SERIAL_OUT_MAX     (128 * BOOT_IMAGE_NUMBER)
 
 #ifdef __ZEPHYR__
 /* base64 lib encodes data to null-terminated string */
@@ -74,10 +75,6 @@ MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #define ntohs(x) sys_be16_to_cpu(x)
 #define htons(x) sys_cpu_to_be16(x)
-#endif
-
-#ifndef BOOT_IMAGE_NUMBER
-#define BOOT_IMAGE_NUMBER MCUBOOT_IMAGE_NUMBER
 #endif
 
 #if (BOOT_IMAGE_NUMBER > 1)
@@ -102,6 +99,21 @@ static cbor_state_t cbor_state = {
     .backups = &dummy_backups
 };
 
+/**
+ * Function that processes MGMT_GROUP_ID_PERUSER mcumgr group and may be
+ * used to process any groups that have not been processed by generic boot
+ * serial implementation.
+ *
+ * @param[in] hdr -- the decoded header of mcumgr message;
+ * @param[in] buffer -- buffer with first mcumgr message;
+ * @param[in] len -- length of of data in buffer;
+ * @param[out] *cs -- object with encoded response.
+ *
+ * @return 0 on success; non-0 error code otherwise.
+ */
+extern int bs_peruser_system_specific(const struct nmgr_hdr *hdr,
+                                      const char *buffer,
+                                      int len, cbor_state_t *cs);
 
 /*
  * Convert version into string without use of snprintf().
@@ -172,15 +184,32 @@ bs_list(char *buf, int len)
                 continue;
             }
 
-            flash_area_read(fap, 0, &hdr, sizeof(hdr));
+            int rc = BOOT_HOOK_CALL(boot_read_image_header_hook,
+                                    BOOT_HOOK_REGULAR, image_index, slot, &hdr);
+            if (rc == BOOT_HOOK_REGULAR)
+            {
+                flash_area_read(fap, 0, &hdr, sizeof(hdr));
+            }
 
-            if (hdr.ih_magic != IMAGE_MAGIC ||
-              bootutil_img_validate(NULL, 0, &hdr, fap, tmpbuf, sizeof(tmpbuf),
-                                    NULL, 0, NULL)) {
-                flash_area_close(fap);
+            fih_int fih_rc = FIH_FAILURE;
+
+            if (hdr.ih_magic == IMAGE_MAGIC)
+            {
+                BOOT_HOOK_CALL_FIH(boot_image_check_hook,
+                                   fih_int_encode(BOOT_HOOK_REGULAR),
+                                   fih_rc, image_index, slot);
+                if (fih_eq(fih_rc, BOOT_HOOK_REGULAR))
+                {
+                    FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr, fap, tmpbuf, sizeof(tmpbuf),
+                                    NULL, 0, NULL);
+                }
+            }
+
+            flash_area_close(fap);
+
+            if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
                 continue;
             }
-            flash_area_close(fap);
 
             map_start_encode(&cbor_state, 20);
 
@@ -218,7 +247,7 @@ bs_upload(char *buf, int len)
     size_t slen;
     const struct flash_area *fap = NULL;
     int rc;
-#ifdef CONFIG_BOOT_ERASE_PROGRESSIVELY
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
     static off_t off_last = -1;
     struct flash_sector sector;
 #endif
@@ -274,7 +303,11 @@ bs_upload(char *buf, int len)
         goto out_invalid_data;
     }
 
+#if !defined(MCUBOOT_SERIAL_DIRECT_IMAGE_UPLOAD)
     rc = flash_area_open(flash_area_id_from_multi_image_slot(img_num, 0), &fap);
+#else
+    rc = flash_area_open(flash_area_id_from_direct_image(img_num), &fap);
+#endif
     if (rc) {
         rc = MGMT_ERR_EINVAL;
         goto out;
@@ -282,11 +315,11 @@ bs_upload(char *buf, int len)
 
     if (off == 0) {
         curr_off = 0;
-        if (data_len > fap->fa_size) {
+        if (data_len > flash_area_get_size(fap)) {
             goto out_invalid_data;
         }
-#ifndef CONFIG_BOOT_ERASE_PROGRESSIVELY
-        rc = flash_area_erase(fap, 0, fap->fa_size);
+#ifndef MCUBOOT_ERASE_PROGRESSIVELY
+        rc = flash_area_erase(fap, 0, flash_area_get_size(fap));
         if (rc) {
             goto out_invalid_data;
         }
@@ -310,16 +343,17 @@ bs_upload(char *buf, int len)
         rem_bytes = 0;
     }
 
-#ifdef CONFIG_BOOT_ERASE_PROGRESSIVELY
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
     rc = flash_area_sector_from_off(curr_off + img_blen, &sector);
     if (rc) {
         BOOT_LOG_ERR("Unable to determine flash sector size");
         goto out;
     }
-    if (off_last != sector.fs_off) {
-        off_last = sector.fs_off;
-        BOOT_LOG_INF("Erasing sector at offset 0x%x", sector.fs_off);
-        rc = flash_area_erase(fap, sector.fs_off, sector.fs_size);
+    if (off_last != flash_sector_get_off(&sector)) {
+        off_last = flash_sector_get_off(&sector);
+        BOOT_LOG_INF("Erasing sector at offset 0x%x", flash_sector_get_off(&sector));
+        rc = flash_area_erase(fap, flash_sector_get_off(&sector),
+                              flash_sector_get_size(&sector));
         if (rc) {
             BOOT_LOG_ERR("Error %d while erasing sector", rc);
             goto out;
@@ -356,8 +390,8 @@ bs_upload(char *buf, int len)
 
     if (rc == 0) {
         curr_off += img_blen;
-#ifdef CONFIG_BOOT_ERASE_PROGRESSIVELY
         if (curr_off == img_size) {
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
             /* get the last sector offset */
             rc = flash_area_sector_from_off(boot_status_off(fap), &sector);
             if (rc) {
@@ -367,16 +401,24 @@ bs_upload(char *buf, int len)
             }
             /* Assure that sector for image trailer was erased. */
             /* Check whether it was erased during previous upload. */
-            if (off_last < sector.fs_off) {
-                BOOT_LOG_INF("Erasing sector at offset 0x%x", sector.fs_off);
-                rc = flash_area_erase(fap, sector.fs_off, sector.fs_size);
+            if (off_last < flash_sector_get_off(&sector)) {
+                BOOT_LOG_INF("Erasing sector at offset 0x%x",
+                             flash_sector_get_off(&sector));
+                rc = flash_area_erase(fap, flash_sector_get_off(&sector),
+                                      flash_sector_get_size(&sector));
                 if (rc) {
                     BOOT_LOG_ERR("Error %d while erasing sector", rc);
                     goto out;
                 }
             }
-        }
 #endif
+            rc = BOOT_HOOK_CALL(boot_serial_uploaded_hook, 0, img_num, fap,
+                                img_size);
+            if (rc) {
+                BOOT_LOG_ERR("Error %d post upload hook", rc);
+                goto out;
+            }
+        }
     } else {
     out_invalid_data:
         rc = MGMT_ERR_EINVAL;
@@ -398,14 +440,14 @@ out:
 }
 
 /*
- * Console echo control/image erase. Send empty response, don't do anything.
+ * Send rc code only.
  */
 static void
-bs_empty_rsp(char *buf, int len)
+bs_rc_rsp(int rc_code)
 {
     map_start_encode(&cbor_state, 10);
     tstrx_put(&cbor_state, "rc");
-    uintx32_put(&cbor_state, 0);
+    uintx32_put(&cbor_state, rc_code);
     map_end_encode(&cbor_state, 10);
     boot_serial_output();
 }
@@ -417,7 +459,7 @@ bs_empty_rsp(char *buf, int len)
 static void
 bs_reset(char *buf, int len)
 {
-    bs_empty_rsp(buf, len);
+    bs_rc_rsp(0);
 
 #ifdef __ZEPHYR__
 #ifdef CONFIG_MULTITHREADING
@@ -469,20 +511,27 @@ boot_serial_input(char *buf, int len)
             bs_upload(buf, len);
             break;
         default:
-            bs_empty_rsp(buf, len);
+            bs_rc_rsp(MGMT_ERR_ENOTSUP);
             break;
         }
     } else if (hdr->nh_group == MGMT_GROUP_ID_DEFAULT) {
         switch (hdr->nh_id) {
         case NMGR_ID_CONS_ECHO_CTRL:
-            bs_empty_rsp(buf, len);
+            bs_rc_rsp(0);
             break;
         case NMGR_ID_RESET:
             bs_reset(buf, len);
             break;
         default:
+            bs_rc_rsp(MGMT_ERR_ENOTSUP);
             break;
         }
+    } else if (MCUBOOT_PERUSER_MGMT_GROUP_ENABLED == 1) {
+        if (bs_peruser_system_specific(hdr, buf, len, &cbor_state) == 0) {
+            boot_serial_output();
+        }
+    } else {
+        bs_rc_rsp(MGMT_ERR_ENOTSUP);
     }
 }
 
@@ -614,6 +663,7 @@ boot_serial_start(const struct boot_uart_funcs *f)
     off = 0;
     while (1) {
         MCUBOOT_CPU_IDLE();
+        MCUBOOT_WATCHDOG_FEED();
         rc = f->read(in_buf + off, sizeof(in_buf) - off, &full_line);
         if (rc <= 0 && !full_line) {
             continue;
