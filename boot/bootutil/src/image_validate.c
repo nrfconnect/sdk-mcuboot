@@ -378,6 +378,12 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
         goto out;
     }
 
+    if (it.tlv_end > bootutil_max_image_size(fap))
+    {
+        rc = -1;
+        goto out;
+    }
+
     /*
      * Traverse through all of the TLVs, performing any checks we know
      * and are able to do.
