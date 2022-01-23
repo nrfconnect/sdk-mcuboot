@@ -15,7 +15,7 @@ mcuboot_primary:
 
 # Partition for secondary slot is not created if building in single application
 # slot configuration.
-#if !defined(CONFIG_SINGLE_APPLICATION_SLOT)
+#if !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_DIRECT_XIP)
 mcuboot_secondary:
   share_size: [mcuboot_primary]
 #if defined(CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY)
@@ -28,7 +28,28 @@ mcuboot_secondary:
     align_next: CONFIG_FPROTECT_BLOCK_SIZE # Ensure that the next partition does not interfere with this image
     after: mcuboot_primary
 #endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
-#endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) */
+
+#else
+
+# Direct XIP is enabled, reserve area for metadata (padding) and name the
+# partition so that its clear that it is not the secondary slot, but the direct
+# XIP alternative.
+
+app_variant_pad:
+  share_size: mcuboot_pad
+  placement:
+    after: mcuboot_primary
+    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+
+app_variant:
+  share_size: mcuboot_primary_app
+  placement:
+    after: app_variant_pad
+
+mcuboot_secondary:
+  span: [app_variant_pad, app_variant]
+
+#endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined (CONFIG_BOOT_DIRECT_XIP) */
 
 #if CONFIG_BOOT_USING_SCRATCH
 mcuboot_scratch:
