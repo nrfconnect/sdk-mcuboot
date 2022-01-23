@@ -30,13 +30,13 @@ mcuboot_secondary:
 #endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
 #endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) */
 
-#if !defined(CONFIG_BOOT_SWAP_USING_MOVE) && !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_UPGRADE_ONLY)
+#if CONFIG_BOOT_SWAP_USING_SCRATCH
 mcuboot_scratch:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
   placement:
     after: app
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
-#endif
+#endif /* CONFIG_BOOT_SWAP_USING_SCRATCH */
 
 # Padding placed before image to boot. This reserves space for the MCUboot image header
 # and it ensures that the boot image gets linked with the correct address offset in flash.
