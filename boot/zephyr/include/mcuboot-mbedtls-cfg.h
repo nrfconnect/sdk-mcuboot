@@ -21,6 +21,16 @@
  * the simulator build.rs accordingly.
  */
 
+/*
+ * When the CC3XX_PLATFORM library is enabled we need to
+ * inform the Mbed TLS library to not compile the
+ * platform_zeroize function, otherwise we will get
+ * a multiple definitions error.
+ */
+#if defined(CONFIG_NRF_CC3XX_PLATFORM)
+#define MBEDTLS_PLATFORM_ZEROIZE_ALT
+#endif
+
 #if defined(CONFIG_BOOT_SIGNATURE_TYPE_RSA) || defined(CONFIG_BOOT_ENCRYPT_RSA)
 #include "config-rsa.h"
 #elif defined(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256) || \
