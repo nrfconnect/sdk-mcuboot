@@ -909,9 +909,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 #if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP)
     const struct flash_area *secondary_fa =
         BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-    struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
-    uint32_t vtable_addr = 0;
-    uint32_t *vtable = 0;
+    struct image_header *hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
     uint32_t reset_addr = 0;
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
@@ -922,12 +920,15 @@ boot_validated_swap_type(struct boot_loader_state *state,
      */
 
     if (hdr->ih_magic == IMAGE_MAGIC) {
-        vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
-        vtable = (uint32_t *)(vtable_addr);
-        reset_addr = vtable[1];
+        int rc = flash_area_read(secondary_fa, hdr->ih_hdr_size +
+				 sizeof(uint32_t), &reset_addr,
+				 sizeof(reset_addr));
+        if (rc != 0) {
+            return BOOT_SWAP_TYPE_FAIL;
+        }
 #ifdef PM_S1_ADDRESS
         const struct flash_area *primary_fa;
-        int rc = flash_area_open(flash_area_id_from_multi_image_slot(
+        rc = flash_area_open(flash_area_id_from_multi_image_slot(
                     BOOT_CURR_IMG(state),
                     BOOT_PRIMARY_SLOT),
                 &primary_fa);
