@@ -804,7 +804,24 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
             goto out;
         }
 
-        if (reset_value < pri_fa->fa_off || reset_value> (pri_fa->fa_off + pri_fa->fa_size)) {
+        uint32_t min_addr, max_addr;
+
+#ifdef PM_CPUNET_APP_ADDRESS
+        /* The primary slot for the network core is emulated in RAM.
+         * Its flash_area hasn't got relevant boundaries.
+         * Therfore need to override its boundaries for the check.
+         */
+        if (BOOT_CURR_IMG(state) == 1) {
+            min_addr = PM_CPUNET_APP_ADDRESS;
+            max_addr = PM_CPUNET_APP_ADDRESS + PM_CPUNET_APP_SIZE;
+        } else
+#endif
+        {
+            min_addr = pri_fa->fa_off;
+            max_addr = pri_fa->fa_off + pri_fa->fa_size;
+        }
+
+        if (reset_value < min_addr || reset_value> (max_addr)) {
             BOOT_LOG_ERR("Reset address of image in secondary slot is not in the primary slot");
             BOOT_LOG_ERR("Erasing image from secondary slot");
 
