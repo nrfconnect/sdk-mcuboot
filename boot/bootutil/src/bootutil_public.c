@@ -317,13 +317,17 @@ boot_write_magic(const struct flash_area *fap)
 {
     uint32_t off;
     int rc;
+    uint8_t magic[BOOT_MAGIC_SZ];
+
+    //some architectures cannot DMA directly from internal flash
+    memcpy(magic, boot_img_magic, BOOT_MAGIC_SZ);
 
     off = boot_magic_off(fap);
 
     BOOT_LOG_DBG("writing magic; fa_id=%d off=0x%lx (0x%lx)",
                  flash_area_get_id(fap), (unsigned long)off,
                  (unsigned long)(flash_area_get_off(fap) + off));
-    rc = flash_area_write(fap, off, boot_img_magic, BOOT_MAGIC_SZ);
+    rc = flash_area_write(fap, off, magic, BOOT_MAGIC_SZ);
     if (rc != 0) {
         return BOOT_EFLASH;
     }
