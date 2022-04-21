@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include <zephyr.h>
+#include <devicetree.h>
 #include <drivers/gpio.h>
 #include <sys/__assert.h>
 #include <drivers/flash.h>
@@ -67,7 +68,14 @@ const struct boot_uart_funcs boot_funcs = {
 #define ZEPHYR_LOG_MODE_MINIMAL 1
 #endif
 
-#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) && \
+/* CONFIG_LOG_IMMEDIATE is the legacy Kconfig property,
+ * replaced by CONFIG_LOG_MODE_IMMEDIATE.
+ */
+#if (defined(CONFIG_LOG_MODE_IMMEDIATE) || defined(CONFIG_LOG_IMMEDIATE))
+#define ZEPHYR_LOG_MODE_IMMEDIATE 1
+#endif
+
+#if defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
     !defined(ZEPHYR_LOG_MODE_MINIMAL)
 #ifdef CONFIG_LOG_PROCESS_THREAD
 #warning "The log internal thread for log processing can't transfer the log"\
@@ -91,7 +99,9 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 /* synchronous log mode doesn't need to be initalized by the application */
 #define ZEPHYR_BOOT_LOG_START() do { } while (false)
 #define ZEPHYR_BOOT_LOG_STOP() do { } while (false)
-#endif /* defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) */
+#endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
+        * !defined(ZEPHYR_LOG_MODE_MINIMAL)
+	*/
 
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
 #include <fprotect.h>
@@ -335,7 +345,7 @@ static void do_boot(struct boot_rsp *rsp)
 }
 #endif
 
-#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) &&\
+#if defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
     !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL)
 /* The log internal thread for log processing can't transfer log well as has too
  * low priority.
@@ -388,8 +398,9 @@ void zephyr_boot_log_stop(void)
      */
     (void)k_sem_take(&boot_log_sem, K_FOREVER);
 }
-#endif/* defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE) &&\
-        !defined(CONFIG_LOG_PROCESS_THREAD) */
+#endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
+        * !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL)
+        */
 
 #if defined(CONFIG_MCUBOOT_SERIAL) || defined(CONFIG_BOOT_USB_DFU_GPIO)
 static bool detect_pin(const char* port, int pin, uint32_t expected, int delay)
@@ -477,10 +488,10 @@ void main(void)
 
     (void)rc;
 
-#if (!defined(CONFIG_XTENSA) && defined(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL))
-    if (!flash_device_get_binding(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL)) {
+#if (!defined(CONFIG_XTENSA) && DT_HAS_CHOSEN(zephyr_flash_controller))
+    if (!flash_device_get_binding(DT_LABEL(DT_CHOSEN(zephyr_flash_controller)))) {
         BOOT_LOG_ERR("Flash device %s not found",
-		     DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
+		     DT_LABEL(DT_CHOSEN(zephyr_flash_controller)));
         while (1)
             ;
     }
@@ -538,7 +549,28 @@ void main(void)
     }
 #endif
 
+#ifdef CONFIG_BOOT_SERIAL_WAIT_FOR_DFU
+    /* Initialize the boot console, so we can already fill up our buffers while
+     * waiting for the boot image check to finish. This image check, can take
+     * some time, so it's better to reuse thistime to already receive the
+     * initial mcumgr command(s) into our buffers
+     */
+    rc = boot_console_init();
+    int timeout_in_ms = CONFIG_BOOT_SERIAL_WAIT_FOR_DFU_TIMEOUT;
+    uint32_t start = k_uptime_get_32();
+#endif
+
     FIH_CALL(boot_go, fih_rc, &rsp);
+
+#ifdef CONFIG_BOOT_SERIAL_WAIT_FOR_DFU
+    timeout_in_ms -= (k_uptime_get_32() - start);
+    if( timeout_in_ms <= 0 ) {
+        /* at least one check if time was expired */
+        timeout_in_ms = 1;
+    }
+   boot_serial_check_start(&boot_funcs,timeout_in_ms);
+#endif
+
     if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
         BOOT_LOG_ERR("Unable to find bootable image");
         FIH_PANIC;
