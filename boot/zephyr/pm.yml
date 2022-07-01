@@ -73,11 +73,13 @@ mcuboot_pad:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
 #endif
 
-#if (CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+#if (CONFIG_NRF53_MCUBOOT_PRIMARY_1_RAM_FLASH)
 mcuboot_primary_1:
   region: ram_flash
   size: CONFIG_NRF53_RAM_FLASH_SIZE
+#endif /* CONFIG_NRF53_MULTI_IMAGE_UPDATE */
 
+#if (CONFIG_NRF53_MULTI_IMAGE_UPDATE)
 mcuboot_secondary_1:
   region: external_flash
   size: CONFIG_NRF53_RAM_FLASH_SIZE
