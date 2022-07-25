@@ -911,9 +911,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
     fih_int fih_rc = FIH_FAILURE;
-    bool upgrade_valid = false;
 
-#if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP)
+#if defined(PM_S1_ADDRESS)
     const struct flash_area *secondary_fa =
         BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
     struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
@@ -956,7 +955,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         }
 #endif /* PM_S1_ADDRESS */
     }
-#endif /* PM_S1_ADDRESS || CONFIG_SOC_NRF5340_CPUAPP */
+#endif /* PM_S1_ADDRESS */
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -970,37 +969,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
             } else {
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             }
-        } else {
-            upgrade_valid = true;
-        }
-
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
-        /* If the update is valid, and it targets the network core: perform the
-         * update and indicate to the caller of this function that no update is
-         * available
-         */
-        if (upgrade_valid && reset_addr > PM_CPUNET_B0N_ADDRESS) {
-            uint32_t fw_size = hdr->ih_img_size;
-
-            BOOT_LOG_INF("Starting network core update");
-            int rc = pcd_network_core_update(vtable, fw_size);
-
-            if (rc != 0) {
-                swap_type = BOOT_SWAP_TYPE_FAIL;
-            } else {
-                BOOT_LOG_INF("Done updating network core");
-#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE)
-                /* swap_erase_trailer_sectors is undefined if upgrade only
-                 * method is used. There is no need to erase sectors, because
-                 * the image cannot be reverted.
-                 */
-                rc = swap_erase_trailer_sectors(state,
-                        secondary_fa);
-#endif
-                swap_type = BOOT_SWAP_TYPE_NONE;
-            }
-        }
-#endif /* CONFIG_SOC_NRF5340_CPUAPP */
+        } 
     }
 
     return swap_type;
