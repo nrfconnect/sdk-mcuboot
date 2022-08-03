@@ -933,26 +933,21 @@ boot_validated_swap_type(struct boot_loader_state *state,
         vtable = (uint32_t *)(vtable_addr);
         reset_addr = vtable[1];
 #ifdef PM_S1_ADDRESS
-#ifdef PM_CPUNET_B0N_ADDRESS
-        if(reset_addr < PM_CPUNET_B0N_ADDRESS)
-#endif
-        {
-            const struct flash_area *primary_fa;
-            int rc = flash_area_open(flash_area_id_from_multi_image_slot(
-                        BOOT_CURR_IMG(state),
-                        BOOT_PRIMARY_SLOT),
-                    &primary_fa);
+        const struct flash_area *primary_fa;
+        int rc = flash_area_open(flash_area_id_from_multi_image_slot(
+                    BOOT_CURR_IMG(state),
+                    BOOT_PRIMARY_SLOT),
+                &primary_fa);
 
-            if (rc != 0) {
-                return BOOT_SWAP_TYPE_FAIL;
-            }
-            /* Get start and end of primary slot for current image */
-            if (reset_addr < primary_fa->fa_off ||
-                    reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
-                /* The image in the secondary slot is not intended for this image
-                */
-                return BOOT_SWAP_TYPE_NONE;
-            }
+        if (rc != 0) {
+            return BOOT_SWAP_TYPE_FAIL;
+        }
+        /* Get start and end of primary slot for current image */
+        if (reset_addr < primary_fa->fa_off ||
+                reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
+            /* The image in the secondary slot is not intended for this image
+            */
+            return BOOT_SWAP_TYPE_NONE;
         }
 #endif /* PM_S1_ADDRESS */
     }
