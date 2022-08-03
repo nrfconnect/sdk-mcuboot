@@ -19,23 +19,19 @@
  * Otherwise, the Zephyr SoC header and the DTS provide most
  * everything we need.
  */
-#include <devicetree.h>
+#include <zephyr/devicetree.h>
 #include <soc.h>
-#include <storage/flash_map.h>
+#include <zephyr/storage/flash_map.h>
 
 #define FLASH_ALIGN FLASH_WRITE_BLOCK_SIZE
 
 #endif /* !defined(MCUBOOT_TARGET_CONFIG) */
 
-#if DT_NODE_HAS_PROP(DT_INST(0, jedec_spi_nor), label)
-#define JEDEC_SPI_NOR_0_LABEL DT_LABEL(DT_INST(0, jedec_spi_nor))
-#endif
-
 /*
  * Sanity check the target support.
  */
 #if (!defined(CONFIG_XTENSA) && !DT_HAS_CHOSEN(zephyr_flash_controller)) || \
-    (defined(CONFIG_XTENSA) && !defined(JEDEC_SPI_NOR_0_LABEL)) || \
+    (defined(CONFIG_XTENSA) && !DT_NODE_EXISTS(DT_INST(0, jedec_spi_nor))) || \
     !defined(FLASH_ALIGN) ||                  \
     !(FLASH_AREA_LABEL_EXISTS(image_0)) || \
     !(FLASH_AREA_LABEL_EXISTS(image_1) || CONFIG_SINGLE_APPLICATION_SLOT) || \

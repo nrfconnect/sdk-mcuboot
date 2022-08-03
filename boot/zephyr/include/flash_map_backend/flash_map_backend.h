@@ -8,7 +8,7 @@
 #ifndef __FLASH_MAP_BACKEND_H__
 #define __FLASH_MAP_BACKEND_H__
 
-#include <storage/flash_map.h> // the zephyr flash_map
+#include <zephyr/storage/flash_map.h> // the zephyr flash_map
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,12 +33,6 @@ extern "C" {
  */
 #include <inttypes.h>
 #include <sys/types.h>
-
-/* Retrieve the flash device with the given name.
- *
- * Returns the flash device on success, or NULL on failure.
- */
-const struct device *flash_device_get_binding(char *dev_name);
 
 /*
  * Retrieve a memory-mapped flash device's base address.

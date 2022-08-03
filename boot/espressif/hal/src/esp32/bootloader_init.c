@@ -12,6 +12,7 @@
 
 #include "bootloader_init.h"
 #include "bootloader_mem.h"
+#include "bootloader_console.h"
 #include "bootloader_clock.h"
 #include "bootloader_flash_config.h"
 #include "bootloader_flash.h"
@@ -21,18 +22,32 @@
 #include "soc/efuse_reg.h"
 #include "soc/rtc.h"
 
+#include "bootloader_wdt.h"
 #include "hal/wdt_hal.h"
 
 #include "esp32/rom/cache.h"
 #include "esp32/rom/spi_flash.h"
 #include "esp32/rom/uart.h"
 
-esp_image_header_t WORD_ALIGNED_ATTR bootloader_image_hdr;
+#include <esp_rom_uart.h>
+#include <esp_rom_gpio.h>
+#include <esp_rom_sys.h>
+#include <soc/uart_periph.h>
+#include <soc/gpio_struct.h>
+#include <hal/gpio_types.h>
+#include <hal/gpio_ll.h>
+#include <hal/uart_ll.h>
 
-void bootloader_clear_bss_section(void)
-{
-    memset(&_bss_start, 0, (&_bss_end - &_bss_start) * sizeof(_bss_start));
-}
+extern esp_image_header_t WORD_ALIGNED_ATTR bootloader_image_hdr;
+
+#if CONFIG_ESP_CONSOLE_UART_CUSTOM
+static uart_dev_t *alt_console_uart_dev = (CONFIG_ESP_CONSOLE_UART_NUM == 0) ?
+                                          &UART0 :
+                                          (CONFIG_ESP_CONSOLE_UART_NUM == 1) ?
+                                          &UART1 :
+                                          &UART2;
+#endif
+
 
 static void bootloader_common_vddsdio_configure(void)
 {
@@ -43,7 +58,7 @@ static void bootloader_common_vddsdio_configure(void)
         cfg.drefl = 3;
         cfg.force = 1;
         rtc_vddsdio_set_config(cfg);
-        ets_delay_us(10); /* wait for regulator to become stable */
+        esp_rom_delay_us(10); /* wait for regulator to become stable */
     }
 }
 
@@ -79,14 +94,6 @@ static esp_err_t bootloader_check_rated_cpu_clock(void)
 {
     int rated_freq = bootloader_clock_get_rated_freq_mhz();
     if (rated_freq < 80) {
-        return ESP_FAIL;
-    }
-    return ESP_OK;
-}
-
-esp_err_t bootloader_read_bootloader_header(void)
-{
-    if (bootloader_flash_read(ESP_BOOTLOADER_OFFSET, &bootloader_image_hdr, sizeof(esp_image_header_t), true) != ESP_OK) {
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -139,40 +146,13 @@ static esp_err_t bootloader_init_spi_flash(void)
     return ESP_OK;
 }
 
-void bootloader_config_wdt(void)
+#if CONFIG_ESP_CONSOLE_UART_CUSTOM
+void IRAM_ATTR esp_rom_uart_putc(char c)
 {
-    wdt_hal_context_t rtc_wdt_ctx = {.inst = WDT_RWDT, .rwdt_dev = &RTCCNTL};
-    wdt_hal_write_protect_disable(&rtc_wdt_ctx);
-    wdt_hal_set_flashboot_en(&rtc_wdt_ctx, false);
-    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
-
-#ifdef CONFIG_ESP_MCUBOOT_WDT_ENABLE
-    wdt_hal_init(&rtc_wdt_ctx, WDT_RWDT, 0, false);
-    uint32_t stage_timeout_ticks = (uint32_t)((uint64_t)CONFIG_BOOTLOADER_WDT_TIME_MS * rtc_clk_slow_freq_get_hz() / 1000);
-    wdt_hal_write_protect_disable(&rtc_wdt_ctx);
-    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE0, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_RTC);
-    wdt_hal_enable(&rtc_wdt_ctx);
-    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
+    while (uart_ll_get_txfifo_len(alt_console_uart_dev) == 0);
+    uart_ll_write_txfifo(alt_console_uart_dev, (const uint8_t *) &c, 1);
+}
 #endif
-
-    wdt_hal_context_t wdt_ctx = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
-    wdt_hal_write_protect_disable(&wdt_ctx);
-    wdt_hal_set_flashboot_en(&wdt_ctx, false);
-    wdt_hal_write_protect_enable(&wdt_ctx);
-}
-
-static void bootloader_init_uart_console(void)
-{
-    const int uart_num = 0;
-
-    uartAttach();
-    ets_install_uart_printf();
-    uart_tx_wait_idle(0);
-
-    const int uart_baud = CONFIG_ESP_CONSOLE_UART_BAUDRATE;
-    uart_div_modify(uart_num, (rtc_clk_apb_freq_get() << 4) / uart_baud);
-}
-
 
 esp_err_t bootloader_init(void)
 {
@@ -202,9 +182,13 @@ esp_err_t bootloader_init(void)
     /* config clock */
     bootloader_clock_configure();
     /* initialize uart console, from now on, we can use ets_printf */
-    bootloader_init_uart_console();
+    bootloader_console_init();
     /* read bootloader header */
     if ((ret = bootloader_read_bootloader_header()) != ESP_OK) {
+        goto err;
+    }
+    // read chip revision and check if it's compatible to bootloader
+    if ((ret = bootloader_check_bootloader_validity()) != ESP_OK) {
         goto err;
     }
     /* initialize spi flash */

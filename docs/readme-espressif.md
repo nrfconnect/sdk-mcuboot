@@ -43,7 +43,7 @@ cd ../..
 
 ## [Building the bootloader itself](#building-the-bootloader-itself)
 
-The MCUboot Espressif port bootloader is built using the toolchain and tools provided by ESP-IDF. Additional configuration related to MCUboot features and slot partitioning may be made using the `bootloader.conf`.
+The MCUboot Espressif port bootloader is built using the toolchain and tools provided by ESP-IDF. Additional configuration related to MCUboot features and slot partitioning may be made using the `port/<TARGET>/bootloader.conf` file or passing a custom config file using the `-DMCUBOOT_CONFIG_FILE` argument on the first step below.
 
 ---
 ***Note***
@@ -52,23 +52,25 @@ The MCUboot Espressif port bootloader is built using the toolchain and tools pro
 
 ---
 
-1. Compile and generate the ELF:
+1. Compile and generate the BIN:
 
 ```
-cmake -DCMAKE_TOOLCHAIN_FILE=tools/toolchain-<TARGET>.cmake -DMCUBOOT_TARGET=<TARGET> -B build -GNinja
-cmake --build build/
+cmake -DCMAKE_TOOLCHAIN_FILE=tools/toolchain-<TARGET>.cmake -DMCUBOOT_TARGET=<TARGET> -DMCUBOOT_FLASH_PORT=<PORT> -B build -GNinja
+ninja -C build/
 ```
 
-2. Convert the ELF to the final bootloader image, ready to be flashed:
+2. Flash MCUboot in your device:
 
 ```
-esptool.py --chip <TARGET> elf2image --flash_mode dio --flash_freq 40m --flash_size <FLASH_SIZE> -o build/mcuboot_<TARGET>.bin build/mcuboot_<TARGET>.elf
+ninja -C build/ flash
 ```
 
-3. Flash MCUboot in your device:
+If `MCUBOOT_FLASH_PORT` arg was not passed to `cmake`, the default `PORT` for flashing will be `/dev/ttyUSB0`.
+
+Alternatively:
 
 ```
-esptool.py -p <PORT> -b <BAUD> --before default_reset --after hard_reset --chip <TARGET> write_flash --flash_mode dio --flash_size <FLASH_SIZE> --flash_freq 40m <BOOTLOADER_FLASH_OFFSET> build/mcuboot_<TARGET>.bin
+esptool.py -p <PORT> -b <BAUD> --before default_reset --after no_reset --chip <TARGET> write_flash --flash_mode dio --flash_size <FLASH_SIZE> --flash_freq 40m <BOOTLOADER_FLASH_OFFSET> build/mcuboot_<TARGET>.bin
 ```
 ---
 ***Note***
@@ -93,6 +95,8 @@ Detected flash size: 4MB
 | 0x1000 | 0x1000 | 0x0000 | 0x0000 |
 
 ---
+
+3. Reset your device
 
 ## [Signing and flashing an application](#signing-and-flashing-an-application)
 
@@ -432,6 +436,7 @@ espsecure.py encrypt_flash_data --aes_xts --keyfile <FLASH_ENCRYPTION_KEY.bin> -
 
 ---
 ***Note***
+
 OTA updates are required to be sent plaintext. The reason is that, as said before, after the Flash Encryption is enabled all read/write operations are decrypted/encrypted in runtime, so as e.g. if pre-encrypted data is sent for an OTA update, it would be wrongly double-encrypted when the update agent writes to the flash.
 
 For updating with an image encrypted on the host, flash it through serial using `esptool.py` as above. **UART ROM Download Mode must not be disabled**.
@@ -537,5 +542,67 @@ imgtool.py sign --align 4 -v 1.0.0 -d "(1, 0.0.1+0)" -H 32 --pad-header -S 0x100
 ```
 
 Supposing that the image 0 is being signed, its version is 1.0.0 and it depends on image 1 with version at least 0.0.1+0.
+
+---
+
+## [Serial recovery mode](#serial-recovery-mode)
+
+Serial recovery mode allows management through MCUMGR (more information and how to install it: https://github.com/apache/mynewt-mcumgr-cli) for communicating and uploading a firmware to the device.
+
+---
+***Note***
+
+Supported on ESP32.
+
+---
+
+Configuration example:
+```
+# Enables the MCUboot Serial Recovery, that allows the use of
+# MCUMGR to upload a firmware through the serial port
+CONFIG_ESP_MCUBOOT_SERIAL=y
+# GPIO used to boot on Serial Recovery
+CONFIG_ESP_SERIAL_BOOT_GPIO_DETECT=32
+# GPIO input type (0 for Pull-down, 1 for Pull-up)
+CONFIG_ESP_SERIAL_BOOT_GPIO_INPUT_TYPE=0
+# GPIO signal value
+CONFIG_ESP_SERIAL_BOOT_GPIO_DETECT_VAL=1
+# Delay time for identify the GPIO signal
+CONFIG_ESP_SERIAL_BOOT_DETECT_DELAY_S=5
+# UART port used for serial communication
+CONFIG_ESP_SERIAL_BOOT_UART_NUM=1
+# GPIO for Serial RX signal
+CONFIG_ESP_SERIAL_BOOT_GPIO_RX=25
+# GPIO for Serial TX signal
+CONFIG_ESP_SERIAL_BOOT_GPIO_TX=26
+```
+
+When enabled, the bootloader checks the if the GPIO `<CONFIG_ESP_SERIAL_BOOT_GPIO_DETECT>` configured has the signal value `<CONFIG_ESP_SERIAL_BOOT_GPIO_DETECT_VAL>` for approximately `<CONFIG_ESP_SERIAL_BOOT_DETECT_DELAY_S>` seconds for entering the Serial recovery mode. Example: a button configured on GPIO 32 pressed for 5 seconds.
+
+Serial mode then uses the UART port configured for communication (`<CONFIG_ESP_SERIAL_BOOT_UART_NUM>`, pins `<CONFIG_ESP_SERIAL_BOOT_GPIO_RX>`, `<CONFIG_ESP_SERIAL_BOOT_GPIO_RX>`).
+
+### [MCUMGR image upload example](#mcumgr-image-upload-example)
+
+After entering the Serial recovery mode on the device, MCUMGR can be used as following:
+
+Configure the connection:
+```
+mcumgr conn add esp type="serial" connstring="dev=<PORT>,baud=115200,mtu=256"
+```
+
+Upload the image (the process may take some time):
+```
+mcumgr -c esp image upload <IMAGE_BIN>
+```
+
+Reset the device:
+```
+mcumgr -c esp reset
+```
+
+---
+:warning: ***ATTENTION***
+
+*Serial recovery mode uploads the image to the PRIMARY_SLOT, therefore if the upload process gets interrupted the image may be corrupted and unable to boot*
 
 ---
