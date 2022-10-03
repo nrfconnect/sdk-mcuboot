@@ -318,7 +318,8 @@ static off_t erase_range(const struct flash_area *fap, off_t start, off_t end)
     }
 
     size = flash_sector_get_off(&sect) + flash_sector_get_size(&sect) - start;
-    BOOT_LOG_INF("Erasing range 0x%x:0x%x", start, start + size - 1);
+    BOOT_LOG_INF("Erasing range 0x%jx:0x%jx", (intmax_t)start,
+		 (intmax_t)(start + size - 1));
 
     rc = flash_area_erase(fap, start, size);
     if (rc != 0) {
@@ -848,7 +849,14 @@ boot_serial_read_console(const struct boot_uart_funcs *f,int timeout_in_ms)
 
     off = 0;
     while (timeout_in_ms > 0 || bs_entry) {
+        /*
+         * Don't enter CPU idle state here if timeout based serial recovery is
+         * used as otherwise the boot process hangs forever, waiting for input
+         * from serial console (if single-thread mode is used).
+         */
+#ifndef MCUBOOT_SERIAL_WAIT_FOR_DFU
         MCUBOOT_CPU_IDLE();
+#endif
         MCUBOOT_WATCHDOG_FEED();
 #ifdef MCUBOOT_SERIAL_WAIT_FOR_DFU
         uint32_t start = k_uptime_get_32();
