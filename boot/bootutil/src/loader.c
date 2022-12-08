@@ -2269,15 +2269,12 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
 
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
 #ifdef PM_S1_ADDRESS
-	/* Patch needed for NCS. If secure boot is enabled, then mcuboot
-	 * will be stored in either partition S0 or S1. Image 1 primary
-	 * will point to the 'other' Sx partition. Hence, image 1 primary
-	 * does not contain a valid image until mcuboot has been upgraded.
-	 * Note that B0 will perform validation of the active mcuboot image,
-	 * so there is no security lost by skipping this check for image 1
-	 * primary.
+	/* Patch needed for NCS. Image 1 primary is the currently
+	 * executing MCUBoot image, and is therefore already trusted and
+	 * does not need validation.
 	 */
-	if (BOOT_CURR_IMG(state) == 0)
+    bool image_needs_validation = BOOT_CURR_IMG(state) != 1;
+	if (image_needs_validation)
 #endif
 	{
             FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_PRIMARY_SLOT, NULL);
