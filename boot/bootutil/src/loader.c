@@ -2269,19 +2269,19 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
 
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
 #ifdef PM_S1_ADDRESS
-	/* Patch needed for NCS. Image 1 primary is the currently
-	 * executing MCUBoot image, and is therefore already trusted and
-	 * does not need validation.
-	 */
-    bool image_needs_validation = BOOT_CURR_IMG(state) != 1;
-	if (image_needs_validation)
+        /* Patch needed for NCS. Image 1 primary is the currently
+         * executing MCUBoot image, and is therefore already validated by NSIB and
+         * does not need to also be validated by MCUBoot.
+         */
+        bool image_validated_by_nsib = BOOT_CURR_IMG(state) == 1;
+        if (!image_validated_by_nsib)
 #endif
-	{
+        {
             FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_PRIMARY_SLOT, NULL);
             if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
                 goto out;
             }
-	}
+        }
 #else
         /* Even if we're not re-validating the primary slot, we could be booting
          * onto an empty flash chip. At least do a basic sanity check that
