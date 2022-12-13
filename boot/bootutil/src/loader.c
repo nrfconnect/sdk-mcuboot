@@ -2296,9 +2296,14 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 #endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
 
+#ifdef PM_S1_ADDRESS
+        if (!image_validated_by_nsib)
+#endif
+        {
         rc = boot_update_hw_rollback_protection(state);
         if (rc != 0) {
             goto out;
+        }
         }
 
         rc = boot_add_shared_data(state, BOOT_PRIMARY_SLOT);
