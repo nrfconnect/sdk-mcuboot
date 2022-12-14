@@ -78,10 +78,7 @@
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
-#ifndef MCUBOOT_SERIAL_MAX_RECEIVE_SIZE
-#define MCUBOOT_SERIAL_MAX_RECEIVE_SIZE 512
-#endif
-
+#define BOOT_SERIAL_INPUT_MAX   512
 #define BOOT_SERIAL_OUT_MAX     (128 * BOOT_IMAGE_NUMBER)
 
 #ifdef __ZEPHYR__
@@ -110,8 +107,8 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define IMAGES_ITER(x)
 #endif
 
-static char in_buf[MCUBOOT_SERIAL_MAX_RECEIVE_SIZE + 1];
-static char dec_buf[MCUBOOT_SERIAL_MAX_RECEIVE_SIZE + 1];
+static char in_buf[BOOT_SERIAL_INPUT_MAX + 1];
+static char dec_buf[BOOT_SERIAL_INPUT_MAX + 1];
 const struct boot_uart_funcs *boot_uf;
 static struct nmgr_hdr *bs_hdr;
 static bool bs_entry;
