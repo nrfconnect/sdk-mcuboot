@@ -16,4 +16,9 @@
  */
 void nrf_cleanup_peripheral(void);
 
+/**
+ * Perform cleanup of non-secure RAM that may have been used by MCUBoot.
+ */
+void nrf_cleanup_ns_ram(void);
+
 #endif
