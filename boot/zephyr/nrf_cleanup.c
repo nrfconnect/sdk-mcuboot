@@ -20,6 +20,10 @@
 
 #include <string.h>
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#endif
+
 #define NRF_UARTE_SUBSCRIBE_CONF_OFFS offsetof(NRF_UARTE_Type, SUBSCRIBE_STARTRX)
 #define NRF_UARTE_SUBSCRIBE_CONF_SIZE (offsetof(NRF_UARTE_Type, EVENTS_CTS) -\
                                        NRF_UARTE_SUBSCRIBE_CONF_OFFS)
@@ -81,3 +85,12 @@ void nrf_cleanup_peripheral(void)
 #endif
     nrf_cleanup_clock();
 }
+
+#if USE_PARTITION_MANAGER \
+	&& defined(CONFIG_ARM_TRUSTZONE_M) \
+	&& defined(PM_SRAM_NONSECURE_NAME)
+void nrf_cleanup_ns_ram(void)
+{
+	memset((void *) PM_SRAM_NONSECURE_ADDRESS, 0, PM_SRAM_NONSECURE_SIZE);
+}
+#endif
