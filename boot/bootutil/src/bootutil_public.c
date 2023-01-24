@@ -618,8 +618,8 @@ boot_set_confirmed_multi(int image_index)
         break;
 
     case BOOT_MAGIC_UNSET:
-        /* Already confirmed. */
-        goto done;
+        /* Confirm needed; proceed. */
+        break;
 
     case BOOT_MAGIC_BAD:
         /* Unexpected state. */
