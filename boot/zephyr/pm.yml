@@ -1,4 +1,4 @@
-#include <autoconf.h>
+# include <autoconf.h>
 
 mcuboot:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT
@@ -15,23 +15,23 @@ mcuboot_primary:
 
 # Partition for secondary slot is not created if building in single application
 # slot configuration.
-#if !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_DIRECT_XIP)
+# if !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_DIRECT_XIP)
 mcuboot_secondary:
   share_size: [mcuboot_primary]
-#if defined(CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY)
+# if defined(CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY)
   region: external_flash
   placement:
     align: {start: 4}
-#else
+# else
   placement:
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
     align_next: CONFIG_FPROTECT_BLOCK_SIZE # Ensure that the next partition does not interfere with this image
     after: mcuboot_primary
-#endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
+# endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
 
-#endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_DIRECT_XIP) */
+# endif /* !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_BOOT_DIRECT_XIP) */
 
-#if CONFIG_BOOT_DIRECT_XIP
+# if CONFIG_BOOT_DIRECT_XIP
 
 # Direct XIP is enabled, reserve area for metadata (padding) and name the
 # partition so that its clear that it is not the secondary slot, but the direct
@@ -51,15 +51,15 @@ mcuboot_secondary_app:
 mcuboot_secondary:
   span: [mcuboot_secondary_pad, mcuboot_secondary_app]
 
-#endif /* CONFIG_BOOT_DIRECT_XIP */
+# endif /* CONFIG_BOOT_DIRECT_XIP */
 
-#if CONFIG_BOOT_SWAP_USING_SCRATCH
+# if CONFIG_BOOT_SWAP_USING_SCRATCH
 mcuboot_scratch:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
   placement:
     after: app
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
-#endif /* CONFIG_BOOT_SWAP_USING_SCRATCH */
+# endif /* CONFIG_BOOT_SWAP_USING_SCRATCH */
 
 # Padding placed before image to boot. This reserves space for the MCUboot image header
 # and it ensures that the boot image gets linked with the correct address offset in flash.
@@ -69,19 +69,24 @@ mcuboot_pad:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_PAD
   placement:
     before: [mcuboot_primary_app]
-#ifdef CONFIG_FPROTECT
+# ifdef CONFIG_FPROTECT
     align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
-#endif
+# endif
 
-#if (CONFIG_NRF53_MCUBOOT_PRIMARY_1_RAM_FLASH)
+# if (CONFIG_NRF53_MCUBOOT_PRIMARY_1_RAM_FLASH)
 mcuboot_primary_1:
   region: ram_flash
   size: CONFIG_NRF53_RAM_FLASH_SIZE
-#endif /* CONFIG_NRF53_MULTI_IMAGE_UPDATE */
+# endif /* CONFIG_NRF53_MULTI_IMAGE_UPDATE */
 
-#if (CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+# if (CONFIG_NRF53_MULTI_IMAGE_UPDATE)
 mcuboot_secondary_1:
+# if (CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY_1)
   region: external_flash
+# endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY_1 */
   size: CONFIG_NRF53_RAM_FLASH_SIZE
+  placement:
+    after: mcuboot_secondary
+    align: {start: 4}
 
-#endif /* CONFIG_NRF53_MULTI_IMAGE_UPDATE */
+# endif /* CONFIG_NRF53_MULTI_IMAGE_UPDATE */
