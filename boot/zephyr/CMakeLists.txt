@@ -310,6 +310,7 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
     ${KEY_FILE}
     > ${GENERATED_PUBKEY}
     DEPENDS ${KEY_FILE}
+    USES_TERMINAL
     )
   zephyr_library_sources(${GENERATED_PUBKEY})
 endif()
