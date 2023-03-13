@@ -108,15 +108,6 @@ boot_read_image_headers(struct boot_loader_state *state, bool require_all,
              *
              * Failure to read any headers is a fatal error.
              */
-#ifdef PM_S1_ADDRESS
-            /* Patch needed for NCS. The primary slot of the second image
-             * (image 1) will not contain a valid image header until an upgrade
-             * of mcuboot has happened (filling S1 with the new version).
-             */
-            if (BOOT_CURR_IMG(state) == 1 && i == 0) {
-                continue;
-            }
-#endif /* PM_S1_ADDRESS */
             if (i > 0 && !require_all) {
                 return 0;
             } else {
@@ -808,24 +799,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
             goto out;
         }
 
-        uint32_t min_addr, max_addr;
-
-#ifdef PM_CPUNET_APP_ADDRESS
-        /* The primary slot for the network core is emulated in RAM.
-         * Its flash_area hasn't got relevant boundaries.
-         * Therfore need to override its boundaries for the check.
-         */
-        if (BOOT_CURR_IMG(state) == 1) {
-            min_addr = PM_CPUNET_APP_ADDRESS;
-            max_addr = PM_CPUNET_APP_ADDRESS + PM_CPUNET_APP_SIZE;
-        } else
-#endif
-        {
-            min_addr = pri_fa->fa_off;
-            max_addr = pri_fa->fa_off + pri_fa->fa_size;
-        }
-
-        if (reset_value < min_addr || reset_value> (max_addr)) {
+        if (reset_value < pri_fa->fa_off || reset_value> (pri_fa->fa_off + pri_fa->fa_size)) {
             BOOT_LOG_ERR("Reset address of image in secondary slot is not in the primary slot");
             BOOT_LOG_ERR("Erasing image from secondary slot");
 
@@ -908,42 +882,6 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
     fih_int fih_rc = FIH_FAILURE;
-#ifdef PM_S1_ADDRESS
-    /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
-     * B1 slot S0 or S1) share the same secondary slot, we need to check
-     * whether the update candidate in the secondary slot is intended for
-     * image 0 or image 1 primary by looking at the address of the reset
-     * vector. Note that there are good reasons for not using img_num from
-     * the swap info.
-     */
-    const struct flash_area *secondary_fa =
-	    BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-    struct image_header *hdr =
-	    (struct image_header *)secondary_fa->fa_off;
-
-    if (hdr->ih_magic == IMAGE_MAGIC) {
-	    const struct flash_area *primary_fa;
-	    uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
-	    uint32_t *vtable = (uint32_t *)(vtable_addr);
-	    uint32_t reset_addr = vtable[1];
-	    int rc = flash_area_open(
-			    flash_area_id_from_multi_image_slot(
-				    BOOT_CURR_IMG(state),
-				    BOOT_PRIMARY_SLOT),
-			    &primary_fa);
-
-	    if (rc != 0) {
-		    return BOOT_SWAP_TYPE_FAIL;
-	    }
-	    /* Get start and end of primary slot for current image */
-	    if (reset_addr < primary_fa->fa_off ||
-	        reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
-		    /* The image in the secondary slot is not intended for this image
-		    */
-		    return BOOT_SWAP_TYPE_NONE;
-	    }
-    }
-#endif
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -2221,19 +2159,9 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
-#ifdef PM_S1_ADDRESS
-        /* Patch needed for NCS. Image 1 primary is the currently
-         * executing MCUBoot image, and is therefore already validated by NSIB and
-         * does not need to also be validated by MCUBoot.
-         */
-        bool image_validated_by_nsib = BOOT_CURR_IMG(state) == 1;
-        if (!image_validated_by_nsib)
-#endif
-        {
-            FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_PRIMARY_SLOT, NULL);
-            if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
-                goto out;
-            }
+        FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_PRIMARY_SLOT, NULL);
+        if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
+            goto out;
         }
 #else
         /* Even if we're not re-validating the primary slot, we could be booting
@@ -2249,14 +2177,9 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 #endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
 
-#ifdef PM_S1_ADDRESS
-        if (!image_validated_by_nsib)
-#endif
-        {
         rc = boot_update_hw_rollback_protection(state);
         if (rc != 0) {
             goto out;
-        }
         }
 
         rc = boot_add_shared_data(state, BOOT_PRIMARY_SLOT);
