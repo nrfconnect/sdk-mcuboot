@@ -59,16 +59,10 @@ config BOOT_SERIAL_UNALIGNED_BUFFER_SIZE
 	  requirements. Set to 0 to disable.
 
 config BOOT_MAX_LINE_INPUT_LEN
-	int "Maximum input line length"
+	int "Maximum command line length"
 	default 512
 	help
-	  Maximum length of input serial port buffer.
-
-config BOOT_SERIAL_MAX_RECEIVE_SIZE
-	int "Maximum command line length"
-	default 1024
-	help
-	  Maximum length of received commands via the serial port.
+	  Maximum length of commands transported over the serial port.
 
 config BOOT_SERIAL_DETECT_PORT
 	string "GPIO device to trigger serial recovery mode (DEPRECATED)"
