@@ -360,7 +360,7 @@ zephyr_library_sources(
 )
 endif()
 
-if(CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL OR CONFIG_MCUBOOT_CLEANUP_NONSECURE_RAM)
+if(CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL)
 zephyr_library_sources(
   ${BOOT_DIR}/zephyr/nrf_cleanup.c
 )
