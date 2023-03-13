@@ -35,6 +35,7 @@
 #include "bootutil/image.h"
 #include "bootutil/bootutil.h"
 #include "bootutil_priv.h"
+#include "bootutil_misc.h"
 #include "bootutil/bootutil_log.h"
 #include "bootutil/fault_injection_hardening.h"
 #ifdef MCUBOOT_ENC_IMAGES
@@ -63,17 +64,17 @@ int boot_current_slot;
  */
 #ifdef MCUBOOT_FIH_PROFILE_OFF
 inline
-fih_int boot_fih_memequal(const void *s1, const void *s2, size_t n)
+fih_ret boot_fih_memequal(const void *s1, const void *s2, size_t n)
 {
     return memcmp(s1, s2, n);
 }
 #else
-fih_int boot_fih_memequal(const void *s1, const void *s2, size_t n)
+fih_ret boot_fih_memequal(const void *s1, const void *s2, size_t n)
 {
     size_t i;
     uint8_t *s1_p = (uint8_t*) s1;
     uint8_t *s2_p = (uint8_t*) s2;
-    fih_int ret = FIH_FAILURE;
+    FIH_DECLARE(ret, FIH_FAILURE);
 
     for (i = 0; i < n; i++) {
         if (s1_p[i] != s2_p[i]) {
@@ -185,39 +186,6 @@ boot_status_off(const struct flash_area *fap)
     return flash_area_get_size(fap) - off_from_end;
 }
 
-static int
-boot_magic_decode(const uint8_t *magic)
-{
-    if (memcmp(magic, BOOT_IMG_MAGIC, BOOT_MAGIC_SZ) == 0) {
-        return BOOT_MAGIC_GOOD;
-    }
-    return BOOT_MAGIC_BAD;
-}
-
-static inline uint32_t
-boot_magic_off(const struct flash_area *fap)
-{
-    return flash_area_get_size(fap) - BOOT_MAGIC_SZ;
-}
-
-static inline uint32_t
-boot_image_ok_off(const struct flash_area *fap)
-{
-    return ALIGN_DOWN(boot_magic_off(fap) - BOOT_MAX_ALIGN, BOOT_MAX_ALIGN);
-}
-
-static inline uint32_t
-boot_copy_done_off(const struct flash_area *fap)
-{
-    return boot_image_ok_off(fap) - BOOT_MAX_ALIGN;
-}
-
-static inline uint32_t
-boot_swap_size_off(const struct flash_area *fap)
-{
-    return boot_swap_info_off(fap) - BOOT_MAX_ALIGN;
-}
-
 #ifdef MCUBOOT_ENC_IMAGES
 static inline uint32_t
 boot_enc_key_off(const struct flash_area *fap, uint8_t slot)
@@ -239,19 +207,16 @@ boot_enc_key_off(const struct flash_area *fap, uint8_t slot)
  *
  * @returns 0 on success, -1 on errors
  */
-static int
+int
 boot_find_status(int image_index, const struct flash_area **fap)
 {
-    uint8_t magic[BOOT_MAGIC_SZ];
-    uint32_t off;
-    uint8_t areas[2] = {
+    uint8_t areas[] = {
 #if MCUBOOT_SWAP_USING_SCRATCH
         FLASH_AREA_IMAGE_SCRATCH,
 #endif
         FLASH_AREA_IMAGE_PRIMARY(image_index),
     };
     unsigned int i;
-    int rc;
 
     /*
      * In the middle a swap, tries to locate the area that is currently
@@ -262,78 +227,68 @@ boot_find_status(int image_index, const struct flash_area **fap)
      */
 
     for (i = 0; i < sizeof(areas) / sizeof(areas[0]); i++) {
-        rc = flash_area_open(areas[i], fap);
-        if (rc != 0) {
-            return rc;
+        uint8_t magic[BOOT_MAGIC_SZ];
+
+        if (flash_area_open(areas[i], fap)) {
+            break;
         }
 
-        off = boot_magic_off(*fap);
-        rc = flash_area_read(*fap, off, magic, BOOT_MAGIC_SZ);
-        flash_area_close(*fap);
-
-        if (rc != 0) {
-            return rc;
+        if (flash_area_read(*fap, boot_magic_off(*fap), magic, BOOT_MAGIC_SZ)) {
+            flash_area_close(*fap);
+            break;
         }
 
         if (BOOT_MAGIC_GOOD == boot_magic_decode(magic)) {
             return 0;
         }
 
+        flash_area_close(*fap);
     }
 
     /* If we got here, no magic was found */
+    fap = NULL;
     return -1;
 }
 
 int
-boot_read_swap_size(int image_index, uint32_t *swap_size)
+boot_read_swap_size(const struct flash_area *fap, uint32_t *swap_size)
 {
     uint32_t off;
-    const struct flash_area *fap;
     int rc;
 
-    rc = boot_find_status(image_index, &fap);
-    if (rc == 0) {
-        off = boot_swap_size_off(fap);
-        rc = flash_area_read(fap, off, swap_size, sizeof *swap_size);
-        flash_area_close(fap);
-    }
+    off = boot_swap_size_off(fap);
+    rc = flash_area_read(fap, off, swap_size, sizeof *swap_size);
 
     return rc;
 }
 
 #ifdef MCUBOOT_ENC_IMAGES
 int
-boot_read_enc_key(int image_index, uint8_t slot, struct boot_status *bs)
+boot_read_enc_key(const struct flash_area *fap, uint8_t slot, struct boot_status *bs)
 {
     uint32_t off;
-    const struct flash_area *fap;
 #if MCUBOOT_SWAP_SAVE_ENCTLV
     int i;
 #endif
     int rc;
 
-    rc = boot_find_status(image_index, &fap);
-    if (rc == 0) {
-        off = boot_enc_key_off(fap, slot);
+    off = boot_enc_key_off(fap, slot);
 #if MCUBOOT_SWAP_SAVE_ENCTLV
-        rc = flash_area_read(fap, off, bs->enctlv[slot], BOOT_ENC_TLV_ALIGN_SIZE);
-        if (rc == 0) {
-            for (i = 0; i < BOOT_ENC_TLV_ALIGN_SIZE; i++) {
-                if (bs->enctlv[slot][i] != 0xff) {
-                    break;
-                }
-            }
-            /* Only try to decrypt non-erased TLV metadata */
-            if (i != BOOT_ENC_TLV_ALIGN_SIZE) {
-                rc = boot_enc_decrypt(bs->enctlv[slot], bs->enckey[slot]);
+    rc = flash_area_read(fap, off, bs->enctlv[slot], BOOT_ENC_TLV_ALIGN_SIZE);
+    if (rc == 0) {
+        for (i = 0; i < BOOT_ENC_TLV_ALIGN_SIZE; i++) {
+            if (bs->enctlv[slot][i] != 0xff) {
+                break;
             }
         }
-#else
-        rc = flash_area_read(fap, off, bs->enckey[slot], BOOT_ENC_KEY_ALIGN_SIZE);
-#endif
-        flash_area_close(fap);
+        /* Only try to decrypt non-erased TLV metadata */
+        if (i != BOOT_ENC_TLV_ALIGN_SIZE) {
+            rc = boot_enc_decrypt(bs->enctlv[slot], bs->enckey[slot]);
+        }
     }
+#else
+    rc = flash_area_read(fap, off, bs->enckey[slot], BOOT_ENC_KEY_ALIGN_SIZE);
+#endif
 
     return rc;
 }
@@ -390,7 +345,7 @@ boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
 
 uint32_t bootutil_max_image_size(const struct flash_area *fap)
 {
-#if defined(MCUBOOT_SWAP_USING_SCRATCH)
+#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SINGLE_APPLICATION_SLOT)
     return boot_status_off(fap);
 #elif defined(MCUBOOT_SWAP_USING_MOVE)
     struct flash_sector sector;

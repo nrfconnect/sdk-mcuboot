@@ -40,7 +40,7 @@
 #elif __ESPRESSIF__
 #include <bootloader_utility.h>
 #include <esp_rom_sys.h>
-#include <rom/crc.h>
+#include <esp_crc.h>
 #include <endian.h>
 #include <mbedtls/base64.h>
 #else
@@ -78,7 +78,10 @@
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
-#define BOOT_SERIAL_INPUT_MAX   512
+#ifndef MCUBOOT_SERIAL_MAX_RECEIVE_SIZE
+#define MCUBOOT_SERIAL_MAX_RECEIVE_SIZE 512
+#endif
+
 #define BOOT_SERIAL_OUT_MAX     (128 * BOOT_IMAGE_NUMBER)
 
 #ifdef __ZEPHYR__
@@ -107,8 +110,8 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define IMAGES_ITER(x)
 #endif
 
-static char in_buf[BOOT_SERIAL_INPUT_MAX + 1];
-static char dec_buf[BOOT_SERIAL_INPUT_MAX + 1];
+static char in_buf[MCUBOOT_SERIAL_MAX_RECEIVE_SIZE + 1];
+static char dec_buf[MCUBOOT_SERIAL_MAX_RECEIVE_SIZE + 1];
 const struct boot_uart_funcs *boot_uf;
 static struct nmgr_hdr *bs_hdr;
 static bool bs_entry;
@@ -232,14 +235,14 @@ bs_list(char *buf, int len)
                 flash_area_read(fap, 0, &hdr, sizeof(hdr));
             }
 
-            fih_int fih_rc = FIH_FAILURE;
+            FIH_DECLARE(fih_rc, FIH_FAILURE);
 
             if (hdr.ih_magic == IMAGE_MAGIC)
             {
                 BOOT_HOOK_CALL_FIH(boot_image_check_hook,
-                                   fih_int_encode(BOOT_HOOK_REGULAR),
+                                   FIH_BOOT_HOOK_REGULAR,
                                    fih_rc, image_index, slot);
-                if (fih_eq(fih_rc, BOOT_HOOK_REGULAR))
+                if (FIH_EQ(fih_rc, FIH_BOOT_HOOK_REGULAR))
                 {
 #ifdef MCUBOOT_ENC_IMAGES
                     if (slot == 0 && IS_ENCRYPTED(&hdr)) {
@@ -259,7 +262,7 @@ bs_list(char *buf, int len)
 
             flash_area_close(fap);
 
-            if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
+            if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
                 continue;
             }
 
@@ -508,7 +511,38 @@ bs_upload(char *buf, int len)
 
     BOOT_LOG_INF("Writing at 0x%x until 0x%x", curr_off, curr_off + img_chunk_len);
     /* Write flash aligned chunk, note that img_chunk_len now holds aligned length */
+#if defined(MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE) && MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE > 0
+    if (flash_area_align(fap) > 1 &&
+        (((size_t)img_chunk) & (flash_area_align(fap) - 1)) != 0) {
+        /* Buffer address incompatible with write address, use buffer to write */
+        uint8_t write_size = MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE;
+        uint8_t wbs_aligned[MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE];
+
+        while (img_chunk_len >= flash_area_align(fap)) {
+            if (write_size > img_chunk_len) {
+                write_size = img_chunk_len;
+            }
+
+            memset(wbs_aligned, flash_area_erased_val(fap), sizeof(wbs_aligned));
+            memcpy(wbs_aligned, img_chunk, write_size);
+
+            rc = flash_area_write(fap, curr_off, wbs_aligned, write_size);
+
+            if (rc != 0) {
+                goto out;
+            }
+
+            curr_off += write_size;
+            img_chunk += write_size;
+            img_chunk_len -= write_size;
+        }
+    } else {
+        rc = flash_area_write(fap, curr_off, img_chunk, img_chunk_len);
+    }
+#else
     rc = flash_area_write(fap, curr_off, img_chunk, img_chunk_len);
+#endif
+
     if (rc == 0 && rem_bytes) {
         /* Non-zero rem_bytes means that last chunk needs alignment; the aligned
          * part, in the img_chunk_len - rem_bytes count bytes, has already been
@@ -552,7 +586,7 @@ out:
     BOOT_LOG_INF("RX: 0x%x", rc);
     zcbor_map_start_encode(cbor_state, 10);
     zcbor_tstr_put_lit_cast(cbor_state, "rc");
-    zcbor_uint32_put(cbor_state, rc);
+    zcbor_int32_put(cbor_state, rc);
     if (rc == 0) {
         zcbor_tstr_put_lit_cast(cbor_state, "off");
         zcbor_uint32_put(cbor_state, curr_off);
@@ -578,7 +612,7 @@ bs_rc_rsp(int rc_code)
 {
     zcbor_map_start_encode(cbor_state, 10);
     zcbor_tstr_put_lit_cast(cbor_state, "rc");
-    zcbor_uint32_put(cbor_state, rc_code);
+    zcbor_int32_put(cbor_state, rc_code);
     zcbor_map_end_encode(cbor_state, 10);
     boot_serial_output();
 }
@@ -623,22 +657,34 @@ out:
 static void
 bs_reset(char *buf, int len)
 {
-    bs_rc_rsp(0);
+    int rc = BOOT_HOOK_CALL(boot_reset_request_hook, 0, false);
+    if (rc == BOOT_RESET_REQUEST_HOOK_BUSY) {
+	rc = MGMT_ERR_EBUSY;
+    } else {
+        /* Currently whatever else is returned it is just converted
+         * to 0/no error. Boot serial starts accepting "force" parameter
+         * in command this needs to change.
+         */
+         rc = 0;
+    }
+    bs_rc_rsp(rc);
 
+    if (rc == 0) {
 #ifdef __ZEPHYR__
 #ifdef CONFIG_MULTITHREADING
-    k_sleep(K_MSEC(250));
+        k_sleep(K_MSEC(250));
 #else
-    k_busy_wait(250000);
+        k_busy_wait(250000);
 #endif
-    sys_reboot(SYS_REBOOT_COLD);
+        sys_reboot(SYS_REBOOT_COLD);
 #elif __ESPRESSIF__
-    esp_rom_delay_us(250000);
-    bootloader_reset();
+        esp_rom_delay_us(250000);
+        bootloader_reset();
 #else
-    os_cputime_delay_usecs(250000);
-    hal_system_reset();
+        os_cputime_delay_usecs(250000);
+        hal_system_reset();
 #endif
+    }
 }
 
 /*
@@ -732,8 +778,8 @@ boot_serial_output(void)
     crc =  crc16_itu_t(crc, data, len);
 #elif __ESPRESSIF__
     /* For ESP32 it was used the CRC API in rom/crc.h */
-    crc =  ~crc16_be(~CRC16_INITIAL_CRC, (uint8_t *)bs_hdr, sizeof(*bs_hdr));
-    crc =  ~crc16_be(~crc, (uint8_t *)data, len);
+    crc =  ~esp_crc16_be(~CRC16_INITIAL_CRC, (uint8_t *)bs_hdr, sizeof(*bs_hdr));
+    crc =  ~esp_crc16_be(~crc, (uint8_t *)data, len);
 #else
     crc = crc16_ccitt(CRC16_INITIAL_CRC, bs_hdr, sizeof(*bs_hdr));
     crc = crc16_ccitt(crc, data, len);
@@ -819,7 +865,7 @@ boot_serial_in_dec(char *in, int inlen, char *out, int *out_off, int maxout)
 #ifdef __ZEPHYR__
     crc = crc16_itu_t(CRC16_INITIAL_CRC, out, len);
 #elif __ESPRESSIF__
-    crc = ~crc16_be(~CRC16_INITIAL_CRC, (uint8_t *)out, len);
+    crc = ~esp_crc16_be(~CRC16_INITIAL_CRC, (uint8_t *)out, len);
 #else
     crc = crc16_ccitt(CRC16_INITIAL_CRC, out, len);
 #endif

@@ -13,21 +13,27 @@ The first step required for Zephyr is making sure your board has flash
 partitions defined in its device tree. These partitions are:
 
 - `boot_partition`: for MCUboot itself
-- `image_0_primary_partition`: the primary slot of Image 0
-- `image_0_secondary_partition`: the secondary slot of Image 0
+- `slot0_partition`: the primary slot of Image 0
+- `slot1_partition`: the secondary slot of Image 0
+
+It is not recommended to use the swap-using-scratch algorithm of MCUboot, but
+if this operating mode is desired then the following flash partition is also
+needed (see end of this help file for details on creating a scratch partition
+and how to use the swap-using-scratch algorithm):
+
 - `scratch_partition`: the scratch slot
 
 Currently, the two image slots must be contiguous. If you are running
 MCUboot as your stage 1 bootloader, `boot_partition` must be configured
 so your SoC runs it out of reset. If there are multiple updateable images
 then the corresponding primary and secondary partitions must be defined for
-the rest of the images too (e.g. `image_1_primary_partition` and
-`image_1_secondary_partition` for Image 1).
+the rest of the images too (for example, `slot2_partition` and
+`slot3_partition` for Image 1).
 
 The flash partitions are typically defined in the Zephyr boards folder, in a
 file named `boards/<arch>/<board>/<board>.dts`. An example `.dts` file with
 flash partitions defined is the frdm_k64f's in
-`boards/arm/frdm_k64f/frdm_k64f.dts`. Make sure the labels in your board's
+`boards/arm/frdm_k64f/frdm_k64f.dts`. Make sure the DT node labels in your board's
 `.dts` file match the ones used there.
 
 ## Installing requirements and dependencies
@@ -53,9 +59,7 @@ it as usual:
 
 ```
   cd boot/zephyr
-  mkdir build && cd build
-  cmake -GNinja -DBOARD=<board> ..
-  ninja
+  west build -b <board>
 ```
 
 In addition to the partitions defined in DTS, some additional
@@ -67,9 +71,8 @@ MCUboot on a per-SoC family basis.
 
 After building the bootloader, the binaries should reside in
 `build/zephyr/zephyr.{bin,hex,elf}`, where `build` is the build
-directory you chose when running `cmake`. Use the Zephyr build
-system `flash` target to flash these binaries, usually by running
-`make flash` (or `ninja flash`, etc.) from the build directory. Depending
+directory you chose when running `west build`. Use `west flash`
+to flash these binaries from the build directory. Depending
 on the target and flash tool used, this might erase the whole of the flash
 memory (mass erase) or only the sectors where the bootloader resides prior to
 programming the bootloader image itself.
@@ -148,15 +151,61 @@ The argument to `-t` should be the desired key type.  See the
 
 The generated keypair above contains both the public and the private
 key.  It is necessary to extract the public key and insert it into the
-bootloader.  The keys live in `boot/zephyr/keys.c`, and can be
-extracted using imgtool:
+bootloader.  Use the ``CONFIG_BOOT_SIGNATURE_KEY_FILE`` Kconfig option to
+provide the path to the key file so the build system can extract
+the public key in a format usable by the C compiler.
+The generated public key is saved in `build/zephyr/autogen-pubkey.h`, which is included
+by the `boot/zephyr/keys.c`.
 
-```
-    $ ./scripts/imgtool.py getpub -k mykey.pem
-```
+Currently, the Zephyr RTOS port limits its support to one keypair at the time,
+although MCUboot's key management infrastructure supports multiple keypairs.
 
-This will output the public key as a C array that can be dropped
-directly into the `keys.c` file.
-
-Once this is done, this new keypair file (`mykey.pem` in this
+Once MCUboot is built, this new keypair file (`mykey.pem` in this
 example) can be used to sign images.
+
+## Using swap-using-scratch flash algorithm
+
+To use the swap-using-scratch flash algorithm, a scratch partition needs to be
+present for the target board which is used for holding the data being swapped
+from both slots, this section must be at least as big as the largest sector
+size of the 2 partitions (e.g. if a device has a primary slot in main flash
+with a sector size of 512 bytes and secondar slot in external off-chip flash
+with a sector size of 4KB then the scratch area must be at least 4KB in size).
+The number of sectors must also be evenly divisable by this sector size, e.g.
+4KB, 8KB, 12KB, 16KB are allowed, 7KB, 7.5KB are not. This scratch partition
+needs adding to the .dts file for the board, e.g. for the nrf52dk_nrf52832
+board thus would involve updating
+`<zephyr>/boards/arm/nrf52dk_nrf52832/nrf52dk_nrf52832.dts` with:
+
+```
+    boot_partition: partition@0 {
+        label = "mcuboot";
+        reg = <0x00000000 0xc000>;
+    };
+    slot0_partition: partition@c000 {
+        label = "image-0";
+        reg = <0x0000C000 0x37000>;
+    };
+    slot1_partition: partition@43000 {
+        label = "image-1";
+        reg = <0x00043000 0x37000>;
+    };
+    storage_partition: partition@7a000 {
+        label = "storage";
+        reg = <0x0007a000 0x00006000>;
+    };
+```
+
+Which would make the application size 220KB and scratch size 24KB (the nRF52832
+has a 4KB sector size so the size of the scratch partition can be reduced at
+the cost of vastly reducing flash lifespan, e.g. for a 32KB firmware update
+with an 8KB scratch area, the scratch area would be erased and programmed 8
+times per image upgrade/revert). To configure MCUboot to work in
+swap-using-scratch mode, the Kconfig value must be set when building it:
+`CONFIG_BOOT_SWAP_USING_SCRATCH=y`.
+
+Note that it is possible for an application to get into a stuck state when
+swap-using-scratch is used whereby an application has loaded a firmware update
+and marked it as test/confirmed but MCUboot will not swap the images and
+erasing the secondary slot from the zephyr application returns an error
+because the slot is marked for upgrade.
