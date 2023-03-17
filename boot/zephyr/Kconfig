@@ -421,6 +421,8 @@ config BOOT_USB_DFU_WAIT
 	select USB_DEVICE_STACK
 	select USB_DFU_CLASS
 	select IMG_MANAGER
+	select STREAM_FLASH
+	select MULTITHREADING
 	help
 	  If y, MCUboot waits for a prescribed duration of time to allow
 	  for USB DFU to be invoked. Please note DFU always updates the
@@ -431,6 +433,8 @@ config BOOT_USB_DFU_GPIO
 	select USB_DEVICE_STACK
 	select USB_DFU_CLASS
 	select IMG_MANAGER
+	select STREAM_FLASH
+	select MULTITHREADING
 	help
 	  If y, MCUboot uses GPIO to detect whether to invoke USB DFU.
 
