@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2012-2014 Wind River Systems, Inc.
  * Copyright (c) 2020 Arm Limited
- * Copyright (c) 2021 Nordic Semiconductor ASA
+ * Copyright (c) 2021-2023 Nordic Semiconductor ASA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,12 +52,20 @@ const struct boot_uart_funcs boot_funcs = {
 };
 #endif
 
+#ifdef CONFIG_BOOT_SERIAL_BOOT_MODE
+#include <zephyr/retention/bootmode.h>
+#endif
+
 #if defined(CONFIG_BOOT_USB_DFU_WAIT) || defined(CONFIG_BOOT_USB_DFU_GPIO)
 #include <zephyr/usb/class/usb_dfu.h>
 #endif
 
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
 #include <arm_cleanup.h>
+#endif
+
+#ifdef CONFIG_BOOT_SERIAL_PIN_RESET
+#include <zephyr/drivers/hwinfo.h>
 #endif
 
 /* CONFIG_LOG_MINIMAL is the legacy Kconfig property,
@@ -119,6 +127,17 @@ static inline bool boot_skip_serial_recovery()
 #endif
 
 BOOT_LOG_MODULE_REGISTER(mcuboot);
+
+/* Validate serial recovery configuration */
+#ifdef CONFIG_MCUBOOT_SERIAL
+#if !defined(CONFIG_BOOT_SERIAL_ENTRANCE_GPIO) && \
+    !defined(CONFIG_BOOT_SERIAL_WAIT_FOR_DFU) && \
+    !defined(CONFIG_BOOT_SERIAL_BOOT_MODE) && \
+    !defined(CONFIG_BOOT_SERIAL_NO_APPLICATION) && \
+    !defined(CONFIG_BOOT_SERIAL_PIN_RESET)
+#error "Serial recovery selected without an entrance mode set"
+#endif
+#endif
 
 #ifdef CONFIG_MCUBOOT_INDICATION_LED
 
@@ -385,7 +404,7 @@ void zephyr_boot_log_stop(void)
         * !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL)
         */
 
-#if defined(CONFIG_MCUBOOT_SERIAL) || defined(CONFIG_BOOT_USB_DFU_GPIO)
+#if defined(CONFIG_BOOT_SERIAL_ENTRANCE_GPIO) || defined(CONFIG_BOOT_USB_DFU_GPIO)
 
 #ifdef CONFIG_MCUBOOT_SERIAL
 #define BUTTON_0_DETECT_DELAY CONFIG_BOOT_SERIAL_DETECT_DELAY
@@ -393,47 +412,12 @@ void zephyr_boot_log_stop(void)
 #define BUTTON_0_DETECT_DELAY CONFIG_BOOT_USB_DFU_DETECT_DELAY
 #endif
 
-
 #define BUTTON_0_NODE DT_ALIAS(mcuboot_button0)
 
 #if DT_NODE_EXISTS(BUTTON_0_NODE) && DT_NODE_HAS_PROP(BUTTON_0_NODE, gpios)
-
 static const struct gpio_dt_spec button0 = GPIO_DT_SPEC_GET(BUTTON_0_NODE, gpios);
-
-#else /* fallback to legacy configuration */
-
-#if defined(CONFIG_MCUBOOT_SERIAL)
-
-/* The value of -1 is used by default. It must be properly specified for a board before used. */
-BUILD_ASSERT(CONFIG_BOOT_SERIAL_DETECT_PIN != -1);
-
-#define BUTTON_0_GPIO_LABEL CONFIG_BOOT_SERIAL_DETECT_PORT
-#define BUTTON_0_GPIO_PIN CONFIG_BOOT_SERIAL_DETECT_PIN
-#define BUTTON_0_GPIO_FLAGS ((CONFIG_BOOT_SERIAL_DETECT_PIN_VAL) ?\
-                                (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN) :\
-                                (GPIO_ACTIVE_LOW | GPIO_PULL_UP))
-
-#elif defined(CONFIG_BOOT_USB_DFU_GPIO)
-
-/* The value of -1 is used by default. It must be properly specified for a board before used. */
-BUILD_ASSERT(CONFIG_BOOT_USB_DFU_DETECT_PIN != -1);
-
-#define BUTTON_0_GPIO_LABEL CONFIG_BOOT_USB_DFU_DETECT_PORT
-#define BUTTON_0_GPIO_PIN CONFIG_BOOT_USB_DFU_DETECT_PIN
-#define BUTTON_0_GPIO_FLAGS ((CONFIG_BOOT_USB_DFU_DETECT_PIN_VAL) ?\
-                                (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN) :\
-                                (GPIO_ACTIVE_LOW | GPIO_PULL_UP))
-
-#endif
-
-#define BUTTON_0_LEGACY 1
-
-static struct gpio_dt_spec button0 = {
-	.port = NULL,
-	.pin = BUTTON_0_GPIO_PIN,
-	.dt_flags = BUTTON_0_GPIO_FLAGS
-};
-
+#else
+#error "Serial recovery/USB DFU button must be declared in device tree as 'mcuboot_button0'"
 #endif
 
 static bool detect_pin(void)
@@ -441,18 +425,10 @@ static bool detect_pin(void)
     int rc;
     int pin_active;
 
-#ifdef BUTTON_0_LEGACY
-    button0.port = device_get_binding(BUTTON_0_GPIO_LABEL);
-    if (button0.port == NULL) {
-        __ASSERT(false, "Error: Bad port for boot detection.\n");
-        return false;
-    }
-#else
     if (!device_is_ready(button0.port)) {
         __ASSERT(false, "GPIO device is not ready.\n");
         return false;
     }
-#endif
 
     rc = gpio_pin_configure_dt(&button0, GPIO_INPUT);
     __ASSERT(rc == 0, "Failed to initialize boot detect pin.\n");
@@ -500,11 +476,38 @@ static bool detect_pin(void)
 }
 #endif
 
+#ifdef CONFIG_MCUBOOT_SERIAL
+static void boot_serial_enter()
+{
+    int rc;
+
+#ifdef CONFIG_MCUBOOT_INDICATION_LED
+    gpio_pin_set_dt(&led0, 1);
+#endif
+
+    mcuboot_status_change(MCUBOOT_STATUS_SERIAL_DFU_ENTERED);
+
+    BOOT_LOG_INF("Enter the serial recovery mode");
+    rc = boot_console_init();
+    __ASSERT(rc == 0, "Error initializing boot console.\n");
+    boot_serial_start(&boot_funcs);
+    __ASSERT(0, "Bootloader serial process was terminated unexpectedly.\n");
+}
+#endif
+
 void main(void)
 {
     struct boot_rsp rsp;
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+#ifdef CONFIG_BOOT_SERIAL_BOOT_MODE
+    int32_t boot_mode;
+#endif
+
+#ifdef CONFIG_BOOT_SERIAL_PIN_RESET
+    uint32_t reset_cause;
+#endif
 
     MCUBOOT_WATCHDOG_FEED();
 
@@ -527,20 +530,19 @@ void main(void)
 
     mcuboot_status_change(MCUBOOT_STATUS_STARTUP);
 
-#ifdef CONFIG_MCUBOOT_SERIAL
+#ifdef CONFIG_BOOT_SERIAL_ENTRANCE_GPIO
     if (detect_pin() &&
             !boot_skip_serial_recovery()) {
-#ifdef CONFIG_MCUBOOT_INDICATION_LED
-        gpio_pin_set_dt(&led0, 1);
+        boot_serial_enter();
+    }
 #endif
 
-        mcuboot_status_change(MCUBOOT_STATUS_SERIAL_DFU_ENTERED);
+#ifdef CONFIG_BOOT_SERIAL_PIN_RESET
+    rc = hwinfo_get_reset_cause(&reset_cause);
 
-        BOOT_LOG_INF("Enter the serial recovery mode");
-        rc = boot_console_init();
-        __ASSERT(rc == 0, "Error initializing boot console.\n");
-        boot_serial_start(&boot_funcs);
-        __ASSERT(0, "Bootloader serial process was terminated unexpectedly.\n");
+    if (rc == 0 && reset_cause == RESET_PIN) {
+        (void)hwinfo_clear_reset_cause();
+        boot_serial_enter();
     }
 #endif
 
@@ -590,6 +592,18 @@ void main(void)
 
     FIH_CALL(boot_go, fih_rc, &rsp);
 
+#ifdef CONFIG_BOOT_SERIAL_BOOT_MODE
+    boot_mode = bootmode_check(BOOT_MODE_TYPE_BOOTLOADER);
+
+    if (boot_mode == 1) {
+        /* Boot mode to stay in bootloader, clear status and enter serial
+         * recovery mode
+         */
+        bootmode_clear();
+        boot_serial_enter();
+    }
+#endif
+
 #ifdef CONFIG_BOOT_SERIAL_WAIT_FOR_DFU
     timeout_in_ms -= (k_uptime_get_32() - start);
     if( timeout_in_ms <= 0 ) {
@@ -603,6 +617,13 @@ void main(void)
         BOOT_LOG_ERR("Unable to find bootable image");
 
         mcuboot_status_change(MCUBOOT_STATUS_NO_BOOTABLE_IMAGE_FOUND);
+
+#ifdef CONFIG_BOOT_SERIAL_NO_APPLICATION
+        /* No bootable image and configuration set to remain in serial
+         * recovery mode
+         */
+        boot_serial_enter();
+#endif
 
         FIH_PANIC;
     }

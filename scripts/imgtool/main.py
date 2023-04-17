@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 #
 # Copyright 2017-2020 Linaro Limited
-# Copyright 2019-2021 Arm Limited
+# Copyright 2019-2023 Arm Limited
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,6 +25,7 @@ import sys
 import base64
 from imgtool import image, imgtool_version
 from imgtool.version import decode_version
+from imgtool.dumpinfo import dump_imginfo
 from .keys import (
     RSAUsageError, ECDSAUsageError, Ed25519UsageError, X25519UsageError)
 
@@ -47,10 +48,6 @@ def gen_ecdsa_p256(keyfile, passwd):
     keys.ECDSA256P1.generate().export_private(keyfile, passwd=passwd)
 
 
-def gen_ecdsa_p224(keyfile, passwd):
-    print("TODO: p-224 not yet implemented")
-
-
 def gen_ed25519(keyfile, passwd):
     keys.Ed25519.generate().export_private(path=keyfile, passwd=passwd)
 
@@ -65,7 +62,6 @@ keygens = {
     'rsa-2048':   gen_rsa2048,
     'rsa-3072':   gen_rsa3072,
     'ecdsa-p256': gen_ecdsa_p256,
-    'ecdsa-p224': gen_ecdsa_p224,
     'ed25519':    gen_ed25519,
     'x25519':     gen_x25519,
 }
@@ -193,6 +189,18 @@ def verify(key, imgfile):
     else:
         print("Unknown return code: {}".format(ret))
     sys.exit(1)
+
+
+@click.argument('imgfile')
+@click.option('-o', '--outfile', metavar='filename', required=False,
+              help='Save image information to outfile in YAML format')
+@click.option('-s', '--silent', default=False, is_flag=True,
+              help='Do not print image information to output')
+@click.command(help='Print header, TLV area and trailer information '
+                    'of a signed image')
+def dumpinfo(imgfile, outfile, silent):
+    dump_imginfo(imgfile, outfile, silent)
+    print("dumpinfo has run successfully")
 
 
 def validate_version(ctx, param, value):
@@ -467,6 +475,7 @@ imgtool.add_command(getpriv)
 imgtool.add_command(verify)
 imgtool.add_command(sign)
 imgtool.add_command(version)
+imgtool.add_command(dumpinfo)
 
 
 if __name__ == '__main__':

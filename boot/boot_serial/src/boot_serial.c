@@ -82,7 +82,8 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define MCUBOOT_SERIAL_MAX_RECEIVE_SIZE 512
 #endif
 
-#define BOOT_SERIAL_OUT_MAX     (128 * BOOT_IMAGE_NUMBER)
+#define BOOT_SERIAL_OUT_MAX     (160 * BOOT_IMAGE_NUMBER)
+#define BOOT_SERIAL_FRAME_MTU   124 /* 127 - pkt start (2 bytes) and stop (1 byte) */
 
 #ifdef __ZEPHYR__
 /* base64 lib encodes data to null-terminated string */
@@ -119,6 +120,11 @@ static bool bs_entry;
 static char bs_obuf[BOOT_SERIAL_OUT_MAX];
 
 static void boot_serial_output(void);
+
+#ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
+static int boot_serial_get_hash(const struct image_header *hdr,
+                                const struct flash_area *fap, uint8_t *hash);
+#endif
 
 static zcbor_state_t cbor_state[2];
 
@@ -190,8 +196,11 @@ bs_list_img_ver(char *dst, int maxlen, struct image_version *ver)
     off += u32toa(dst + off, ver->iv_minor);
     dst[off++] = '.';
     off += u32toa(dst + off, ver->iv_revision);
-    dst[off++] = '.';
-    off += u32toa(dst + off, ver->iv_build_num);
+
+    if (ver->iv_build_num != 0) {
+        dst[off++] = '.';
+        off += u32toa(dst + off, ver->iv_build_num);
+    }
 }
 #else
 /*
@@ -200,8 +209,14 @@ bs_list_img_ver(char *dst, int maxlen, struct image_version *ver)
 static void
 bs_list_img_ver(char *dst, int maxlen, struct image_version *ver)
 {
-   snprintf(dst, maxlen, "%hu.%hu.%hu.%u", (uint16_t)ver->iv_major,
-            (uint16_t)ver->iv_minor, ver->iv_revision, ver->iv_build_num);
+   int len;
+
+   len = snprintf(dst, maxlen, "%hu.%hu.%hu", (uint16_t)ver->iv_major,
+                  (uint16_t)ver->iv_minor, ver->iv_revision);
+
+   if (ver->iv_build_num != 0 && len > 0 && len < maxlen) {
+      snprintf(&dst[len], (maxlen - len), "%u", ver->iv_build_num);
+   }
 }
 #endif /* !MCUBOOT_USE_SNPRINTF */
 
@@ -216,6 +231,9 @@ bs_list(char *buf, int len)
     uint32_t slot, area_id;
     const struct flash_area *fap;
     uint8_t image_index;
+#ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
+    uint8_t hash[32];
+#endif
 
     zcbor_map_start_encode(cbor_state, 1);
     zcbor_tstr_put_lit_cast(cbor_state, "images");
@@ -260,6 +278,11 @@ bs_list(char *buf, int len)
                 }
             }
 
+#ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
+            /* Retrieve SHA256 hash of image for identification */
+            rc = boot_serial_get_hash(&hdr, fap, hash);
+#endif
+
             flash_area_close(fap);
 
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
@@ -275,9 +298,18 @@ bs_list(char *buf, int len)
 
             zcbor_tstr_put_lit_cast(cbor_state, "slot");
             zcbor_uint32_put(cbor_state, slot);
+
+#ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
+            if (rc == 0) {
+                zcbor_tstr_put_lit_cast(cbor_state, "hash");
+                zcbor_bstr_encode_ptr(cbor_state, hash, sizeof(hash));
+            }
+#endif
+
             zcbor_tstr_put_lit_cast(cbor_state, "version");
 
             bs_list_img_ver((char *)tmpbuf, sizeof(tmpbuf), &hdr.ih_ver);
+
             zcbor_tstr_encode_ptr(cbor_state, tmpbuf, strlen((char *)tmpbuf));
             zcbor_map_end_encode(cbor_state, 20);
         }
@@ -318,7 +350,7 @@ static off_t erase_range(const struct flash_area *fap, off_t start, off_t end)
         return start;
     }
 
-    if (flash_area_sector_from_off(end, &sect)) {
+    if (flash_area_get_sector(fap, end, &sect)) {
         return -EINVAL;
     }
 
@@ -437,7 +469,7 @@ bs_upload(char *buf, int len)
          * TODO: This is single occurrence issue, it should get detected during tests
          * and fixed otherwise you are deploying broken mcuboot.
          */
-        if (flash_area_sector_from_off(boot_status_off(fap), &status_sector)) {
+        if (flash_area_get_sector(fap, boot_status_off(fap), &status_sector)) {
             rc = MGMT_ERR_EUNKNOWN;
             BOOT_LOG_ERR("Unable to determine flash sector of the image trailer");
             goto out;
@@ -758,9 +790,10 @@ static void
 boot_serial_output(void)
 {
     char *data;
-    int len;
+    int len, out;
     uint16_t crc;
     uint16_t totlen;
+    char pkt_cont[2] = { SHELL_NLIP_DATA_START1, SHELL_NLIP_DATA_START2 };
     char pkt_start[2] = { SHELL_NLIP_PKT_START1, SHELL_NLIP_PKT_START2 };
     char buf[BOOT_SERIAL_OUT_MAX + sizeof(*bs_hdr) + sizeof(crc) + sizeof(totlen)];
     char encoded_buf[BASE64_ENCODE_SIZE(sizeof(buf))];
@@ -786,8 +819,6 @@ boot_serial_output(void)
 #endif
     crc = htons(crc);
 
-    boot_uf->write(pkt_start, sizeof(pkt_start));
-
     totlen = len + sizeof(*bs_hdr) + sizeof(crc);
     totlen = htons(totlen);
 
@@ -810,8 +841,23 @@ boot_serial_output(void)
 #else
     totlen = base64_encode(buf, totlen, encoded_buf, 1);
 #endif
-    boot_uf->write(encoded_buf, totlen);
-    boot_uf->write("\n", 1);
+
+    out = 0;
+    while (out < totlen) {
+        if (out == 0) {
+            boot_uf->write(pkt_start, sizeof(pkt_start));
+        } else {
+            boot_uf->write(pkt_cont, sizeof(pkt_cont));
+        }
+
+        len = MIN(BOOT_SERIAL_FRAME_MTU, totlen - out);
+        boot_uf->write(&encoded_buf[out], len);
+
+        out += len;
+
+        boot_uf->write("\n", 1);
+    }
+
     BOOT_LOG_INF("TX");
 }
 
@@ -968,5 +1014,52 @@ boot_serial_check_start(const struct boot_uart_funcs *f, int timeout_in_ms)
 {
     bs_entry = false;
     boot_serial_read_console(f,timeout_in_ms);
+}
+#endif
+
+#ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
+/* Function to find the hash of an image, returns 0 on success. */
+static int boot_serial_get_hash(const struct image_header *hdr,
+                                const struct flash_area *fap, uint8_t *hash)
+{
+    struct image_tlv_iter it;
+    uint32_t offset;
+    uint16_t len;
+    uint16_t type;
+    int rc;
+
+    /* Manifest data is concatenated to the end of the image.
+     * It is encoded in TLV format.
+     */
+    rc = bootutil_tlv_iter_begin(&it, hdr, fap, IMAGE_TLV_ANY, false);
+    if (rc) {
+        return -1;
+    }
+
+    /* Traverse through the TLV area to find the image hash TLV. */
+    while (true) {
+        rc = bootutil_tlv_iter_next(&it, &offset, &len, &type);
+        if (rc < 0) {
+            return -1;
+        } else if (rc > 0) {
+            break;
+        }
+
+        if (type == IMAGE_TLV_SHA256) {
+            /* Get the image's hash value from the manifest section. */
+            if (len != 32) {
+                return -1;
+            }
+
+            rc = flash_area_read(fap, offset, hash, len);
+            if (rc) {
+                return -1;
+            }
+
+            return 0;
+        }
+    }
+
+    return -1;
 }
 #endif
