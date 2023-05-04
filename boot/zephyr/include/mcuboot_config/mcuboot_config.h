@@ -290,22 +290,18 @@
 #error "No NRFX WDT instances enabled"
 #endif /* defined(CONFIG_NRFX_WDT0) && defined(CONFIG_NRFX_WDT1) */
 
-#elif CONFIG_IWDG_STM32 /* CONFIG_NRFX_WDT */
+#elif DT_NODE_HAS_STATUS(DT_ALIAS(watchdog0), okay) /* CONFIG_NRFX_WDT */
 #include <zephyr/device.h>
 #include <zephyr/drivers/watchdog.h>
 
-#define MCUBOOT_WATCHDOG_FEED() \
-    do {                        \
-        const struct device* wdt =                                  \
-            DEVICE_DT_GET_OR_NULL(DT_INST(0, st_stm32_watchdog));   \
-        if (device_is_ready(wdt)) {                                 \
-            wdt_feed(wdt, 0);                                       \
-        }                                                           \
+#define MCUBOOT_WATCHDOG_SETUP()                              \
+    do {                                                      \
+        const struct device* wdt =                            \
+            DEVICE_DT_GET(DT_ALIAS(watchdog0));               \
+        if (device_is_ready(wdt)) {                           \
+            wdt_setup(wdt, 0);                                \
+        }                                                     \
     } while (0)
-
-#elif DT_NODE_HAS_STATUS(DT_ALIAS(watchdog0), okay) /* CONFIG_IWDG_STM32 */
-#include <zephyr/device.h>
-#include <zephyr/drivers/watchdog.h>
 
 #define MCUBOOT_WATCHDOG_FEED()                               \
     do {                                                      \
@@ -328,6 +324,10 @@
     } while (0)
 
 #endif /* CONFIG_BOOT_WATCHDOG_FEED */
+
+#ifndef MCUBOOT_WATCHDOG_SETUP
+#define MCUBOOT_WATCHDOG_SETUP()
+#endif
 
 #define MCUBOOT_CPU_IDLE() \
   if (!IS_ENABLED(CONFIG_MULTITHREADING)) { \
