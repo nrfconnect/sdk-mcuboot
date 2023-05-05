@@ -225,12 +225,8 @@ static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx,
 {
     (void)ctx;
     (void)pk_len;
+    (void)sig_len;
     (void)hash_len;
-    uint8_t dsig[2 * NUM_ECC_BYTES];
-
-    if (bootutil_decode_sig(dsig, sig, sig + sig_len)) {
-        return -1;
-    }
 
     /* Only support uncompressed keys. */
     if (pk[0] != 0x04) {
@@ -238,7 +234,7 @@ static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx,
     }
     pk++;
 
-    return cc310_ecdsa_verify_secp256r1(hash, pk, dsig, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE);
+    return cc310_ecdsa_verify_secp256r1(hash, pk, sig, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE);
 }
 
 static inline int bootutil_ecdsa_p256_parse_public_key(bootutil_ecdsa_p256_context *ctx,
@@ -402,11 +398,7 @@ static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx,
 {
     (void)ctx;
     (void)pk_len;
-    uint8_t dsig[2 * NUM_ECC_BYTES];
-
-    if (bootutil_decode_sig(dsig, sig, sig + sig_len)) {
-        return -1;
-    }
+    (void)sig_len;
 
 	/* As described on the compact representation in IETF protocols,
 	 * the first byte of the key defines if the ECC points are
