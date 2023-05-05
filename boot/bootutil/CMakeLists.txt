@@ -23,7 +23,7 @@ target_sources(bootutil
         src/encrypted.c
         src/fault_injection_hardening.c
         src/fault_injection_hardening_delay_rng_mbedtls.c
-        src/image_ec256.c
+        src/image_ecdsa.c
         src/image_ed25519.c
         src/image_rsa.c
         src/image_validate.c

@@ -29,36 +29,41 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
-#ifdef MCUBOOT_SIGN_EC256
+#if defined(MCUBOOT_SIGN_EC256) || defined(MCUBOOT_SIGN_EC384)
 
 #include "bootutil_priv.h"
 #include "bootutil/fault_injection_hardening.h"
-#include "bootutil/crypto/ecdsa_p256.h"
+#include "bootutil/crypto/ecdsa.h"
 
-fih_int
+fih_ret
 bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
                     uint8_t key_id)
 {
     int rc;
-    bootutil_ecdsa_p256_context ctx;
+    bootutil_ecdsa_context ctx;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     uint8_t *pubkey;
     uint8_t *end;
 
     pubkey = (uint8_t *)bootutil_keys[key_id].key;
     end = pubkey + *bootutil_keys[key_id].len;
-    bootutil_ecdsa_p256_init(&ctx);
+    bootutil_ecdsa_init(&ctx);
 
-    rc = bootutil_ecdsa_p256_parse_public_key(&ctx, &pubkey, end);
+    rc = bootutil_ecdsa_parse_public_key(&ctx, &pubkey, end);
     if (rc) {
-        FIH_SET(fih_rc, FIH_FAILURE);
-        FIH_RET(fih_rc);
+        goto out;
     }
 
-    FIH_CALL(bootutil_ecdsa_p256_verify, fih_rc, &ctx, pubkey, end-pubkey, hash, hlen, sig, slen);
-    bootutil_ecdsa_p256_drop(&ctx);
+    rc = bootutil_ecdsa_verify(&ctx, pubkey, end-pubkey, hash, hlen, sig, slen);
+    fih_rc = fih_ret_encode_zero_equality(rc);
+    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+        FIH_SET(fih_rc, FIH_FAILURE);
+    }
+
+out:
+    bootutil_ecdsa_drop(&ctx);
 
     FIH_RET(fih_rc);
 }
 
-#endif /* MCUBOOT_SIGN_EC256 */
+#endif /* MCUBOOT_SIGN_EC256 || MCUBOOT_SIGN_EC384 */

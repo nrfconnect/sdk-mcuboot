@@ -26,7 +26,6 @@
 #include "sysflash/sysflash.h"
 
 #include "bootutil/bootutil_log.h"
-#include "zcbor_encode.h"
 
 #ifdef __ZEPHYR__
 #include <zephyr/sys/reboot.h>
@@ -37,13 +36,16 @@
 #include <zephyr/sys/crc.h>
 #include <zephyr/sys/base64.h>
 #include <hal/hal_flash.h>
+#include <zcbor_encode.h>
 #elif __ESPRESSIF__
+#include "zcbor_encode.h"
 #include <bootloader_utility.h>
 #include <esp_rom_sys.h>
 #include <esp_crc.h>
 #include <endian.h>
 #include <mbedtls/base64.h>
 #else
+#include "zcbor_encode.h"
 #include <bsp/bsp.h>
 #include <hal/hal_system.h>
 #include <hal/hal_flash.h>
@@ -151,7 +153,7 @@ extern int bs_peruser_system_specific(const struct nmgr_hdr *hdr,
                                       int len, zcbor_state_t *cs);
 
 #define zcbor_tstr_put_lit_cast(state, string) \
-	zcbor_tstr_encode_ptr(state, (uint8_t *)string, sizeof(string) - 1)
+	zcbor_tstr_encode_ptr(state, (char *)string, sizeof(string) - 1)
 
 #ifndef MCUBOOT_USE_SNPRINTF
 /*
@@ -310,7 +312,7 @@ bs_list(char *buf, int len)
 
             bs_list_img_ver((char *)tmpbuf, sizeof(tmpbuf), &hdr.ih_ver);
 
-            zcbor_tstr_encode_ptr(cbor_state, tmpbuf, strlen((char *)tmpbuf));
+            zcbor_tstr_encode_ptr(cbor_state, (char *)tmpbuf, strlen((char *)tmpbuf));
             zcbor_map_end_encode(cbor_state, 20);
         }
     }
