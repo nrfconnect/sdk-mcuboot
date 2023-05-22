@@ -52,6 +52,10 @@
 #include <dfu/pcd.h>
 #endif
 
+#if defined(CONFIG_FLASH_SIMULATOR)
+#include <zephyr/drivers/flash/flash_simulator.h>
+#endif
+
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
@@ -936,7 +940,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
     bool upgrade_valid = false;
 
 #if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP)
-    const struct flash_area *secondary_fa =
+    const struct flash_area *fap_secondary_slot =
         BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
     uint32_t reset_addr = 0;
@@ -950,7 +954,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
      */
 
     if (hdr->ih_magic == IMAGE_MAGIC) {
-        rc = flash_area_read(secondary_fa, hdr->ih_hdr_size +
+        rc = flash_area_read(fap_secondary_slot, hdr->ih_hdr_size +
                              sizeof(uint32_t), &reset_addr,
                              sizeof(reset_addr));
         if (rc != 0) {
@@ -1018,10 +1022,22 @@ boot_validated_swap_type(struct boot_loader_state *state,
          * available
          */
         if (upgrade_valid && reset_addr > PM_CPUNET_B0N_ADDRESS) {
-            struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
+            uint32_t fw_size = hdr->ih_img_size;
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
-            uint32_t fw_size = hdr->ih_img_size;
+#if defined(CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY)
+            size_t mock_size;
+            uint32_t *flash_sim_addr = flash_simulator_get_memory(NULL, &mock_size);
+            /* Direct copy from flash to mocked flash in SRAM. */
+            rc = flash_area_read(fap_secondary_slot, hdr->ih_hdr_size , (void *)(flash_sim_addr),
+                            fw_size);
+            if (rc != 0) {
+                    BOOT_LOG_INF("Error whilst copying image from Flash to SRAM(flash_sim): %d",
+                                 rc);
+                    return BOOT_SWAP_TYPE_FAIL;
+            }
+            net_core_fw_addr = flash_sim_addr;
+#endif
             BOOT_LOG_INF("Starting network core update");
             rc = pcd_network_core_update(net_core_fw_addr, fw_size);
 
@@ -1029,13 +1045,29 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             } else {
                 BOOT_LOG_INF("Done updating network core");
+
 #if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE)
                 /* swap_erase_trailer_sectors is undefined if upgrade only
                  * method is used. There is no need to erase sectors, because
                  * the image cannot be reverted.
                  */
-                rc = swap_erase_trailer_sectors(state,
-                        secondary_fa);
+                rc = swap_erase_trailer_sectors(state, fap_secondary_slot);
+                if (rc != 0) {
+                        BOOT_LOG_DBG("Unable to erase swap trailer info");
+                }
+#elif defined(MCUBOOT_OVERWRITE_ONLY)
+                size_t last_sector = boot_img_num_sectors(state, BOOT_SECONDARY_SLOT) - 1;
+                rc = boot_erase_region(fap_secondary_slot,
+                                boot_img_sector_off(state, BOOT_SECONDARY_SLOT,
+                                        last_sector),
+                                boot_img_sector_size(state, BOOT_SECONDARY_SLOT,
+                                        last_sector));
+                if (rc != 0) {
+                        /* This will cause the network update to happen again
+                         * on the next reboot
+                         */
+                        BOOT_LOG_DBG("Unable to erase trailer info");
+                }
 #endif
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
