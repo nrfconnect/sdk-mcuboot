@@ -19,9 +19,24 @@
 /* If B0 is present then two bootloaders are present, and we must use
  * a single secondary slot for both primary slots.
  */
-#ifdef PM_B0_ADDRESS
-
+#if defined(PM_B0_ADDRESS)
 extern uint32_t _image_1_primary_slot_id[];
+#endif
+#if defined(PM_B0_ADDRESS) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+#define FLASH_AREA_IMAGE_PRIMARY(x)          \
+        ((x == 0) ?                          \
+           PM_MCUBOOT_PRIMARY_ID :           \
+         (x == 1) ?                          \
+           PM_MCUBOOT_PRIMARY_1_ID :         \
+           255 )
+
+#define FLASH_AREA_IMAGE_SECONDARY(x)        \
+        ((x == 0) ?                          \
+           PM_MCUBOOT_SECONDARY_ID:          \
+        (x == 1) ?                           \
+           PM_MCUBOOT_SECONDARY_1_ID:        \
+           255 )
+#elif defined(PM_B0_ADDRESS)
 
 #define FLASH_AREA_IMAGE_PRIMARY(x)            \
         ((x == 0) ?                            \
