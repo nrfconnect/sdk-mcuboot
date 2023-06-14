@@ -622,15 +622,17 @@ boot_check_header_erased(struct boot_loader_state *state, int slot)
     defined(MCUBOOT_RAM_LOAD) || \
     defined(MCUBOOT_DOWNGRADE_PREVENTION)
 /**
- * Compare image version numbers not including the build number
+ * Compare image version numbers
+ *
+ * By default, the comparison does not take build number into account.
+ * Enable MCUBOOT_VERSION_CMP_USE_BUILD_NUMBER to take the build number into account.
  *
  * @param ver1           Pointer to the first image version to compare.
  * @param ver2           Pointer to the second image version to compare.
  *
- * @retval -1           If ver1 is strictly less than ver2.
- * @retval 0            If the image version numbers are equal,
- *                      (not including the build number).
- * @retval 1            If ver1 is strictly greater than ver2.
+ * @retval -1           If ver1 is less than ver2.
+ * @retval 0            If the image version numbers are equal.
+ * @retval 1            If ver1 is greater than ver2.
  */
 static int
 boot_version_cmp(const struct image_version *ver1,
@@ -656,6 +658,16 @@ boot_version_cmp(const struct image_version *ver1,
     if (ver1->iv_revision < ver2->iv_revision) {
         return -1;
     }
+
+#if defined(MCUBOOT_VERSION_CMP_USE_BUILD_NUMBER)
+    /* The revisions are equal, continue comparison. */
+    if (ver1->iv_build_num > ver2->iv_build_num) {
+        return 1;
+    }
+    if (ver1->iv_build_num < ver2->iv_build_num) {
+        return -1;
+    }
+#endif
 
     return 0;
 }
@@ -923,6 +935,21 @@ boot_erase_region(const struct flash_area *fap, uint32_t off, uint32_t sz)
 }
 
 #if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
+
+#if defined(MCUBOOT_ENC_IMAGES) || defined(MCUBOOT_SWAP_SAVE_ENCTLV)
+/* Replacement for memset(p, 0, sizeof(*p) that does not get
+ * optimized out.
+ */
+static void like_mbedtls_zeroize(void *p, size_t n)
+{
+    volatile unsigned char *v = (unsigned char *)p;
+
+    for (size_t i = 0; i < n; i++) {
+        v[i] = 0;
+    }
+}
+#endif
+
 /**
  * Copies the contents of one flash region to another.  You must erase the
  * destination region prior to calling this function.
@@ -2225,17 +2252,22 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     if(FIH_NOT_EQ(fih_cnt, BOOT_IMAGE_NUMBER)) {
         FIH_PANIC;
     }
-    /*
-     * Since the boot_status struct stores plaintext encryption keys, reset
-     * them here to avoid the possibility of jumping into an image that could
-     * easily recover them.
-     */
-    memset(&bs, 0, sizeof(struct boot_status));
 
     fill_rsp(state, rsp);
 
     fih_rc = FIH_SUCCESS;
 out:
+    /*
+     * Since the boot_status struct stores plaintext encryption keys, reset
+     * them here to avoid the possibility of jumping into an image that could
+     * easily recover them.
+     */
+#if defined(MCUBOOT_ENC_IMAGES) || defined(MCUBOOT_SWAP_SAVE_ENCTLV)
+    like_mbedtls_zeroize(&bs, sizeof(bs));
+#else
+    memset(&bs, 0, sizeof(struct boot_status));
+#endif
+
     close_all_flash_areas(state);
     FIH_RET(fih_rc);
 }

@@ -98,7 +98,7 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/tlv.c
   ${BOOT_DIR}/bootutil/src/encrypted.c
   ${BOOT_DIR}/bootutil/src/image_rsa.c
-  ${BOOT_DIR}/bootutil/src/image_ec256.c
+  ${BOOT_DIR}/bootutil/src/image_ecdsa.c
   ${BOOT_DIR}/bootutil/src/image_ed25519.c
   ${BOOT_DIR}/bootutil/src/bootutil_misc.c
   ${BOOT_DIR}/bootutil/src/fault_injection_hardening.c
@@ -236,9 +236,7 @@ endif()
 if(CONFIG_MCUBOOT_SERIAL)
   zephyr_sources(${BOOT_DIR}/zephyr/serial_adapter.c)
   zephyr_sources(${BOOT_DIR}/boot_serial/src/boot_serial.c)
-  zephyr_sources(${BOOT_DIR}/boot_serial/src/serial_recovery_cbor.c)
-
-  zephyr_sources_ifdef(CONFIG_BOOT_MGMT_ECHO ${BOOT_DIR}/boot_serial/src/serial_recovery_echo.c)
+  zephyr_sources(${BOOT_DIR}/boot_serial/src/zcbor_bulk.c)
 
   zephyr_include_directories(${BOOT_DIR}/bootutil/include)
   zephyr_include_directories(${BOOT_DIR}/boot_serial/include)

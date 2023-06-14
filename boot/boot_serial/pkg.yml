@@ -31,6 +31,7 @@ pkg.deps:
     - "@apache-mynewt-core/encoding/base64"
     - "@mcuboot/boot/mynewt/flash_map_backend"
     - "@mcuboot/boot/mynewt/boot_uart"
+    - "@mcuboot/boot/zcbor"
     - "@apache-mynewt-core/util/crc"
 
 pkg.req_apis:

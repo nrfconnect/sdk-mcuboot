@@ -149,7 +149,7 @@ config MCUBOOT_CLEANUP_ARM_CORE
 	default y
 	help
 	  This option instructs MCUboot to perform a clean-up of a set of
-	  architecture core HW registers before junping to the application
+	  architecture core HW registers before jumping to the application
 	  firmware. The clean-up sets these registers to their warm-reset
 	  values as specified by the architecture.
 
@@ -501,7 +501,7 @@ config MCUBOOT_INDICATION_LED
 	default n
 	help
 	  Device device activates the LED while in bootloader mode.
-	  bootloader-led0 alias must be set in the device's .dts
+	  mcuboot-led0 alias must be set in the device's .dts
 	  definitions for this to work.
 
 rsource "Kconfig.serial_recovery"
@@ -521,6 +521,15 @@ config UPDATEABLE_IMAGE_NUMBER
 	range 1 1 if SINGLE_APPLICATION_SLOT
 	help
 	  Enables support of multi image update.
+
+config BOOT_VERSION_CMP_USE_BUILD_NUMBER
+	bool "Use build number while comparing image version"
+	depends on (UPDATEABLE_IMAGE_NUMBER > 1) || BOOT_DIRECT_XIP || \
+		   BOOT_RAM_LOAD || MCUBOOT_DOWNGRADE_PREVENTION
+	help
+	  By default, the image version comparison relies only on version major,
+	  minor and revision. Enable this option to take into account the build
+	  number as well.
 
 choice BOOT_DOWNGRADE_PREVENTION_CHOICE
 	prompt "Downgrade prevention"
@@ -619,6 +628,7 @@ config MULTITHREADING
 	default y if BOOT_SERIAL_CDC_ACM #usb driver requires MULTITHREADING
 	default y if BOOT_USB_DFU_GPIO || BOOT_USB_DFU_WAIT
 	default n if SOC_FAMILY_NRF
+	default n if SOC_FAMILY_ESP32 && MCUBOOT
 	default y
 
 config LOG_PROCESS_THREAD
