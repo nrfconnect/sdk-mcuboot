@@ -419,7 +419,7 @@ static inline int bootutil_ecdsa_p256_verify(bootutil_ecdsa_p256_context *ctx,
 	pk++;
 
     return bl_secp256r1_validate(hash, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE,
-                                 pk, dsig);
+                                 pk, sig);
 }
 #endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
