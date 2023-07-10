@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "sysflash/sysflash.h"
 
@@ -262,6 +263,7 @@ bs_list(char *buf, int len)
 #endif
 
         for (slot = 0; slot < 2; slot++) {
+            FIH_DECLARE(fih_rc, FIH_FAILURE);
             uint8_t tmpbuf[64];
 
 #ifdef MCUBOOT_SERIAL_IMG_GRP_IMAGE_STATE
@@ -285,8 +287,6 @@ bs_list(char *buf, int len)
 
             if (hdr.ih_magic == IMAGE_MAGIC)
             {
-                FIH_DECLARE(fih_rc, FIH_FAILURE);
-
                 BOOT_HOOK_CALL_FIH(boot_image_check_hook,
                                    FIH_BOOT_HOOK_REGULAR,
                                    fih_rc, image_index, slot);
@@ -306,10 +306,11 @@ bs_list(char *buf, int len)
                     FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr, fap, tmpbuf, sizeof(tmpbuf),
                                     NULL, 0, NULL);
                 }
+            }
 
-                if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-                    continue;
-                }
+            if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+                flash_area_close(fap);
+                continue;
             }
 
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
@@ -354,7 +355,7 @@ bs_list(char *buf, int len)
 
             if (!(hdr.ih_flags & IMAGE_F_NON_BOOTABLE)) {
                 zcbor_tstr_put_lit_cast(cbor_state, "bootable");
-                zcbor_bool_put(cbor_state, 1);
+                zcbor_bool_put(cbor_state, true);
             }
 
             if (confirmed) {
@@ -440,7 +441,7 @@ bs_set(char *buf, int len)
     ok = zcbor_map_decode_bulk(zsd, image_set_state_decode, ARRAY_SIZE(image_set_state_decode),
                                &decoded) == 0;
 
-    if (!ok || len != decoded) {
+    if (!ok) {
         rc = MGMT_ERR_EINVAL;
         goto out;
     }
@@ -617,7 +618,8 @@ bs_upload(char *buf, int len)
     size_t img_chunk_off = SIZE_MAX;    /* Offset of image chunk within image  */
     uint8_t rem_bytes;                  /* Reminder bytes after aligning chunk write to
                                          * to flash alignment */
-    uint32_t img_num;
+    uint32_t img_num_tmp = UINT_MAX;    /* Temp variable for image number */
+    static uint32_t img_num = 0;
     size_t img_size_tmp = SIZE_MAX;     /* Temp variable for image size */
     const struct flash_area *fap = NULL;
     int rc;
@@ -639,7 +641,7 @@ bs_upload(char *buf, int len)
     zcbor_new_state(zsd, sizeof(zsd) / sizeof(zcbor_state_t), (uint8_t *)buf, len, 1);
 
     struct zcbor_map_decode_key_val image_upload_decode[] = {
-        ZCBOR_MAP_DECODE_KEY_DECODER("image", zcbor_uint32_decode, &img_num),
+        ZCBOR_MAP_DECODE_KEY_DECODER("image", zcbor_uint32_decode, &img_num_tmp),
         ZCBOR_MAP_DECODE_KEY_DECODER("data", zcbor_bstr_decode, &img_chunk_data),
         ZCBOR_MAP_DECODE_KEY_DECODER("len", zcbor_size_decode, &img_size_tmp),
         ZCBOR_MAP_DECODE_KEY_DECODER("off", zcbor_size_decode, &img_chunk_off),
@@ -670,6 +672,15 @@ bs_upload(char *buf, int len)
          * Offset must be set in every block.
          */
         goto out_invalid_data;
+    }
+
+    /* Use image number only from packet with offset == 0. */
+    if (img_chunk_off == 0) {
+        if (img_num_tmp != UINT_MAX) {
+            img_num = img_num_tmp;
+        } else {
+            img_num = 0;
+        }
     }
 
 #if !defined(MCUBOOT_SERIAL_DIRECT_IMAGE_UPLOAD)
