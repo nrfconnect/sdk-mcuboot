@@ -26,21 +26,20 @@ assert_exists(FIAT_DIR)
 # Path to mbed-tls' asn1 parser library.
 set(MBEDTLS_ASN1_DIR "${MCUBOOT_DIR}/ext/mbedtls-asn1")
 assert_exists(MBEDTLS_ASN1_DIR)
-set(NRF_DIR "${MCUBOOT_DIR}/ext/nrf")
+set(MCUBOOT_NRF_EXT_DIR "${MCUBOOT_DIR}/ext/nrf")
 
 if(CONFIG_BOOT_USE_NRF_CC310_BL)
-set(NRFXLIB_DIR ${ZEPHYR_BASE}/../nrfxlib)
-if(NOT EXISTS ${NRFXLIB_DIR})
-  message(FATAL_ERROR "
+  if(NOT EXISTS ${ZEPHYR_NRFXLIB_MODULE_DIR})
+    message(FATAL_ERROR "
     ------------------------------------------------------------------------
-    No such file or directory: ${NRFXLIB_DIR}
+    No such file or directory: ${ZEPHYR_NRFXLIB_MODULE_DIR}
     The current configuration enables nRF CC310 crypto accelerator hardware
     with the `CONFIG_BOOT_USE_NRF_CC310_BL` option. Please follow
     `ext/nrf/README.md` guide to fix your setup or use tinycrypt instead of
     the HW accelerator.
     To use the tinycrypt set `CONFIG_BOOT_ECDSA_TINYCRYPT` to y.
     ------------------------------------------------------------------------")
-endif()
+  endif()
 endif()
 
 zephyr_library_include_directories(
@@ -162,8 +161,8 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
     ${TINYCRYPT_DIR}/source/utils.c
     )
   elseif(CONFIG_BOOT_USE_NRF_CC310_BL)
-    zephyr_library_sources(${NRF_DIR}/cc310_glue.c)
-    zephyr_library_include_directories(${NRF_DIR})
+    zephyr_library_sources(${MCUBOOT_NRF_EXT_DIR}/cc310_glue.c)
+    zephyr_library_include_directories(${MCUBOOT_NRF_EXT_DIR})
     zephyr_link_libraries(nrfxlib_crypto)
   elseif(CONFIG_BOOT_USE_NRF_EXTERNAL_CRYPTO)
     zephyr_include_directories(${BL_CRYPTO_DIR}/../include)
