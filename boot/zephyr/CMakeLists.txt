@@ -525,3 +525,14 @@ zephyr_library_sources(
   ${BOOT_DIR}/zephyr/nrf_cleanup.c
 )
 endif()
+
+if(SYSBUILD AND CONFIG_PCD_APP)
+    # Sysbuild requires details of the RAM flash device are stored to the cache of MCUboot so
+    # that they can be read when running partition manager
+    dt_nodelabel(ram_flash_dev NODELABEL flash_sim0)
+    dt_reg_addr(ram_flash_addr PATH ${ram_flash_dev})
+    dt_reg_size(ram_flash_size PATH ${ram_flash_dev})
+
+    set(RAM_FLASH_ADDR "${ram_flash_addr}" CACHE STRING "" FORCE)
+    set(RAM_FLASH_SIZE "${ram_flash_size}" CACHE STRING "" FORCE)
+endif()
