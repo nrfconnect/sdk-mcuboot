@@ -674,6 +674,16 @@ check_validity:
      * overwriting an application written to the incorrect slot.
      * This feature is only supported by ARM platforms.
      */
+#if MCUBOOT_IMAGE_NUMBER >= 3
+    /* Currently the MCUboot can be configured for up to 3 image, where image number 2 is
+     * designated for XIP, where it is the second part of image stored in slots of image
+     * 0. This part of image is not bootable, as the XIP setup is done by the app in
+     * image 0 slot, and it does not carry the reset vector.
+     */
+    if (fap == state->imgs[2][BOOT_SLOT_SECONDARY].area) {
+        goto out;
+    }
+#endif
     if (fap == BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY)) {
         struct image_header *secondary_hdr = boot_img_hdr(state, slot);
         uint32_t internal_img_addr = 0; /* either the reset handler addres or the image beginning addres */
