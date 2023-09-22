@@ -816,6 +816,16 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
      * overwriting an application written to the incorrect slot.
      * This feature is only supported by ARM platforms.
      */
+#if MCUBOOT_IMAGE_NUMBER >= 3
+    /* Currently the MCUboot can be configured for up to 3 image, where image number 2 is
+     * designated for XIP, where it is the second part of image stored in slots of image
+     * 0. This part of image is not bootable, as the XIP setup is done by the app in
+     * image 0 slot, and it does not carry the reset vector.
+     */
+    if (area_id == FLASH_AREA_IMAGE_SECONDARY(2)) {
+        goto out;
+    }
+#endif
     if (area_id == FLASH_AREA_IMAGE_SECONDARY(BOOT_CURR_IMG(state))) {
         const struct flash_area *pri_fa = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
         struct image_header *secondary_hdr = boot_img_hdr(state, slot);
