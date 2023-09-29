@@ -107,6 +107,25 @@ static inline uint8_t flash_area_get_device_id(const struct flash_area *fa)
 }
 
 /****************************************************************************
+ * Name: flash_area_get_sector
+ *
+ * Description:
+ *   Retrieve the flash sector a given offset belongs to.
+ *
+ * Input Parameters:
+ *   fap - flash area structure
+ *   off - address offset.
+ *   sector - flash sector
+ *
+ * Returned Value:
+ *   Returns 0 on success, or an error code on failure.
+ *
+ ****************************************************************************/
+
+int flash_area_get_sector(const struct flash_area *fap, off_t off,
+                          struct flash_sector *fs);
+
+/****************************************************************************
  * Name: flash_area_get_off
  *
  * Description:

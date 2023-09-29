@@ -1,6 +1,6 @@
 // Copyright (c) 2017-2021 Linaro LTD
 // Copyright (c) 2017-2019 JUUL Labs
-// Copyright (c) 2019-2021 Arm Limited
+// Copyright (c) 2019-2023 Arm Limited
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,6 +9,9 @@
 use crate::area::AreaDesc;
 use simflash::SimMultiFlash;
 use crate::api;
+
+#[allow(unused)]
+use std::sync::Once;
 
 /// The result of an invocation of `boot_go`.  This is intentionally opaque so that we can provide
 /// accessors for everything we need from this.
@@ -66,6 +69,8 @@ impl BootGoResult {
 pub fn boot_go(multiflash: &mut SimMultiFlash, areadesc: &AreaDesc,
                counter: Option<&mut i32>, image_index: Option<i32>,
                catch_asserts: bool) -> BootGoResult {
+    init_crypto();
+
     for (&dev_id, flash) in multiflash.iter_mut() {
         api::set_flash(dev_id, flash);
     }
@@ -150,6 +155,16 @@ pub fn kw_encrypt(kek: &[u8], seckey: &[u8], keylen: u32) -> Result<Vec<u8>, &'s
     }
 }
 
+pub fn set_security_counter(image_index: u32, security_counter_value: u32) {
+    api::sim_set_nv_counter_for_image(image_index, security_counter_value);
+}
+
+pub fn get_security_counter(image_index: u32) -> u32 {
+    let mut counter_val: u32 = 0;
+    api::sim_get_nv_counter_for_image(image_index, &mut counter_val as *mut u32);
+    return counter_val;
+}
+
 mod raw {
     use crate::area::CAreaDesc;
     use crate::api::{BootRsp, CSimContext};
@@ -173,5 +188,38 @@ mod raw {
 
         pub fn kw_encrypt_(kek: *const u8, seckey: *const u8,
                            encbuf: *mut u8) -> libc::c_int;
+
+        #[allow(unused)]
+        pub fn psa_crypto_init() -> u32;
+
+        #[allow(unused)]
+        pub fn mbedtls_test_enable_insecure_external_rng();
     }
+}
+
+#[allow(unused)]
+static PSA_INIT_SYNC: Once = Once::new();
+
+#[allow(unused)]
+static MBEDTLS_EXTERNAL_RNG_ENABLE_SYNC: Once = Once::new();
+
+#[cfg(feature = "psa-crypto-api")]
+fn init_crypto() {
+    PSA_INIT_SYNC.call_once(|| {
+        assert_eq!(unsafe { raw::psa_crypto_init() }, 0);
+    });
+
+    /* The PSA APIs require properly initialisation of the entropy subsystem
+     * The configuration adds the option MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG when the
+     * psa-crypto-api feature is enabled. As a result the tests use the implementation
+     * of the test external rng that needs to be initialised before being able to use it
+     */
+    MBEDTLS_EXTERNAL_RNG_ENABLE_SYNC.call_once(|| {
+        unsafe { raw::mbedtls_test_enable_insecure_external_rng() }
+    });
+}
+
+#[cfg(not(feature = "psa-crypto-api"))]
+fn init_crypto() {
+   // When the feature is not enabled, the init is just empty
 }

@@ -810,3 +810,35 @@ int flash_area_id_from_image_offset(uint32_t offset)
 
   return ERROR; /* flash_area_open will fail on that */
 }
+
+/****************************************************************************
+ * Name: flash_area_get_sector
+ *
+ * Description:
+ *   Retrieve the flash sector a given offset belongs to.
+ *
+ * Input Parameters:
+ *   fap - flash area structure
+ *   off - address offset.
+ *   sector - flash sector
+ *
+ * Returned Value:
+ *   Returns 0 on success, or an error code on failure.
+ *
+ ****************************************************************************/
+
+int flash_area_get_sector(const struct flash_area *fap, off_t off,
+                          struct flash_sector *fs)
+{
+  off_t offset = fap->fa_off + off;
+  struct flash_device_s *dev = lookup_flash_device_by_offset(offset);
+  if (dev == NULL)
+    {
+      return -errno;
+    }
+
+  fs->fs_off = (offset / dev->mtdgeo.erasesize) * dev->mtdgeo.erasesize;
+  fs->fs_size = dev->mtdgeo.erasesize;
+
+  return 0;
+}

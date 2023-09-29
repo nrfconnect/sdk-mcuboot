@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "sysflash/sysflash.h"
 
@@ -72,7 +73,7 @@
 #endif
 
 #ifdef MCUBOOT_ENC_IMAGES
-#include "single_loader.h"
+#include "boot_serial/boot_serial_encryption.h"
 #endif
 
 #include "bootutil/boot_hooks.h"
@@ -262,6 +263,7 @@ bs_list(char *buf, int len)
 #endif
 
         for (slot = 0; slot < 2; slot++) {
+            FIH_DECLARE(fih_rc, FIH_FAILURE);
             uint8_t tmpbuf[64];
 
 #ifdef MCUBOOT_SERIAL_IMG_GRP_IMAGE_STATE
@@ -285,31 +287,28 @@ bs_list(char *buf, int len)
 
             if (hdr.ih_magic == IMAGE_MAGIC)
             {
-                FIH_DECLARE(fih_rc, FIH_FAILURE);
-
                 BOOT_HOOK_CALL_FIH(boot_image_check_hook,
                                    FIH_BOOT_HOOK_REGULAR,
                                    fih_rc, image_index, slot);
                 if (FIH_EQ(fih_rc, FIH_BOOT_HOOK_REGULAR))
                 {
 #ifdef MCUBOOT_ENC_IMAGES
-                    if (slot == 0 && IS_ENCRYPTED(&hdr)) {
-                        /* Clear the encrypted flag we didn't supply a key
-                        * This flag could be set if there was a decryption in place
-                        * performed before. We will try to validate the image without
-                        * decryption by clearing the flag in the heder. If
-                        * still encrypted the validation will fail.
-                        */
-                        hdr.ih_flags &= ~(ENCRYPTIONFLAGS);
+                    if (IS_ENCRYPTED(&hdr)) {
+                        FIH_CALL(boot_image_validate_encrypted, fih_rc, fap,
+                                 &hdr, tmpbuf, sizeof(tmpbuf));
+                    } else {
+#endif
+                        FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr,
+                                 fap, tmpbuf, sizeof(tmpbuf), NULL, 0, NULL);
+#ifdef MCUBOOT_ENC_IMAGES
                     }
 #endif
-                    FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr, fap, tmpbuf, sizeof(tmpbuf),
-                                    NULL, 0, NULL);
                 }
+            }
 
-                if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-                    continue;
-                }
+            if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+                flash_area_close(fap);
+                continue;
             }
 
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
@@ -354,7 +353,7 @@ bs_list(char *buf, int len)
 
             if (!(hdr.ih_flags & IMAGE_F_NON_BOOTABLE)) {
                 zcbor_tstr_put_lit_cast(cbor_state, "bootable");
-                zcbor_bool_put(cbor_state, 1);
+                zcbor_bool_put(cbor_state, true);
             }
 
             if (confirmed) {
@@ -431,7 +430,7 @@ bs_set(char *buf, int len)
     zcbor_new_state(zsd, sizeof(zsd) / sizeof(zcbor_state_t), (uint8_t *)buf, len, 1);
 
     struct zcbor_map_decode_key_val image_set_state_decode[] = {
-        ZCBOR_MAP_DECODE_KEY_DECODER("confirm", zcbor_uint32_decode, &confirm),
+        ZCBOR_MAP_DECODE_KEY_DECODER("confirm", zcbor_bool_decode, &confirm),
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
         ZCBOR_MAP_DECODE_KEY_DECODER("hash", zcbor_bstr_decode, &img_hash),
 #endif
@@ -440,7 +439,7 @@ bs_set(char *buf, int len)
     ok = zcbor_map_decode_bulk(zsd, image_set_state_decode, ARRAY_SIZE(image_set_state_decode),
                                &decoded) == 0;
 
-    if (!ok || len != decoded) {
+    if (!ok) {
         rc = MGMT_ERR_EINVAL;
         goto out;
     }
@@ -482,8 +481,17 @@ bs_set(char *buf, int len)
                                    fih_rc, image_index, 1);
                 if (FIH_EQ(fih_rc, FIH_BOOT_HOOK_REGULAR))
                 {
-                    FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr, fap,
-                             tmpbuf, sizeof(tmpbuf), NULL, 0, NULL);
+#ifdef MCUBOOT_ENC_IMAGES
+                    if (IS_ENCRYPTED(&hdr)) {
+                        FIH_CALL(boot_image_validate_encrypted, fih_rc, fap,
+                                 &hdr, tmpbuf, sizeof(tmpbuf));
+                    } else {
+#endif
+                        FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, &hdr,
+                                 fap, tmpbuf, sizeof(tmpbuf), NULL, 0, NULL);
+#ifdef MCUBOOT_ENC_IMAGES
+                    }
+#endif
                 }
 
                 if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
@@ -617,7 +625,8 @@ bs_upload(char *buf, int len)
     size_t img_chunk_off = SIZE_MAX;    /* Offset of image chunk within image  */
     uint8_t rem_bytes;                  /* Reminder bytes after aligning chunk write to
                                          * to flash alignment */
-    uint32_t img_num;
+    uint32_t img_num_tmp = UINT_MAX;    /* Temp variable for image number */
+    static uint32_t img_num = 0;
     size_t img_size_tmp = SIZE_MAX;     /* Temp variable for image size */
     const struct flash_area *fap = NULL;
     int rc;
@@ -639,7 +648,7 @@ bs_upload(char *buf, int len)
     zcbor_new_state(zsd, sizeof(zsd) / sizeof(zcbor_state_t), (uint8_t *)buf, len, 1);
 
     struct zcbor_map_decode_key_val image_upload_decode[] = {
-        ZCBOR_MAP_DECODE_KEY_DECODER("image", zcbor_uint32_decode, &img_num),
+        ZCBOR_MAP_DECODE_KEY_DECODER("image", zcbor_uint32_decode, &img_num_tmp),
         ZCBOR_MAP_DECODE_KEY_DECODER("data", zcbor_bstr_decode, &img_chunk_data),
         ZCBOR_MAP_DECODE_KEY_DECODER("len", zcbor_size_decode, &img_size_tmp),
         ZCBOR_MAP_DECODE_KEY_DECODER("off", zcbor_size_decode, &img_chunk_off),
@@ -670,6 +679,15 @@ bs_upload(char *buf, int len)
          * Offset must be set in every block.
          */
         goto out_invalid_data;
+    }
+
+    /* Use image number only from packet with offset == 0. */
+    if (img_chunk_off == 0) {
+        if (img_num_tmp != UINT_MAX) {
+            img_num = img_num_tmp;
+        } else {
+            img_num = 0;
+        }
     }
 
 #if !defined(MCUBOOT_SERIAL_DIRECT_IMAGE_UPLOAD)
@@ -851,14 +869,23 @@ out:
     zcbor_map_end_encode(cbor_state, 10);
 
     boot_serial_output();
-    flash_area_close(fap);
 
 #ifdef MCUBOOT_ENC_IMAGES
-    if (curr_off == img_size) {
-        /* Last sector received, now start a decryption on the image if it is encrypted*/
-        rc = boot_handle_enc_fw();
+    /* Check if this upload was for the primary slot */
+#if !defined(MCUBOOT_SERIAL_DIRECT_IMAGE_UPLOAD)
+    if (flash_area_id_from_multi_image_slot(img_num, 0) == FLASH_AREA_IMAGE_PRIMARY(0))
+#else
+    if (flash_area_id_from_direct_image(img_num) == FLASH_AREA_IMAGE_PRIMARY(0))
+#endif
+    {
+        if (curr_off == img_size) {
+            /* Last sector received, now start a decryption on the image if it is encrypted */
+            rc = boot_handle_enc_fw(fap);
+        }
     }
-#endif //#ifdef MCUBOOT_ENC_IMAGES
+#endif
+
+    flash_area_close(fap);
 }
 
 #ifdef MCUBOOT_BOOT_MGMT_ECHO
@@ -1026,7 +1053,7 @@ boot_serial_output(void)
     char encoded_buf[BASE64_ENCODE_SIZE(sizeof(buf))];
 
     data = bs_obuf;
-    len = (uint32_t)cbor_state->payload_mut - (uint32_t)bs_obuf;
+    len = (uintptr_t)cbor_state->payload_mut - (uintptr_t)bs_obuf;
 
     bs_hdr->nh_op++;
     bs_hdr->nh_flags = 0;

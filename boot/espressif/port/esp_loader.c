@@ -9,19 +9,11 @@
 #include <bootutil/bootutil_log.h>
 #include <bootutil/fault_injection_hardening.h>
 
+#include "bootloader_memory_utils.h"
 #include "bootloader_flash_priv.h"
 #include "esp_flash_encrypt.h"
-#include "soc/soc_memory_layout.h"
 
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/uart.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/uart.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/uart.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/uart.h"
-#endif
+#include "rom/uart.h"
 
 #include "esp_mcuboot_image.h"
 #include "esp_loader.h"
@@ -82,10 +74,10 @@ void esp_app_image_load(int image_index, int slot, unsigned int hdr_offset, unsi
         FIH_PANIC;
     }
 
-    BOOT_LOG_INF("DRAM segment: start=0x%x, size=0x%x, vaddr=0x%x", load_header.dram_flash_offset, load_header.dram_size, load_header.dram_dest_addr);
+    BOOT_LOG_INF("DRAM segment: start=0x%x, size=0x%x, vaddr=0x%x", fap->fa_off + load_header.dram_flash_offset, load_header.dram_size, load_header.dram_dest_addr);
     load_segment(fap, load_header.dram_flash_offset, load_header.dram_size, load_header.dram_dest_addr);
 
-    BOOT_LOG_INF("IRAM segment: start=0x%x, size=0x%x, vaddr=0x%x", load_header.iram_flash_offset, load_header.iram_size, load_header.iram_dest_addr);
+    BOOT_LOG_INF("IRAM segment: start=0x%x, size=0x%x, vaddr=0x%x", fap->fa_off + load_header.iram_flash_offset, load_header.iram_size, load_header.iram_dest_addr);
     load_segment(fap, load_header.iram_flash_offset, load_header.iram_size, load_header.iram_dest_addr);
 
     BOOT_LOG_INF("start=0x%x", load_header.entry_addr);

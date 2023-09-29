@@ -92,10 +92,9 @@ board and then just make a copy of it to get started on your own
 application; see samples/zephyr/README.md for a tutorial.
 
 The Zephyr `CONFIG_BOOTLOADER_MCUBOOT` configuration option
-[documentation](http://docs.zephyrproject.org/reference/kconfig/CONFIG_BOOTLOADER_MCUBOOT.html)
+[documentation](https://docs.zephyrproject.org/latest/kconfig.html#CONFIG_BOOTLOADER_MCUBOOT)
 provides additional details regarding the changes it makes to the image
-placement and generation in order for an application to be bootable by
-MCUboot.
+placement and generation in order for an application to be bootable by MCUboot.
 
 With this, build the application as your normally would.
 
@@ -251,12 +250,6 @@ The mapping of image number to partition is as follows:
 Use the ``CONFIG_ENABLE_MGMT_PERUSER=y`` Kconfig option to enable the following additional commands:
 * Storage erase - This command allows erasing the storage partition (enable with ``CONFIG_BOOT_MGMT_CUSTOM_STORAGE_ERASE=y``).
 * Custom image list - This command allows fetching version and installation status (custom properties) for all images (enable with ``CONFIG_BOOT_MGMT_CUSTOM_IMG_LIST=y``).
-
-### In-place image decryption
-
-Images uploaded by the serial recovery can be decrypted on the fly by using ECIES primitives described in the [ECIES encryption](encrypted_images.md#ecies-encryption) section.
-
-Enable support for this feature by using ``CONFIG_BOOT_SERIAL_ENCRYPT_EC256=y``.
 
 ### More configuration
 

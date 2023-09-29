@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 cmake_minimum_required(VERSION 3.13)
+cmake_policy(SET CMP0109 NEW)
 
 include(${CMAKE_CURRENT_LIST_DIR}/tools/utils.cmake)
 
@@ -19,7 +20,10 @@ if ("${MCUBOOT_TARGET}" STREQUAL "esp32" OR
     "${MCUBOOT_TARGET}" STREQUAL "esp32s2" OR
     "${MCUBOOT_TARGET}" STREQUAL "esp32s3")
     set(MCUBOOT_ARCH "xtensa")
-elseif("${MCUBOOT_TARGET}" STREQUAL "esp32c3")
+elseif("${MCUBOOT_TARGET}" STREQUAL "esp32c3" OR
+    "${MCUBOOT_TARGET}" STREQUAL "esp32c6" OR
+    "${MCUBOOT_TARGET}" STREQUAL "esp32c2" OR
+    "${MCUBOOT_TARGET}" STREQUAL "esp32h2")
     set(MCUBOOT_ARCH "riscv")
 endif()
 
@@ -32,17 +36,25 @@ elseif("${MCUBOOT_TARGET}" STREQUAL "esp32s3")
     set(ESP_MIN_REVISION 0)
 elseif("${MCUBOOT_TARGET}" STREQUAL "esp32c3")
     set(ESP_MIN_REVISION 3)
+elseif("${MCUBOOT_TARGET}" STREQUAL "esp32c6")
+    set(ESP_MIN_REVISION 0)
+elseif("${MCUBOOT_TARGET}" STREQUAL "esp32c2")
+    set(ESP_MIN_REVISION 0)
+elseif("${MCUBOOT_TARGET}" STREQUAL "esp32h2")
+    set(ESP_MIN_REVISION 0)
 else()
     message(FATAL_ERROR "Unsupported target ${MCUBOOT_TARGET}")
 endif()
 
-if (NOT DEFINED IDF_PATH)
-    if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/hal/esp-idf")
-        set(IDF_PATH "${CMAKE_CURRENT_LIST_DIR}/hal/esp-idf")
-    elseif (DEFINED ENV{IDF_PATH})
-        set(IDF_PATH $ENV{IDF_PATH})
+if (NOT DEFINED ESP_HAL_PATH)
+    if (DEFINED ENV{ESP_HAL_PATH})
+        set(ESP_HAL_PATH $ENV{ESP_HAL_PATH})
     else()
-        message(FATAL_ERROR "IDF_PATH not found. Please update submodules or set IDF_PATH environment variable or pass -DIDF_PATH flag.")
+        message(WARNING "ESP_HAL_PATH not found. Please set -DESP_HAL_PATH parameter or define ESP_HAL_PATH environment variable.")
+        if (DEFINED ENV{IDF_PATH})
+            set(ESP_HAL_PATH $ENV{IDF_PATH})
+            message("IDF installation found in the system, using IDF_PATH as ESP_HAL_PATH.")
+        endif()
     endif()
 endif()
 
@@ -85,6 +97,45 @@ if ("${IMGTOOL_COMMAND}" MATCHES "IMGTOOL_COMMAND-NOTFOUND")
     set(imgtool_path "${MCUBOOT_ROOT_DIR}/scripts/imgtool.py")
 else()
     set(imgtool_path "${IMGTOOL_COMMAND}")
+endif()
+
+# Find installed esptool, if not found falls to IDF's
+find_program(ESPTOOL_COMMAND
+    NAMES esptool esptool.py
+    )
+if ("${ESPTOOL_COMMAND}" MATCHES "ESPTOOL_COMMAND-NOTFOUND")
+    if (DEFINED ENV{IDF_PATH})
+        set(esptool_path "${IDF_PATH}/components/esptool_py/esptool/esptool.py")
+    else()
+        message(FATAL_ERROR "esptool.py not found. Please install it using \'pip install esptool\'.")
+    endif()
+else()
+    set(esptool_path "${ESPTOOL_COMMAND}")
+endif()
+
+# Flash frequency parameter for esptool.py, for more information, check `esptool.py -h`
+if (NOT DEFINED ESP_FLASH_FREQ)
+    if ("${MCUBOOT_TARGET}" STREQUAL "esp32" OR
+        "${MCUBOOT_TARGET}" STREQUAL "esp32s2" OR
+        "${MCUBOOT_TARGET}" STREQUAL "esp32s3" OR
+        "${MCUBOOT_TARGET}" STREQUAL "esp32c3" OR
+        "${MCUBOOT_TARGET}" STREQUAL "esp32c6")
+        set(ESP_FLASH_FREQ "40m")
+    elseif("${MCUBOOT_TARGET}" STREQUAL "esp32c2")
+        set(ESP_FLASH_FREQ "60m")
+    elseif("${MCUBOOT_TARGET}" STREQUAL "esp32h2")
+        set(ESP_FLASH_FREQ "24m")
+    endif()
+endif()
+
+# Flash mode parameter for esptool.py, for more information, check `esptool.py -h`
+if (NOT DEFINED ESP_FLASH_MODE)
+    set(ESP_FLASH_MODE "dio")
+endif()
+
+# Serial baud rate parameter for esptool.py flash use, for more information, check `esptool.py -h`
+if (NOT DEFINED ESP_BAUD_RATE)
+    set(ESP_BAUD_RATE 115200)
 endif()
 
 if (DEFINED CONFIG_ESP_SIGN_RSA)
@@ -169,7 +220,7 @@ set(CFLAGS
     "-ggdb"
     "-Os"
     "-D_GNU_SOURCE"
-    "-std=gnu99"
+    "-std=gnu17"
     "-Wno-old-style-declaration"
     "-Wno-implicit-int"
     "-Wno-declaration-after-statement"
@@ -257,10 +308,28 @@ target_include_directories(
     ${bootutil_paths}
     )
 
+set(ld_input ${CMAKE_CURRENT_LIST_DIR}/port/${MCUBOOT_TARGET}/ld/bootloader.ld)
+set(ld_output ${CMAKE_CURRENT_BINARY_DIR}/ld/bootloader.ld)
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ld")
+
+get_directory_property(configs COMPILE_DEFINITIONS)
+foreach(c ${configs})
+    list(APPEND conf_defines "-D${c}")
+endforeach()
+
+# Preprocess linker script
+add_custom_command(
+    TARGET ${APP_EXECUTABLE} PRE_LINK
+    COMMAND ${CMAKE_C_COMPILER} -x c -E -P -o ${ld_output} ${conf_defines} ${ld_input}
+    MAIN_DEPENDENCY ${ld_input}
+    COMMENT "Preprocessing bootloader.ld linker script..."
+    )
+
 target_link_libraries(
     ${APP_EXECUTABLE}
     PUBLIC
-    -T${CMAKE_CURRENT_LIST_DIR}/port/${MCUBOOT_TARGET}/ld/bootloader.ld
+    -T${ld_output}
     ${LDFLAGS}
     )
 
@@ -275,9 +344,9 @@ target_link_libraries(
 # Note: Both binary generation and flash steps still have some default arguments
 add_custom_command(TARGET ${APP_EXECUTABLE} POST_BUILD
     COMMAND
-    ${IDF_PATH}/components/esptool_py/esptool/esptool.py
+    ${esptool_path}
     --chip ${MCUBOOT_TARGET} elf2image --min-rev ${ESP_MIN_REVISION}
-    --flash_mode dio --flash_freq 40m --flash_size ${CONFIG_ESP_FLASH_SIZE}
+    --flash_mode ${ESP_FLASH_MODE} --flash_freq ${ESP_FLASH_FREQ} --flash_size ${CONFIG_ESP_FLASH_SIZE}
     -o ${APP_NAME}.bin ${APP_NAME}.elf
     )
 
@@ -296,10 +365,10 @@ add_custom_target(flash DEPENDS ${APP_NAME}.bin)
 add_custom_command(TARGET flash
     USES_TERMINAL
     COMMAND
-    ${IDF_PATH}/components/esptool_py/esptool/esptool.py
-    -p ${FLASH_PORT} -b 2000000 --before default_reset --after no_reset
+    ${esptool_path}
+    -p ${FLASH_PORT} -b ${ESP_BAUD_RATE} --before default_reset --after no_reset
     --chip ${MCUBOOT_TARGET} write_flash
-    --flash_mode dio --flash_size ${CONFIG_ESP_FLASH_SIZE}
-    --flash_freq 40m ${CONFIG_ESP_BOOTLOADER_OFFSET}
+    --flash_mode ${ESP_FLASH_MODE} --flash_size ${CONFIG_ESP_FLASH_SIZE}
+    --flash_freq ${ESP_FLASH_FREQ} ${CONFIG_ESP_BOOTLOADER_OFFSET}
     ${APP_NAME}.bin
     )

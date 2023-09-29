@@ -2,6 +2,7 @@
  * Copyright (c) 2018 Open Source Foundries Limited
  * Copyright (c) 2019-2020 Arm Limited
  * Copyright (c) 2019-2020 Linaro Limited
+ * Copyright (c) 2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -116,11 +117,6 @@
 #define MCUBOOT_ENCRYPT_EC256
 #endif
 
-#ifdef CONFIG_BOOT_SERIAL_ENCRYPT_EC256
-#define MCUBOOT_ENC_IMAGES
-#define MCUBOOT_ENCRYPT_EC256
-#endif
-
 #ifdef CONFIG_BOOT_ENCRYPT_X25519
 #define MCUBOOT_ENC_IMAGES
 #define MCUBOOT_ENCRYPT_X25519
@@ -216,6 +212,15 @@
 #define MCUBOOT_SERIAL_IMG_GRP_IMAGE_STATE
 #endif
 
+#ifdef CONFIG_MCUBOOT_SERIAL
+#define MCUBOOT_SERIAL_RECOVERY
+#endif
+
+#if (defined(CONFIG_BOOT_USB_DFU_WAIT) || \
+     defined(CONFIG_BOOT_USB_DFU_GPIO))
+#define MCUBOOT_USB_DFU
+#endif
+
 /*
  * The option enables code, currently in boot_serial, that attempts
  * to erase flash progressively, as update fragments are received,
@@ -266,6 +271,10 @@
         #define MCUBOOT_BOOT_MAX_ALIGN \
             DT_PROP(DT_CHOSEN(zephyr_flash), write_block_size)
     #endif
+#endif
+
+#ifdef CONFIG_MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP
+#define MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP 1
 #endif
 
 #if CONFIG_BOOT_WATCHDOG_FEED

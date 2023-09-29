@@ -14,6 +14,7 @@
 #include "esp_image_format.h"
 #include "esp_efuse.h"
 #include "esp_efuse_table.h"
+#include "rom/secure_boot.h"
 
 /* The following API implementations are used only when called
  * from the bootloader code.

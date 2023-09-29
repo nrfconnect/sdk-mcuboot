@@ -123,6 +123,19 @@ struct SlotPlace {
     size: u32,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ImageManipulation {
+    None,
+    BadSignature,
+    WrongOffset,
+    IgnoreRamLoadFlag,
+    /// True to use same address,
+    /// false to overlap by 1 byte
+    OverlapImages(bool),
+    CorruptHigherVersionImage,
+}
+
+
 impl ImagesBuilder {
     /// Construct a new image builder for the given device.  Returns
     /// Some(builder) if is possible to test this configuration, or None if
@@ -210,22 +223,37 @@ impl ImagesBuilder {
     }
 
     /// Construct an `Images` that doesn't expect an upgrade to happen.
-    pub fn make_no_upgrade_image(self, deps: &DepTest) -> Images {
+    pub fn make_no_upgrade_image(self, deps: &DepTest, img_manipulation: ImageManipulation) -> Images {
         let num_images = self.num_images();
         let mut flash = self.flash;
-        let ram = self.ram.clone();  // TODO: This is wasteful.
+        let ram = self.ram.clone();  // TODO: Avoid this clone.
+        let mut higher_version_corrupted = false;
         let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
             let dep: Box<dyn Depender> = if num_images > 1 {
                 Box::new(PairDep::new(num_images, image_num, deps))
             } else {
                 Box::new(BoringDep::new(image_num, deps))
             };
-            let primaries = install_image(&mut flash, &slots[0],
-                maximal(42784), &ram, &*dep, false);
-            let upgrades = match deps.depends[image_num] {
-                DepType::NoUpgrade => install_no_image(),
-                _ => install_image(&mut flash, &slots[1],
-                    maximal(46928), &ram, &*dep, false)
+
+            let (primaries,upgrades) =  if img_manipulation == ImageManipulation::CorruptHigherVersionImage && !higher_version_corrupted {
+                higher_version_corrupted = true;
+               let prim =  install_image(&mut flash, &slots[0],
+                    maximal(42784), &ram, &*dep, ImageManipulation::None, Some(0));
+                let upgr   = match deps.depends[image_num] {
+                    DepType::NoUpgrade => install_no_image(),
+                    _ => install_image(&mut flash, &slots[1],
+                        maximal(46928), &ram, &*dep, ImageManipulation::BadSignature, Some(0))
+                };
+                (prim, upgr)
+            } else {
+                let prim = install_image(&mut flash, &slots[0],
+                    maximal(42784), &ram, &*dep, img_manipulation, Some(0));
+                let upgr = match deps.depends[image_num] {
+                        DepType::NoUpgrade => install_no_image(),
+                        _ => install_image(&mut flash, &slots[1],
+                            maximal(46928), &ram, &*dep, img_manipulation, Some(0))
+                    };
+                (prim, upgr)
             };
             OneImage {
                 slots,
@@ -243,7 +271,7 @@ impl ImagesBuilder {
     }
 
     pub fn make_image(self, deps: &DepTest, permanent: bool) -> Images {
-        let mut images = self.make_no_upgrade_image(deps);
+        let mut images = self.make_no_upgrade_image(deps, ImageManipulation::None);
         for image in &images.images {
             mark_upgrade(&mut images.flash, &image.slots[1]);
         }
@@ -274,9 +302,9 @@ impl ImagesBuilder {
         let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
             let dep = BoringDep::new(image_num, &NO_DEPS);
             let primaries = install_image(&mut bad_flash, &slots[0],
-                maximal(32784), &ram, &dep, false);
+                maximal(32784), &ram, &dep, ImageManipulation::None, Some(0));
             let upgrades = install_image(&mut bad_flash, &slots[1],
-                maximal(41928), &ram, &dep, true);
+                maximal(41928), &ram, &dep, ImageManipulation::BadSignature, Some(0));
             OneImage {
                 slots,
                 primaries,
@@ -297,9 +325,9 @@ impl ImagesBuilder {
         let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
             let dep = BoringDep::new(image_num, &NO_DEPS);
             let primaries = install_image(&mut bad_flash, &slots[0],
-                maximal(32784), &ram, &dep, false);
+                maximal(32784), &ram, &dep, ImageManipulation::None, Some(0));
             let upgrades = install_image(&mut bad_flash, &slots[1],
-                ImageSize::Oversized, &ram, &dep, false);
+                ImageSize::Oversized, &ram, &dep, ImageManipulation::None, Some(0));
             OneImage {
                 slots,
                 primaries,
@@ -320,7 +348,7 @@ impl ImagesBuilder {
         let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
             let dep = BoringDep::new(image_num, &NO_DEPS);
             let primaries = install_image(&mut flash, &slots[0],
-                maximal(32784), &ram, &dep, false);
+                maximal(32784), &ram, &dep,ImageManipulation::None, Some(0));
             let upgrades = install_no_image();
             OneImage {
                 slots,
@@ -343,7 +371,7 @@ impl ImagesBuilder {
             let dep = BoringDep::new(image_num, &NO_DEPS);
             let primaries = install_no_image();
             let upgrades = install_image(&mut flash, &slots[1],
-                maximal(32784), &ram, &dep, false);
+                maximal(32784), &ram, &dep, ImageManipulation::None, Some(0));
             OneImage {
                 slots,
                 primaries,
@@ -365,7 +393,31 @@ impl ImagesBuilder {
             let dep = BoringDep::new(image_num, &NO_DEPS);
             let primaries = install_no_image();
             let upgrades = install_image(&mut flash, &slots[1],
-                ImageSize::Oversized, &ram, &dep, false);
+                ImageSize::Oversized, &ram, &dep, ImageManipulation::None, Some(0));
+            OneImage {
+                slots,
+                primaries,
+                upgrades,
+            }}).collect();
+        Images {
+            flash,
+            areadesc: self.areadesc,
+            images,
+            total_count: None,
+            ram: self.ram,
+        }
+    }
+
+    /// If security_cnt is None then do not add a security counter TLV, otherwise add the specified value.
+    pub fn make_image_with_security_counter(self, security_cnt: Option<u32>) -> Images {
+        let mut flash = self.flash;
+        let ram = self.ram.clone(); // TODO: Avoid this clone.
+        let images = self.slots.into_iter().enumerate().map(|(image_num, slots)| {
+            let dep = BoringDep::new(image_num, &NO_DEPS);
+            let primaries = install_image(&mut flash, &slots[0],
+                maximal(32784), &ram, &dep,  ImageManipulation::None, security_cnt);
+            let upgrades = install_image(&mut flash, &slots[1],
+                maximal(41928), &ram, &dep, ImageManipulation::None, security_cnt.map(|v| v + 1));
             OneImage {
                 slots,
                 primaries,
@@ -1269,6 +1321,53 @@ impl Images {
         return false;
     }
 
+    pub fn run_hw_rollback_prot(&self) -> bool {
+        if !Caps::HwRollbackProtection.present() {
+            return false;
+        }
+
+        let mut flash = self.flash.clone();
+
+        // set the "stored" security counter to a fixed value.
+        c::set_security_counter(0, 30);
+
+        let result = c::boot_go(&mut flash, &self.areadesc, None, None, true);
+
+        if result.success() {
+            warn!("Successful boot when it did not suppose to happen!");
+            return true;
+        }
+        let counter_val =  c::get_security_counter(0);
+        if counter_val != 30 {
+            warn!("Counter was changed when it did not suppose to!");
+            return true;
+        }
+
+        false
+    }
+
+    pub fn run_ram_load_boot_with_result(&self, expected_result: bool) -> bool {
+        if !Caps::RamLoad.present() {
+            return false;
+        }
+        // Clone the flash so we can tell if unchanged.
+        let mut flash = self.flash.clone();
+
+        // Create RAM config.
+        let ram = RamBlock::new(self.ram.total - RAM_LOAD_ADDR, RAM_LOAD_ADDR);
+
+        // Run the bootloader, and verify that it couldn't run to completion.
+        let result = ram.invoke(|| c::boot_go(&mut flash, &self.areadesc, None,
+            None, true));
+
+        if result.success() != expected_result {
+            error!("RAM load boot result was not of the expected value! (was: {}, expected: {})", result.success(), expected_result);
+            return true;
+        }
+
+        false
+    }
+
     /// Adds a new flash area that fails statistically
     fn mark_bad_status_with_rate(&self, flash: &mut SimMultiFlash, slot: usize,
                                  rate: f32) {
@@ -1650,13 +1749,19 @@ fn image_largest_trailer(dev: &dyn Flash) -> usize {
 /// fields used by the given code.  Returns a copy of the image that was written.
 fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: ImageSize,
                  ram: &RamData,
-                 deps: &dyn Depender, bad_sig: bool) -> ImageData {
+                 deps: &dyn Depender, img_manipulation: ImageManipulation, security_counter:Option<u32>) -> ImageData {
     let offset = slot.base_off;
     let slot_len = slot.len;
     let dev_id = slot.dev_id;
     let dev = flash.get_mut(&dev_id).unwrap();
 
     let mut tlv: Box<dyn ManifestGen> = Box::new(make_tlv());
+    if img_manipulation == ImageManipulation::IgnoreRamLoadFlag {
+        tlv.set_ignore_ram_load_flag();
+    }
+
+    tlv.set_security_counter(security_counter);
+
 
     // Add the dependencies early to the tlv.
     for dep in deps.my_deps(offset, slot.index) {
@@ -1664,10 +1769,14 @@ fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: ImageSize,
     }
 
     const HDR_SIZE: usize = 32;
-
     let place = ram.lookup(&slot);
     let load_addr = if Caps::RamLoad.present() {
-        place.offset
+        match img_manipulation {
+            ImageManipulation::WrongOffset => u32::MAX,
+            ImageManipulation::OverlapImages(true) => RAM_LOAD_ADDR,
+            ImageManipulation::OverlapImages(false) => place.offset - 1,
+            _ => place.offset
+        }
     } else {
         0
     };
@@ -1752,7 +1861,7 @@ fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: ImageSize,
     }
 
     // Build the TLV itself.
-    if bad_sig {
+    if img_manipulation == ImageManipulation::BadSignature  {
         tlv.corrupt_sig();
     }
     let mut b_tlv = tlv.make_tlv();
@@ -1784,8 +1893,11 @@ fn install_image(flash: &mut SimMultiFlash, slot: &SlotInfo, len: ImageSize,
     // an encrypted image, re-read to use for verification, erase + flash
     // un-encrypted. In the secondary slot the image is written un-encrypted,
     // and if encryption is requested, it follows an erase + flash encrypted.
-
-    if slot.index == 0 {
+    //
+    // In the case of ram-load when encryption is enabled both slots have to
+    // be encrypted so in the event when the image is in the primary slot
+    // the verification will fail as the image is not encrypted.
+    if slot.index == 0 && !Caps::RamLoad.present() {
         let enc_copy: Option<Vec<u8>>;
 
         if is_encrypted {
@@ -1891,6 +2003,8 @@ fn make_tlv() -> TlvGen {
             TlvGen::new_ecdsa()
         } else if Caps::Ed25519.present() {
             TlvGen::new_ed25519()
+        } else if Caps::HwRollbackProtection.present() {
+            TlvGen::new_sec_cnt()
         } else {
             TlvGen::new_hash_only()
         }

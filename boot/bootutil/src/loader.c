@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2016-2020 Linaro LTD
  * Copyright (c) 2016-2019 JUUL Labs
- * Copyright (c) 2019-2021 Arm Limited
+ * Copyright (c) 2019-2023 Arm Limited
  *
  * Original license:
  *
@@ -142,10 +142,14 @@ boot_read_image_headers(struct boot_loader_state *state, bool require_all,
  */
 static int
 boot_add_shared_data(struct boot_loader_state *state,
-                     uint32_t active_slot)
+                     uint8_t active_slot)
 {
 #if defined(MCUBOOT_MEASURED_BOOT) || defined(MCUBOOT_DATA_SHARING)
     int rc;
+
+#ifdef MCUBOOT_DATA_SHARING
+    int max_app_size;
+#endif
 
 #ifdef MCUBOOT_MEASURED_BOOT
     rc = boot_save_boot_status(BOOT_CURR_IMG(state),
@@ -158,8 +162,10 @@ boot_add_shared_data(struct boot_loader_state *state,
 #endif /* MCUBOOT_MEASURED_BOOT */
 
 #ifdef MCUBOOT_DATA_SHARING
+    max_app_size = app_max_size(state);
     rc = boot_save_shared_data(boot_img_hdr(state, active_slot),
-                                BOOT_IMG_AREA(state, active_slot));
+                                BOOT_IMG_AREA(state, active_slot),
+                                active_slot, max_app_size);
     if (rc != 0) {
         BOOT_LOG_ERR("Failed to add data to shared memory area.");
         return rc;
@@ -1228,10 +1234,10 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
     assert(rc == 0);
 #endif
 
-    BOOT_LOG_INF("Image upgrade secondary slot -> primary slot");
-    BOOT_LOG_INF("Erasing the primary slot");
-
     image_index = BOOT_CURR_IMG(state);
+
+    BOOT_LOG_INF("Image %d upgrade secondary slot -> primary slot", image_index);
+    BOOT_LOG_INF("Erasing the primary slot");
 
     rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index),
             &fap_primary_slot);
@@ -1287,8 +1293,8 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
     }
 #endif
 
-    BOOT_LOG_INF("Copying the secondary slot to the primary slot: 0x%zx bytes",
-                 size);
+    BOOT_LOG_INF("Image %d copying the secondary slot to the primary slot: 0x%zx bytes",
+                 image_index, size);
     rc = boot_copy_region(state, fap_secondary_slot, fap_primary_slot, 0, 0, size);
     if (rc != 0) {
         return rc;
@@ -2096,7 +2102,7 @@ check_downgrade_prevention(struct boot_loader_state *state)
     }
     if (rc < 0) {
         /* Image in slot 0 prevents downgrade, delete image in slot 1 */
-        BOOT_LOG_INF("Image in slot 1 erased due to downgrade prevention");
+        BOOT_LOG_INF("Image %d in slot 1 erased due to downgrade prevention", BOOT_CURR_IMG(state));
         flash_area_erase(BOOT_IMG(state, 1).area, 0,
                          flash_area_get_size(BOOT_IMG(state, 1).area));
     } else {
@@ -2239,13 +2245,14 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             break;
 
         case BOOT_SWAP_TYPE_TEST:
+            /* fallthrough */
+        case BOOT_SWAP_TYPE_PERM:
             if (check_downgrade_prevention(state) != 0) {
                 /* Downgrade prevented */
                 BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_NONE;
                 break;
             }
             /* fallthrough */
-        case BOOT_SWAP_TYPE_PERM:          /* fallthrough */
         case BOOT_SWAP_TYPE_REVERT:
             rc = BOOT_HOOK_CALL(boot_perform_update_hook, BOOT_HOOK_REGULAR,
                                 BOOT_CURR_IMG(state), &(BOOT_IMG(state, 1).hdr),
@@ -2863,7 +2870,8 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
     /* Direct copy from flash to its new location in SRAM. */
     rc = flash_area_read(fap_src, 0, (void *)(IMAGE_RAM_BASE + img_dst), img_sz);
     if (rc != 0) {
-        BOOT_LOG_INF("Error whilst copying image from Flash to SRAM: %d", rc);
+        BOOT_LOG_INF("Error whilst copying image %d from Flash to SRAM: %d",
+                     BOOT_CURR_IMG(state), rc);
     }
 
     flash_area_close(fap_src);
@@ -2975,15 +2983,15 @@ boot_load_image_to_sram(struct boot_loader_state *state)
 
         rc = boot_verify_ram_load_address(state);
         if (rc != 0) {
-            BOOT_LOG_INF("Image RAM load address 0x%x is invalid.", img_dst);
+            BOOT_LOG_INF("Image %d RAM load address 0x%x is invalid.", BOOT_CURR_IMG(state), img_dst);
             return rc;
         }
 
 #if (BOOT_IMAGE_NUMBER > 1)
         rc = boot_check_ram_load_overlapping(state);
         if (rc != 0) {
-            BOOT_LOG_INF("Image RAM loading to address 0x%x would overlap with\
-                         another image.", img_dst);
+            BOOT_LOG_INF("Image %d RAM loading to address 0x%x would overlap with\
+                         another image.", BOOT_CURR_IMG(state), img_dst);
             return rc;
         }
 #endif
@@ -3001,9 +3009,9 @@ boot_load_image_to_sram(struct boot_loader_state *state)
         rc = boot_copy_image_to_sram(state, active_slot, img_dst, img_sz);
 #endif
         if (rc != 0) {
-            BOOT_LOG_INF("RAM loading to 0x%x is failed.", img_dst);
+            BOOT_LOG_INF("Image %d RAM loading to 0x%x is failed.", BOOT_CURR_IMG(state), img_dst);
         } else {
-            BOOT_LOG_INF("RAM loading to 0x%x is succeeded.", img_dst);
+            BOOT_LOG_INF("Image %d RAM loading to 0x%x is succeeded.", BOOT_CURR_IMG(state), img_dst);
         }
     } else {
         /* Only images that support IMAGE_F_RAM_LOAD are allowed if
@@ -3032,7 +3040,8 @@ boot_remove_image_from_sram(struct boot_loader_state *state)
 {
     (void)state;
 
-    BOOT_LOG_INF("Removing image from SRAM at address 0x%x",
+    BOOT_LOG_INF("Removing image %d from SRAM at address 0x%x",
+                 BOOT_CURR_IMG(state),
                  state->slot_usage[BOOT_CURR_IMG(state)].img_dst);
 
     memset((void*)(IMAGE_RAM_BASE + state->slot_usage[BOOT_CURR_IMG(state)].img_dst),
@@ -3345,8 +3354,7 @@ boot_update_hw_rollback_protection(struct boot_loader_state *state)
                                           state->slot_usage[BOOT_CURR_IMG(state)].active_slot,
                                           boot_img_hdr(state, state->slot_usage[BOOT_CURR_IMG(state)].active_slot));
         if (rc != 0) {
-            BOOT_LOG_ERR("Security counter update failed after image "
-                            "validation.");
+            BOOT_LOG_ERR("Security counter update failed after image %d validation.", BOOT_CURR_IMG(state));
             return rc;
         }
 #if defined(MCUBOOT_DIRECT_XIP) && defined(MCUBOOT_DIRECT_XIP_REVERT)
@@ -3407,7 +3415,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             goto out;
         }
 
-        rc = boot_add_shared_data(state, state->slot_usage[BOOT_CURR_IMG(state)].active_slot);
+        rc = boot_add_shared_data(state, (uint8_t)state->slot_usage[BOOT_CURR_IMG(state)].active_slot);
         if (rc != 0) {
             FIH_SET(fih_rc, FIH_FAILURE);
             goto out;
