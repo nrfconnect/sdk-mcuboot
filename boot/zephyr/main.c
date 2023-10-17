@@ -258,13 +258,16 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 
 #if defined(CONFIG_FW_INFO) && !defined(CONFIG_EXT_API_PROVIDE_EXT_API_UNUSED)
-    bool provided = fw_info_ext_api_provide(fw_info_find((uint32_t)vt), true);
+    const struct fw_info *firmware_info = fw_info_find((uint32_t) vt);
+    bool provided = fw_info_ext_api_provide(firmware_info, true);
 
 #ifdef PM_S0_ADDRESS
     /* Only fail if the immutable bootloader is present. */
     if (!provided) {
-        BOOT_LOG_ERR("Failed to provide EXT_APIs\n");
-        return;
+	if (firmware_info == NULL) {
+            BOOT_LOG_WRN("Unable to find firmware info structure in %p", vt);
+	}
+        BOOT_LOG_ERR("Failed to provide EXT_APIs to %p", vt);
     }
 #endif
 #endif
