@@ -67,7 +67,10 @@
 #include "boot_serial/boot_serial.h"
 #include "boot_serial_priv.h"
 #include "mcuboot_config/mcuboot_config.h"
-#include "../src/bootutil_priv.h"
+
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
+#include "bootutil_priv.h"
+#endif
 
 #ifdef MCUBOOT_ENC_IMAGES
 #include "boot_serial/boot_serial_encryption.h"
