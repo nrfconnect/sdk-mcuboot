@@ -967,6 +967,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         if(reset_addr < PM_CPUNET_B0N_ADDRESS)
 #endif
         {
+            const struct flash_area *nsib_fa;
             const struct flash_area *primary_fa;
             rc = flash_area_open(flash_area_id_from_multi_image_slot(
                                  BOOT_CURR_IMG(state), BOOT_PRIMARY_SLOT),
@@ -977,9 +978,6 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
             /* Check start and end of primary slot for current image */
             if (reset_addr < primary_fa->fa_off) {
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
-		    const struct flash_area *nsib_fa;
-
                     /* NSIB upgrade slot */
                     rc = flash_area_open((uint32_t)_image_1_primary_slot_id,
                                     &nsib_fa);
@@ -994,10 +992,6 @@ boot_validated_swap_type(struct boot_loader_state *state,
                         /* Set primary to be NSIB upgrade slot */
                         BOOT_IMG_AREA(state, 0) = nsib_fa;
                     }
-#else
-                return BOOT_SWAP_TYPE_NONE;
-#endif
-
             } else if (reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
                 /* The image in the secondary slot is not intended for any */
                 return BOOT_SWAP_TYPE_NONE;
