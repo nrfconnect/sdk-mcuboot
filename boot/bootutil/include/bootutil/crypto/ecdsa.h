@@ -80,7 +80,8 @@
 extern "C" {
 #endif
 
-#if defined(MCUBOOT_USE_TINYCRYPT) || defined(MCUBOOT_USE_MBED_TLS) || defined(MCUBOOT_USE_CC310)
+#if (defined(MCUBOOT_USE_TINYCRYPT) || defined(MCUBOOT_USE_MBED_TLS) || \
+     defined(MCUBOOT_USE_CC310)) && !defined(MCUBOOT_USE_PSA_CRYPTO)
 /*
  * Declaring these like this adds NULL termination.
  */
@@ -130,7 +131,7 @@ static int bootutil_import_key(uint8_t **cp, uint8_t *end)
 
     return 0;
 }
-#endif /* MCUBOOT_USE_TINYCRYPT || MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310 */
+#endif /* (MCUBOOT_USE_TINYCRYPT || MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310) && !MCUBOOT_USE_PSA_CRYPTO */
 
 /*
  * cp points to ASN1 string containing an integer.

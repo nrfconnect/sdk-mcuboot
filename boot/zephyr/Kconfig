@@ -30,6 +30,7 @@ config BOOT_USE_TINYCRYPT
 	# When building for ECDSA, we use our own copy of mbedTLS, so the
 	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
 	# will collide.
+	select MBEDTLS_PROMPTLESS
 	help
 	  Use TinyCrypt for crypto primitives.
 
@@ -255,6 +256,18 @@ config BOOT_RAM_LOAD
 	  The address that the image is copied to is specified using the load-addr
 	  argument to the imgtool.py script which writes it to the image header.
 
+config BOOT_FIRMWARE_LOADER
+	bool "Firmware loader"
+	help
+	  If y, mcuboot will have a single application slot, and the secondary
+	  slot will be for a non-upgradeable firmware loaded image (e.g. for
+	  loading firmware via Bluetooth). The main application will boot by
+	  default unless there is an error with it or the boot mode has been
+	  forced to the firmware loader.
+
+	  Note: The firmware loader image must be signed with the same signing
+	  key as the primary image.
+
 endchoice
 
 # Workaround for not being able to have commas in macro arguments
@@ -374,17 +387,91 @@ config BOOT_MAX_IMG_SECTORS
 	  memory usage; larger values allow it to support larger images.
 	  If unsure, leave at the default value.
 
-config MEASURED_BOOT
-	bool "Store the boot state/measurements in shared memory"
+config BOOT_SHARE_BACKEND_AVAILABLE
+	bool
 	default n
+	help
+	  Hidden open which indicates if there is a sharing backend available.
+
+# Workaround for not being able to have commas in macro arguments
+DT_CHOSEN_BOOTLOADER_INFO := zephyr,bootloader-info
+
+config BOOT_SHARE_BACKEND_AVAILABLE
+	bool
+	default n
+	help
+	  Hidden open which indicates if there is a sharing backend available.
+
+choice BOOT_SHARE_BACKEND
+	prompt "Shared data backend"
+	default BOOT_SHARE_BACKEND_DISABLED
+
+config BOOT_SHARE_BACKEND_DISABLED
+	bool "Disabled"
+	help
+	  No data sharing support.
+
+config BOOT_SHARE_BACKEND_RETENTION
+	bool "Retention"
+	depends on RETENTION
+	depends on $(dt_chosen_enabled,$(DT_CHOSEN_BOOTLOADER_INFO))
+	select BOOT_SHARE_BACKEND_AVAILABLE
+	help
+	  Use retention to share data with application. Requires:
+	    - Retained memory area
+	    - Retention partition of retained memory area
+	    - Chosen node "zephyr,bootloader-info" to be set to the retention
+	      partition
+
+config BOOT_SHARE_BACKEND_EXTERNAL
+	bool "External (user-provided code)"
+	select BOOT_SHARE_BACKEND_AVAILABLE
+	help
+	  Use a custom user-specified storage.
+
+endchoice
+
+menuconfig BOOT_SHARE_DATA
+	bool "Save application specific data"
+	default n
+	depends on BOOT_SHARE_BACKEND_AVAILABLE
+	help
+	  This will allow data to be shared between MCUboot and an application,
+	  it does not include any informatiom by default.
+
+	  Note: This requires a backend to function, see
+	  BOOT_SHARE_BACKEND_RETENTION for details on using the retention
+	  subsystem as a backend.
+
+config BOOT_SHARE_DATA_BOOTINFO
+	bool "Save boot information data"
+	default n
+	depends on BOOT_SHARE_DATA
+	help
+	  This will place information about the MCUboot configuration and
+	  running application into a shared memory area.
+
+menuconfig MEASURED_BOOT
+	bool "Store the boot state/measurements in shared memory area"
+	default n
+	depends on BOOT_SHARE_BACKEND_AVAILABLE
 	help
 	  If enabled, the bootloader will store certain boot measurements such as
 	  the hash of the firmware image in a shared memory area. This data can
 	  be used later by runtime services (e.g. by a device attestation service).
 
-config BOOT_SHARE_DATA
-	bool "Save application specific data in shared memory area"
-	default n
+	  Note: This requires a backend to function, see
+	  BOOT_SHARE_BACKEND_RETENTION for details on using the retention
+	  subsystem as a backend.
+
+config MEASURED_BOOT_MAX_CBOR_SIZE
+	int "Maximum CBOR size of boot state/measurements"
+	default 64
+	range 0 256
+	depends on MEASURED_BOOT
+	help
+	  The maximum size of the CBOR message which stores boot
+	  state/measurements.
 
 choice BOOT_FAULT_INJECTION_HARDENING_PROFILE
 	prompt "Fault injection hardening profile"
@@ -472,20 +559,6 @@ config BOOT_USB_DFU_DETECT_DELAY
 
 endif # BOOT_USB_DFU_GPIO
 
-config ZEPHYR_TRY_MASS_ERASE
-	bool "Try to mass erase flash when flashing MCUboot image (DEPRECATED)"
-	select DEPRECATED
-	help
-	  If y, attempt to configure the Zephyr build system's "flash"
-	  target to mass-erase the flash device before flashing the
-	  MCUboot image. This ensures the scratch and other partitions
-	  are in a consistent state.
-
-	  This is not available for all targets.
-
-	  This option has been deprecated, to perform a mass erase when
-	  flashing a board, `west flash --erase` should be used instead.
-
 config BOOT_USE_BENCH
         bool "Enable benchmark code"
         default n
@@ -520,6 +593,8 @@ config MCUBOOT_INDICATION_LED
 	  definitions for this to work.
 
 rsource "Kconfig.serial_recovery"
+
+rsource "Kconfig.firmware_loader"
 
 config BOOT_INTR_VEC_RELOC
 	bool "Relocate the interrupt vector to the application"

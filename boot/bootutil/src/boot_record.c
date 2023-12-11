@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited
+ * Copyright (c) 2018-2023 Arm Limited
  * Copyright (c) 2020 Linaro Limited
  * Copyright (c) 2023, Nordic Semiconductor ASA
  *
@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "mcuboot_config/mcuboot_config.h"
+#include "bootutil/crypto/sha.h"
 
 #if defined(MCUBOOT_MEASURED_BOOT) || defined(MCUBOOT_DATA_SHARING)
 #include "bootutil/boot_record.h"
@@ -31,6 +32,7 @@
 #include "bootutil/image.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#if !defined(MCUBOOT_CUSTOM_DATA_SHARING_FUNCTION)
 /**
  * @var shared_memory_init_done
  *
@@ -112,6 +114,7 @@ boot_add_data_to_shared_area(uint8_t        major_type,
     return SHARED_MEMORY_OK;
 }
 #endif /* MCUBOOT_MEASURED_BOOT OR MCUBOOT_DATA_SHARING */
+#endif /* !MCUBOOT_CUSTOM_DATA_SHARING_FUNCTION */
 
 #ifdef MCUBOOT_MEASURED_BOOT
 /* See in boot_record.h */
@@ -127,7 +130,7 @@ boot_save_boot_status(uint8_t sw_module,
     uint16_t type;
     uint16_t ias_minor;
     size_t record_len = 0;
-    uint8_t image_hash[32]; /* SHA256 - 32 Bytes */
+    uint8_t image_hash[IMAGE_HASH_SIZE];
     uint8_t buf[MAX_BOOT_RECORD_SZ];
     bool boot_record_found = false;
     bool hash_found = false;
@@ -165,7 +168,7 @@ boot_save_boot_status(uint8_t sw_module,
             record_len = len;
             boot_record_found = true;
 
-        } else if (type == IMAGE_TLV_SHA256) {
+        } else if (type == EXPECTED_HASH_TLV) {
             /* Get the image's hash value from the manifest section. */
             if (len > sizeof(image_hash)) {
                 return -1;
@@ -240,9 +243,15 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
 #elif defined(MCUBOOT_SWAP_USING_MOVE)
     uint8_t mode = MCUBOOT_MODE_SWAP_USING_MOVE;
 #elif defined(MCUBOOT_DIRECT_XIP)
+#if defined(MCUBOOT_DIRECT_XIP_REVERT)
+    uint8_t mode = MCUBOOT_MODE_DIRECT_XIP_WITH_REVERT;
+#else
     uint8_t mode = MCUBOOT_MODE_DIRECT_XIP;
+#endif
 #elif defined(MCUBOOT_RAM_LOAD)
     uint8_t mode = MCUBOOT_MODE_RAM_LOAD;
+#elif defined(MCUBOOT_FIRMWARE_LOADER)
+    uint8_t mode = MCUBOOT_MODE_FIRMWARE_LOADER;
 #else
 #error "Unknown mcuboot operating mode"
 #endif
