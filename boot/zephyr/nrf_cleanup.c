@@ -20,7 +20,7 @@
 
 #include <string.h>
 
-#if USE_PARTITION_MANAGER
+#if defined(USE_PARTITION_MANAGER)
 #include <pm_config.h>
 #endif
 
@@ -86,7 +86,7 @@ void nrf_cleanup_peripheral(void)
     nrf_cleanup_clock();
 }
 
-#if USE_PARTITION_MANAGER \
+#if defined(USE_PARTITION_MANAGER) \
 	&& defined(CONFIG_ARM_TRUSTZONE_M) \
 	&& defined(PM_SRAM_NONSECURE_NAME)
 void nrf_cleanup_ns_ram(void)
