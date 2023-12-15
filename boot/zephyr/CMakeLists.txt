@@ -6,26 +6,6 @@
 
 cmake_minimum_required(VERSION 3.13.1)
 
-# Enable Zephyr runner options which request mass erase if so
-# configured.
-#
-# Note that this also disables the default "leave" option when
-# targeting STM32 DfuSe devices with dfu-util, making the chip stay in
-# the bootloader after flashing.
-#
-# That's the right thing, because mcuboot has nothing to do since the
-# chip was just erased. The next thing the user is going to want to do
-# is flash the application. (Developers can reset DfuSE devices
-# manually to test mcuboot behavior on an otherwise erased flash
-# device.)
-macro(app_set_runner_args)
-  if(CONFIG_ZEPHYR_TRY_MASS_ERASE)
-    board_runner_args(dfu-util "--dfuse-modifiers=force:mass-erase")
-    board_runner_args(pyocd "--flash-opt=-e=chip")
-    board_runner_args(nrfjprog "--erase")
-  endif()
-endmacro()
-
 # find_package(Zephyr) in order to load application boilerplate:
 # http://docs.zephyrproject.org/application/application.html
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
@@ -83,11 +63,28 @@ if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
   zephyr_library_sources(
     boot_serial_extensions.c
     )
+
+  zephyr_linker_sources_ifdef(
+    CONFIG_ENABLE_MGMT_PERUSER
+    SECTIONS include/boot_serial/boot_serial.ld
+  )
+
+  if(DEFINED CONFIG_BOOT_MGMT_CUSTOM_STORAGE_ERASE OR DEFINED CONFIG_BOOT_MGMT_CUSTOM_IMG_LIST)
+    zephyr_library_sources(
+      boot_serial_extension_zephyr_basic.c
+      )
+  endif()
 endif()
 
 if(NOT DEFINED CONFIG_FLASH_PAGE_LAYOUT)
   zephyr_library_sources(
     flash_map_legacy.c
+    )
+endif()
+
+if(DEFINED CONFIG_BOOT_SHARE_BACKEND_RETENTION)
+  zephyr_library_sources(
+    shared_data.c
     )
 endif()
 
@@ -103,6 +100,19 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/bootutil_misc.c
   ${BOOT_DIR}/bootutil/src/fault_injection_hardening.c
   )
+
+if(DEFINED CONFIG_MEASURED_BOOT OR DEFINED CONFIG_BOOT_SHARE_DATA)
+  zephyr_library_sources(
+    ${BOOT_DIR}/bootutil/src/boot_record.c
+    )
+
+  # Set a define for this file which will allow inclusion of the Zephyr version
+  # include file
+  set_source_files_properties(
+    ${BOOT_DIR}/bootutil/src/boot_record.c
+    PROPERTIES COMPILE_FLAGS -DZEPHYR_VER_INCLUDE=1
+    )
+endif()
 
 # library which might be common source code for MCUBoot and an application
 zephyr_link_libraries(MCUBOOT_BOOTUTIL)

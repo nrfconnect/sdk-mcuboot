@@ -25,13 +25,19 @@
 #if defined(CONFIG_BOOT_SERIAL_UART) && defined(CONFIG_UART_CONSOLE) && \
     (!DT_HAS_CHOSEN(zephyr_uart_mcumgr) ||                              \
      DT_SAME_NODE(DT_CHOSEN(zephyr_uart_mcumgr), DT_CHOSEN(zephyr_console)))
-#error Zephyr UART console must been disabled if serial_adapter module is used.
+#error Zephyr UART console must be disabled if serial_adapter module is used.
 #endif
 
 #if defined(CONFIG_BOOT_SERIAL_CDC_ACM) && \
-    defined(CONFIG_UART_CONSOLE) && !DT_HAS_CHOSEN(zephyr_uart_mcumgr)
-#error Zephyr UART console must been disabled if CDC ACM is enabled and MCUmgr \
+    defined(CONFIG_UART_CONSOLE) && (!DT_HAS_CHOSEN(zephyr_uart_mcumgr) || \
+    DT_SAME_NODE(DT_CHOSEN(zephyr_uart_mcumgr), DT_CHOSEN(zephyr_console)))
+#error Zephyr UART console must be disabled if CDC ACM is enabled and MCUmgr \
        has not been redirected to other UART with DTS chosen zephyr,uart-mcumgr.
+#endif
+
+#if defined(CONFIG_BOOT_SERIAL_CDC_ACM) && CONFIG_MAIN_THREAD_PRIORITY < 0
+#error CONFIG_MAIN_THREAD_PRIORITY must be preemptible to support USB CDC ACM \
+       (0 or above)
 #endif
 
 BOOT_LOG_MODULE_REGISTER(serial_adapter);
@@ -199,7 +205,6 @@ boot_uart_fifo_getline(char **line)
 static int
 boot_uart_fifo_init(void)
 {
-
 #if defined(CONFIG_BOOT_SERIAL_UART)
 
 #if DT_HAS_CHOSEN(zephyr_uart_mcumgr)
