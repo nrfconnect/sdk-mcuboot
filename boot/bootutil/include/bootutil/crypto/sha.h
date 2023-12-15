@@ -211,27 +211,27 @@ static inline int bootutil_sha_finish(bootutil_sha_context *ctx,
 
 #include <bl_crypto.h>
 
-typedef bl_sha256_ctx_t bootutil_sha256_context;
+typedef bl_sha256_ctx_t bootutil_sha_context;
 
-static inline void bootutil_sha256_init(bootutil_sha256_context *ctx)
+static inline void bootutil_sha_init(bootutil_sha_context *ctx)
 {
     bl_sha256_init(ctx);
 }
 
-static inline void bootutil_sha256_drop(bootutil_sha256_context *ctx)
+static inline void bootutil_sha_drop(bootutil_sha_context *ctx)
 {
     (void)ctx;
 }
 
-static inline int bootutil_sha256_update(bootutil_sha256_context *ctx,
-                                          const void *data,
-                                          uint32_t data_len)
+static inline int bootutil_sha_update(bootutil_sha_context *ctx,
+                                      const void *data,
+                                      uint32_t data_len)
 {
     return bl_sha256_update(ctx, data, data_len);
 }
 
-static inline int bootutil_sha256_finish(bootutil_sha256_context *ctx,
-                                          uint8_t *output)
+static inline int bootutil_sha_finish(bootutil_sha_context *ctx,
+                                      uint8_t *output)
 {
     bl_sha256_finalize(ctx, output);
     return 0;
