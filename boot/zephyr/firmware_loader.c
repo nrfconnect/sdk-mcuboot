@@ -1,17 +1,21 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * Copyright (c) 2020 Nordic Semiconductor ASA
  * Copyright (c) 2020 Arm Limited
+ * Copyright (c) 2020-2023 Nordic Semiconductor ASA
  */
 
 #include <assert.h>
+#include <zephyr/kernel.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/gpio.h>
 #include "bootutil/image.h"
 #include "bootutil_priv.h"
 #include "bootutil/bootutil_log.h"
 #include "bootutil/bootutil_public.h"
 #include "bootutil/fault_injection_hardening.h"
 
+#include "io/io.h"
 #include "mcuboot_config/mcuboot_config.h"
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
@@ -92,34 +96,35 @@ boot_image_validate_once(const struct flash_area *fa_p,
 #endif
 
 /**
- * Gather information on image and prepare for booting.
+ * Validates that an image in a slot is OK to boot.
  *
- * @parami[out]	rsp	Parameters for booting image, on success
+ * @param[in]	slot	Slot number to check
+ * @param[out]	rsp	Parameters for booting image, on success
  *
- * @return		FIH_SUCCESS on success; nonzero on failure.
+ * @return		FIH_SUCCESS on success; non-zero on failure.
  */
-fih_ret
-boot_go(struct boot_rsp *rsp)
+static fih_ret validate_image_slot(int slot, struct boot_rsp *rsp)
 {
     int rc = -1;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(0), &_fa_p);
+    rc = flash_area_open(slot, &_fa_p);
     assert(rc == 0);
 
     rc = boot_image_load_header(_fa_p, &_hdr);
-    if (rc != 0)
-        goto out;
+    if (rc != 0) {
+        goto other;
+    }
 
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
     FIH_CALL(boot_image_validate, fih_rc, _fa_p, &_hdr);
     if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        goto out;
+        goto other;
     }
 #elif defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
     FIH_CALL(boot_image_validate_once, fih_rc, _fa_p, &_hdr);
     if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        goto out;
+        goto other;
     }
 #else
     fih_rc = FIH_SUCCESS;
@@ -129,8 +134,63 @@ boot_go(struct boot_rsp *rsp)
     rsp->br_image_off = flash_area_get_off(_fa_p);
     rsp->br_hdr = &_hdr;
 
-out:
+other:
     flash_area_close(_fa_p);
+
+    FIH_RET(fih_rc);
+}
+
+/**
+ * Gather information on image and prepare for booting. Will boot from main
+ * image if none of the enabled entrance modes for the firmware loader are set,
+ * otherwise will boot the firmware loader. Note: firmware loader must be a
+ * valid signed image with the same signing key as the application image.
+ *
+ * @param[out]	rsp	Parameters for booting image, on success
+ *
+ * @return		FIH_SUCCESS on success; non-zero on failure.
+ */
+fih_ret
+boot_go(struct boot_rsp *rsp)
+{
+    bool boot_firmware_loader = false;
+    FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER_ENTRANCE_GPIO
+    if (io_detect_pin() &&
+            !io_boot_skip_serial_recovery()) {
+        boot_firmware_loader = true;
+    }
+#endif
+
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER_PIN_RESET
+    if (io_detect_pin_reset()) {
+        boot_firmware_loader = true;
+    }
+#endif
+
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER_BOOT_MODE
+    if (io_detect_boot_mode()) {
+        boot_firmware_loader = true;
+    }
+#endif
+
+    /* Check if firmware loader button is pressed. TODO: check all entrance methods */
+    if (boot_firmware_loader == true) {
+        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp);
+
+        if (FIH_EQ(fih_rc, FIH_SUCCESS)) {
+            FIH_RET(fih_rc);
+        }
+    }
+
+    FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_PRIMARY(0), rsp);
+
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER_NO_APPLICATION
+    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp);
+    }
+#endif
 
     FIH_RET(fih_rc);
 }

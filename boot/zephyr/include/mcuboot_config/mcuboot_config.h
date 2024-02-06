@@ -87,6 +87,10 @@
 #define IMAGE_EXECUTABLE_RAM_SIZE CONFIG_BOOT_IMAGE_EXECUTABLE_RAM_SIZE
 #endif
 
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER
+#define MCUBOOT_FIRMWARE_LOADER
+#endif
+
 #ifdef CONFIG_UPDATEABLE_IMAGE_NUMBER
 #define MCUBOOT_IMAGE_NUMBER    CONFIG_UPDATEABLE_IMAGE_NUMBER
 #else
@@ -324,9 +328,21 @@
 #elif defined(CONFIG_NRFX_WDT0)
 #define MCUBOOT_WATCHDOG_FEED() \
     FEED_WDT_INST(0);
-#else /* defined(CONFIG_NRFX_WDT0) && defined(CONFIG_NRFX_WDT1) */
+#elif defined(CONFIG_NRFX_WDT30) && defined(CONFIG_NRFX_WDT31)
+#define MCUBOOT_WATCHDOG_FEED() \
+    do {                        \
+        FEED_WDT_INST(30);      \
+        FEED_WDT_INST(31);      \
+    } while (0)
+#elif defined(CONFIG_NRFX_WDT30)
+#define MCUBOOT_WATCHDOG_FEED() \
+    FEED_WDT_INST(30);
+#elif defined(CONFIG_NRFX_WDT31)
+#define MCUBOOT_WATCHDOG_FEED() \
+    FEED_WDT_INST(31);
+#else
 #error "No NRFX WDT instances enabled"
-#endif /* defined(CONFIG_NRFX_WDT0) && defined(CONFIG_NRFX_WDT1) */
+#endif
 
 #elif DT_NODE_HAS_STATUS(DT_ALIAS(watchdog0), okay) /* CONFIG_NRFX_WDT */
 #include <zephyr/device.h>
