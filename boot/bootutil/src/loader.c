@@ -844,11 +844,6 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         if (BOOT_CURR_IMG(state) == 1) {
             min_addr = PM_CPUNET_APP_ADDRESS;
             max_addr = PM_CPUNET_APP_ADDRESS + PM_CPUNET_APP_SIZE;
-#ifdef PM_S1_ADDRESS
-        } else if (BOOT_CURR_IMG(state) == 0) {
-            min_addr = PM_S0_ADDRESS;
-            max_addr = pri_fa->fa_off + pri_fa->fa_size;
-#endif
         } else
 #endif
         {
@@ -967,33 +962,20 @@ boot_validated_swap_type(struct boot_loader_state *state,
         if(reset_addr < PM_CPUNET_B0N_ADDRESS)
 #endif
         {
-            const struct flash_area *nsib_fa;
             const struct flash_area *primary_fa;
             rc = flash_area_open(flash_area_id_from_multi_image_slot(
-                                 BOOT_CURR_IMG(state), BOOT_PRIMARY_SLOT),
-                                 &primary_fa);
+                        BOOT_CURR_IMG(state),
+                        BOOT_PRIMARY_SLOT),
+                    &primary_fa);
+
             if (rc != 0) {
                 return BOOT_SWAP_TYPE_FAIL;
             }
-
-            /* Check start and end of primary slot for current image */
-            if (reset_addr < primary_fa->fa_off) {
-                    /* NSIB upgrade slot */
-                    rc = flash_area_open((uint32_t)_image_1_primary_slot_id,
-                                    &nsib_fa);
-
-                    if (rc != 0) {
-                            return BOOT_SWAP_TYPE_FAIL;
-                    }
-
-                    /* Image is placed before Primary and within the NSIB slot */
-                    if (reset_addr > nsib_fa->fa_off
-                        && reset_addr < (nsib_fa->fa_off + nsib_fa->fa_size)) {
-                        /* Set primary to be NSIB upgrade slot */
-                        BOOT_IMG_AREA(state, 0) = nsib_fa;
-                    }
-            } else if (reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
-                /* The image in the secondary slot is not intended for any */
+            /* Get start and end of primary slot for current image */
+            if (reset_addr < primary_fa->fa_off ||
+                    reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
+                /* The image in the secondary slot is not intended for this image
+                */
                 return BOOT_SWAP_TYPE_NONE;
             }
         }
@@ -1257,7 +1239,7 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
     BOOT_LOG_INF("Image %d upgrade secondary slot -> primary slot", image_index);
     BOOT_LOG_INF("Erasing the primary slot");
 
-    rc = flash_area_open(flash_area_get_id(BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT)),
+    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index),
             &fap_primary_slot);
     assert (rc == 0);
 
