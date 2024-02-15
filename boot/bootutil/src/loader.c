@@ -1188,6 +1188,87 @@ done:
 }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT */
 
+#if defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
+(defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP))
+
+#define SEC_SLOT_VIRGIN 0
+#define SEC_SLOT_TOUCHED 1
+#define SEC_SLOT_ASSIGNED 2
+
+#if (MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS) && \
+      !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+/* This configuration is peculiar - the one physical secondary slot is
+ * mocking two logical secondary
+ */
+#define SEC_SLOT_PHYSICAL_CNT 1
+#else
+#define SEC_SLOT_PHYSICAL_CNT MCUBOOT_IMAGE_NUMBER
+#endif
+
+static uint8_t sec_slot_assignmnet[SEC_SLOT_PHYSICAL_CNT] = {0};
+
+static inline void sec_slot_touch(struct boot_loader_state *state)
+{
+    uint8_t idx = (SEC_SLOT_PHYSICAL_CNT == 1) ? 0 : BOOT_CURR_IMG(state);
+
+    if (SEC_SLOT_VIRGIN == sec_slot_assignmnet[idx]) {
+        sec_slot_assignmnet[idx] = SEC_SLOT_TOUCHED;
+    }
+}
+
+static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
+{
+    uint8_t idx = (SEC_SLOT_PHYSICAL_CNT == 1) ? 0 : BOOT_CURR_IMG(state);
+
+    sec_slot_assignmnet[idx] = SEC_SLOT_ASSIGNED;
+}
+
+/**
+ * Cleanu up all secondary slot which couldn't be assigned to any primary slot.
+ *
+ * This function erases content of each secondary slot which contains valid
+ * header but couldn't be assigned to any of supported primary images.
+ *
+ * This function is supposed to be called after boot_validated_swap_type()
+ * iterates over all the images in context_boot_go().
+ */
+static void sec_slot_cleanup_if_unusable(void)
+{
+    uint8_t idx;
+
+    for (idx = 0; idx < SEC_SLOT_PHYSICAL_CNT; idx++) {
+        if (SEC_SLOT_TOUCHED == sec_slot_assignmnet[idx]) {
+            const struct flash_area *secondary_fa;
+            int rc;
+
+            rc = flash_area_open(flash_area_id_from_multi_image_slot(idx, BOOT_SECONDARY_SLOT),
+                                 &secondary_fa);
+            if (!rc) {
+                rc = flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+                if (!rc) {
+                    BOOT_LOG_ERR("Cleaned-up secondary slot of %d. image.", idx);
+                }
+            }
+
+            if (rc) {
+                BOOT_LOG_ERR("Can not cleanup secondary slot of %d. image.", idx);
+            }
+        }
+    }
+}
+#else
+static inline void sec_slot_touch(struct boot_loader_state *state)
+{
+}
+static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
+{
+}
+static inline void sec_slot_cleanup_if_unusable(void)
+{
+}
+#endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
+          defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
+
 #if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
 /**
  * Determines which swap operation to perform, if any.  If it is determined
@@ -1226,6 +1307,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
         if (rc != 0) {
             return BOOT_SWAP_TYPE_FAIL;
         }
+
+        sec_slot_touch(state);
+
 #ifdef PM_S1_ADDRESS
 #ifdef PM_CPUNET_B0N_ADDRESS
         if(reset_addr < PM_CPUNET_B0N_ADDRESS)
@@ -1260,6 +1344,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
                     }
 #else
                 return BOOT_SWAP_TYPE_NONE;
+
 #endif
 
             } else if (reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
@@ -1268,7 +1353,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
             }
         }
 #endif /* PM_S1_ADDRESS */
+        sec_slot_mark_assigned(state);
     }
+
 #endif /* PM_S1_ADDRESS || CONFIG_SOC_NRF5340_CPUAPP */
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
@@ -2325,6 +2412,9 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             has_upgrade = true;
         }
     }
+
+    /* cleanup secondary slots which were recognized unusable*/
+    sec_slot_cleanup_if_unusable();
 
 #if (BOOT_IMAGE_NUMBER > 1)
     if (has_upgrade) {
