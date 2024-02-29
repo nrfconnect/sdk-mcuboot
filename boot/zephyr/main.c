@@ -594,7 +594,9 @@ int main(void)
     led_init();
 #endif
 
+#ifdef MBEDTLS_ENABLE_HEAP
     os_heap_init();
+#endif
 
     ZEPHYR_BOOT_LOG_START();
 

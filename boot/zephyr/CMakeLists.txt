@@ -168,12 +168,7 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
     zephyr_include_directories(${BL_CRYPTO_DIR}/../include)
   endif()
 
-  # Since here we are not using Zephyr's mbedTLS but rather our own, we need
-  # to set MBEDTLS_CONFIG_FILE ourselves. When using Zephyr's copy, this
-  # variable is set by its Kconfig in the Zephyr codebase.
-  zephyr_library_compile_definitions(
-    MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_LIST_DIR}/include/mcuboot-mbedtls-cfg.h"
-    )
+
 elseif(CONFIG_BOOT_SIGNATURE_TYPE_NONE)
   zephyr_library_include_directories(
     ${BOOT_DIR}/zephyr/include
@@ -185,8 +180,6 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_NONE)
     ${TINYCRYPT_DIR}/source/utils.c
     )
 elseif(CONFIG_BOOT_SIGNATURE_TYPE_RSA)
-  # Use mbedTLS provided by Zephyr for RSA signatures. (Its config file
-  # is set using Kconfig.)
   zephyr_include_directories(include)
   if(CONFIG_BOOT_ENCRYPT_RSA)
     set_source_files_properties(
@@ -210,9 +203,6 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
       # Additionally pull in just the ASN.1 parser from mbedTLS.
       ${MBEDTLS_ASN1_DIR}/src/asn1parse.c
       ${MBEDTLS_ASN1_DIR}/src/platform_util.c
-      )
-    zephyr_library_compile_definitions(
-      MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_LIST_DIR}/include/mcuboot-mbedtls-cfg.h"
       )
   else()
     zephyr_include_directories(include)

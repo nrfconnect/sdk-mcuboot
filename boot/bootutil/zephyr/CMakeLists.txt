@@ -34,7 +34,13 @@ target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
 )
 endif()
 
+if(CONFIG_NRF_SECURITY)
+  target_link_libraries(MCUBOOT_BOOTUTIL INTERFACE mbedcrypto_common)
+  zephyr_link_libraries(${mbedcrypto_target})
+endif()
+
 if(CONFIG_BOOT_USE_MBEDTLS)
   zephyr_link_libraries(mbedTLS)
 endif()
+
 endif()

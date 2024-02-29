@@ -23,6 +23,8 @@ config BOOT_USE_MBEDTLS
 	bool
 	# Hidden option
 	default n
+	select NRF_SECURITY
+	select MBEDTLS
 	help
 	  Use mbedTLS for crypto primitives.
 
@@ -80,6 +82,7 @@ config BOOT_SIGNATURE_TYPE_RSA
 	bool "RSA signatures"
 	select BOOT_USE_MBEDTLS
 	select MBEDTLS
+	select MBEDTLS_RSA_C
 	select BOOT_ENCRYPTION_SUPPORT
 
 if BOOT_SIGNATURE_TYPE_RSA
@@ -740,5 +743,6 @@ config MCUBOOT_VERIFY_IMG_ADDRESS
 	  enabled then the only mitigation is serial recovery. This feature can
 	  also be useful when BOOT_DIRECT_XIP is enabled, to ensure that the image
 	  linked at the correct address is loaded.
+
 
 source "Kconfig.zephyr"
