@@ -9,6 +9,7 @@
 #endif
 #include <hal/nrf_uarte.h>
 #include <haly/nrfy_uarte.h>
+#include <haly/nrfy_gpio.h>
 #if defined(NRF_RTC0) || defined(NRF_RTC1) || defined(NRF_RTC2)
     #include <hal/nrf_rtc.h>
 #endif
@@ -95,6 +96,21 @@ void nrf_cleanup_peripheral(void)
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_ENDRX);
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXTO);
         nrfy_uarte_disable(current);
+
+        uint32_t pin[4];
+
+        pin[0] = nrfy_uarte_tx_pin_get(current);
+        pin[1] = nrfy_uarte_rx_pin_get(current);
+        pin[2] = nrfy_uarte_rts_pin_get(current);
+        pin[3] = nrfy_uarte_cts_pin_get(current);
+
+        nrfy_uarte_pins_disconnect(current);
+
+        for (int j = 0; j < 4; j++) {
+            if (pin[j] != NRF_UARTE_PSEL_DISCONNECTED) {
+                nrfy_gpio_cfg_default(pin[j]);
+            }
+        }
 
 #if defined(NRF_DPPIC)
         /* Clear all SUBSCRIBE configurations. */
