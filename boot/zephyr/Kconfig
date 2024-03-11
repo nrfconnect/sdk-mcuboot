@@ -1,5 +1,6 @@
 # Copyright (c) 2017-2020 Linaro Limited
 # Copyright (c) 2020 Arm Limited
+# Copyright (c) 2023 Nordic Semiconductor ASA
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -30,6 +31,7 @@ config BOOT_USE_TINYCRYPT
 	# When building for ECDSA, we use our own copy of mbedTLS, so the
 	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
 	# will collide.
+	select MBEDTLS_PROMPTLESS if ZEPHYR_MBEDTLS_MODULE
 	help
 	  Use TinyCrypt for crypto primitives.
 
@@ -255,6 +257,18 @@ config BOOT_RAM_LOAD
 	  The address that the image is copied to is specified using the load-addr
 	  argument to the imgtool.py script which writes it to the image header.
 
+config BOOT_FIRMWARE_LOADER
+	bool "Firmware loader"
+	help
+	  If y, mcuboot will have a single application slot, and the secondary
+	  slot will be for a non-upgradeable firmware loaded image (e.g. for
+	  loading firmware via Bluetooth). The main application will boot by
+	  default unless there is an error with it or the boot mode has been
+	  forced to the firmware loader.
+
+	  Note: The firmware loader image must be signed with the same signing
+	  key as the primary image.
+
 endchoice
 
 # Workaround for not being able to have commas in macro arguments
@@ -293,6 +307,7 @@ config BOOT_BOOTSTRAP
 config BOOT_SWAP_SAVE_ENCTLV
 	bool "Save encrypted key TLVs instead of plaintext keys in swap metadata"
 	default n
+	depends on BOOT_ENCRYPT_IMAGE
 	help
 	  If y, instead of saving the encrypted image keys in plaintext in the
 	  swap resume metadata, save the encrypted image TLVs. This should be used
@@ -581,6 +596,8 @@ config MCUBOOT_INDICATION_LED
 
 rsource "Kconfig.serial_recovery"
 
+rsource "Kconfig.firmware_loader"
+
 config BOOT_INTR_VEC_RELOC
 	bool "Relocate the interrupt vector to the application"
 	default n
@@ -649,6 +666,8 @@ config BOOT_WATCHDOG_FEED
 	imply NRFX_WDT if SOC_FAMILY_NRF
 	imply NRFX_WDT0 if SOC_FAMILY_NRF
 	imply NRFX_WDT1 if SOC_FAMILY_NRF
+	imply NRFX_WDT30 if SOC_FAMILY_NRF
+	imply NRFX_WDT31 if SOC_FAMILY_NRF
 	help
 	  Enables implementation of MCUBOOT_WATCHDOG_FEED() macro which is
 	  used to feed watchdog while doing time consuming operations.
