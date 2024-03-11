@@ -7,6 +7,7 @@
 #include <hal/nrf_clock.h>
 #if defined(NRF_UARTE0) || defined(NRF_UARTE1)
     #include <hal/nrf_uarte.h>
+    #include <hal/nrf_gpio.h>
 #endif
 #if defined(NRF_RTC0) || defined(NRF_RTC1) || defined(NRF_RTC2)
     #include <hal/nrf_rtc.h>
@@ -46,6 +47,34 @@ static void nrf_cleanup_clock(void)
     nrf_clock_int_disable(NRF_CLOCK, 0xFFFFFFFF);
 }
 
+#if (defined(NRF_UARTE0) || defined(NRF_UARTE1)) && defined(CONFIG_UART_NRFX_UARTE)
+static void uninit_used_uarte(NRF_UARTE_Type *p_reg)
+{
+    uint32_t pin[4];
+
+    nrf_uarte_disable(p_reg);
+    nrf_uarte_int_disable(p_reg, 0xFFFFFFFF);
+
+    pin[0] = nrf_uarte_tx_pin_get(p_reg);
+    pin[1] = nrf_uarte_rx_pin_get(p_reg);
+    pin[2] = nrf_uarte_rts_pin_get(p_reg);
+    pin[3] = nrf_uarte_cts_pin_get(p_reg);
+
+    for (int i = 0; i < 4; i++) {
+        if (pin[i] != NRF_UARTE_PSEL_DISCONNECTED) {
+            nrf_gpio_cfg_default(pin[i]);
+        }
+    }
+
+    #if defined(NRF_DPPIC)
+    /* Clear all SUBSCRIBE configurations. */
+    memset((uint8_t *)p_reg + NRF_UARTE_SUBSCRIBE_CONF_OFFS, 0, NRF_UARTE_SUBSCRIBE_CONF_SIZE);
+    /* Clear all PUBLISH configurations. */
+    memset((uint8_t *)p_reg + NRF_UARTE_PUBLISH_CONF_OFFS, 0, NRF_UARTE_PUBLISH_CONF_SIZE);
+    #endif
+}
+#endif
+
 void nrf_cleanup_peripheral(void)
 {
 #if defined(NRF_RTC0)
@@ -57,25 +86,11 @@ void nrf_cleanup_peripheral(void)
 #if defined(NRF_RTC2)
     nrf_cleanup_rtc(NRF_RTC2);
 #endif
-#if defined(NRF_UARTE0)
-    nrf_uarte_disable(NRF_UARTE0);
-    nrf_uarte_int_disable(NRF_UARTE0, 0xFFFFFFFF);
-#if defined(NRF_DPPIC)
-    /* Clear all SUBSCRIBE configurations. */
-    memset((uint8_t *)NRF_UARTE0 + NRF_UARTE_SUBSCRIBE_CONF_OFFS, 0, NRF_UARTE_SUBSCRIBE_CONF_SIZE);
-    /* Clear all PUBLISH configurations. */
-    memset((uint8_t *)NRF_UARTE0 + NRF_UARTE_PUBLISH_CONF_OFFS, 0, NRF_UARTE_PUBLISH_CONF_SIZE);
+#if defined(NRF_UARTE0) && defined(CONFIG_UART_NRFX_UARTE)
+    uninit_used_uarte(NRF_UARTE0);
 #endif
-#endif
-#if defined(NRF_UARTE1)
-    nrf_uarte_disable(NRF_UARTE1);
-    nrf_uarte_int_disable(NRF_UARTE1, 0xFFFFFFFF);
-#if defined(NRF_DPPIC)
-    /* Clear all SUBSCRIBE configurations. */
-    memset((uint8_t *)NRF_UARTE1 + NRF_UARTE_SUBSCRIBE_CONF_OFFS, 0, NRF_UARTE_SUBSCRIBE_CONF_SIZE);
-    /* Clear all PUBLISH configurations. */
-    memset((uint8_t *)NRF_UARTE1 + NRF_UARTE_PUBLISH_CONF_OFFS, 0, NRF_UARTE_PUBLISH_CONF_SIZE);
-#endif
+#if defined(NRF_UARTE1) && defined(CONFIG_UART_NRFX_UARTE)
+    uninit_used_uarte(NRF_UARTE1);
 #endif
 #if defined(NRF_PPI)
     nrf_ppi_channels_disable_all(NRF_PPI);
