@@ -1,6 +1,6 @@
 /*
  * This file has been copied from the zcbor library.
- * Commit zcbor 0.8.1
+ * Commit zcbor 0.8.0
  */
 
 /*
@@ -93,12 +93,10 @@ static void zcbor_print_compare_lines(const uint8_t *str1, const uint8_t *str2, 
 __attribute__((used))
 static void zcbor_print_compare_strings(const uint8_t *str1, const uint8_t *str2, uint32_t size)
 {
-	const size_t col_width = 16;
-
-	for (size_t i = 0; i <= size / col_width; i++) {
-		zcbor_do_print("line %zu (char %zu)\r\n", i, i*col_width);
-		zcbor_print_compare_lines(&str1[i*col_width], &str2[i*col_width],
-			MIN(col_width, (size - i*col_width)));
+	for (uint32_t i = 0; i <= size / 16; i++) {
+		zcbor_do_print("line %d (char %d)\r\n", i, i*16);
+		zcbor_print_compare_lines(&str1[i*16], &str2[i*16],
+			MIN(16, (size - i*16)));
 	}
 	zcbor_do_print("\r\n");
 }
@@ -106,14 +104,12 @@ static void zcbor_print_compare_strings(const uint8_t *str1, const uint8_t *str2
 __attribute__((used))
 static void zcbor_print_compare_strings_diff(const uint8_t *str1, const uint8_t *str2, uint32_t size)
 {
-	const size_t col_width = 16;
 	bool printed = false;
-
-	for (size_t i = 0; i <= size / col_width; i++) {
-		if (memcmp(&str1[i*col_width], &str2[i*col_width], MIN(col_width, (size - i*col_width))) != 0) {
-			zcbor_do_print("line %zu (char %zu)\r\n", i, i*col_width);
-			zcbor_print_compare_lines(&str1[i*col_width], &str2[i*col_width],
-				MIN(col_width, (size - i*col_width)));
+	for (uint32_t i = 0; i <= size / 16; i++) {
+		if (memcmp(&str1[i*16], &str2[i*16], MIN(16, (size - i*16))) != 0) {
+			zcbor_do_print("line %d (char %d)\r\n", i, i*16);
+			zcbor_print_compare_lines(&str1[i*16], &str2[i*16],
+				MIN(16, (size - i*16)));
 			printed = true;
 		}
 	}
