@@ -27,6 +27,10 @@
 #include <soc.h>
 #include <zephyr/linker/linker-defs.h>
 
+#if defined(CONFIG_BOOT_DISABLE_CACHES)
+#include <zephyr/cache.h>
+#endif
+
 #if defined(CONFIG_ARM)
 #include <cmsis_core.h>
 #endif
@@ -42,7 +46,7 @@
 #include "flash_map_backend/flash_map_backend.h"
 
 /* Check if Espressif target is supported */
-#ifdef CONFIG_SOC_FAMILY_ESP32
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
 
 #include <bootloader_init.h>
 #include <esp_loader.h>
@@ -63,7 +67,7 @@
 #define IMAGE1_PRIMARY_SIZE \
           DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_1), reg, 1)
 
-#endif /* CONFIG_SOC_FAMILY_ESP32 */
+#endif /* CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 */
 
 #ifdef CONFIG_FW_INFO
 #include <fw_info.h>
@@ -214,10 +218,12 @@ static void do_boot(struct boot_rsp *rsp)
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     cleanup_arm_nvic(); /* cleanup NVIC registers */
 
-#ifdef CONFIG_CPU_CORTEX_M_HAS_CACHE
-    /* Disable instruction cache and data cache before chain-load the application */
-    SCB_DisableDCache();
-    SCB_DisableICache();
+#if defined(CONFIG_BOOT_DISABLE_CACHES)
+    /* Flush and disable instruction/data caches before chain-loading the application */
+    (void)sys_cache_instr_flush_all();
+    (void)sys_cache_data_flush_all();
+    sys_cache_instr_disable();
+    sys_cache_data_disable();
 #endif
 
 #if CONFIG_CPU_HAS_ARM_MPU || CONFIG_CPU_HAS_NXP_MPU
@@ -263,7 +269,7 @@ static void do_boot(struct boot_rsp *rsp)
 
 #elif defined(CONFIG_XTENSA) || defined(CONFIG_RISCV)
 
-#ifndef CONFIG_SOC_FAMILY_ESP32
+#ifndef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
 
 #define SRAM_BASE_ADDRESS	0xBE030000
 
@@ -292,7 +298,7 @@ static void copy_img_to_SRAM(int slot, unsigned int hdr_offset)
 done:
     flash_area_close(fap);
 }
-#endif /* !CONFIG_SOC_FAMILY_ESP32 */
+#endif /* !CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 */
 
 /* Entry point (.ResetVector) is at the very beginning of the image.
  * Simply copy the image to a suitable location and jump there.
@@ -304,7 +310,7 @@ static void do_boot(struct boot_rsp *rsp)
     BOOT_LOG_INF("br_image_off = 0x%x\n", rsp->br_image_off);
     BOOT_LOG_INF("ih_hdr_size = 0x%x\n", rsp->br_hdr->ih_hdr_size);
 
-#ifdef CONFIG_SOC_FAMILY_ESP32
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
     int slot = (rsp->br_image_off == IMAGE0_PRIMARY_START_ADDRESS) ?
                 PRIMARY_SLOT : SECONDARY_SLOT;
     /* Load memory segments and start from entry point */
@@ -316,7 +322,7 @@ static void do_boot(struct boot_rsp *rsp)
     /* Jump to entry point */
     start = (void *)(SRAM_BASE_ADDRESS + rsp->br_hdr->ih_hdr_size);
     ((void (*)(void))start)();
-#endif /* CONFIG_SOC_FAMILY_ESP32 */
+#endif /* CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 */
 }
 
 #else
