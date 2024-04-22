@@ -612,7 +612,6 @@ config BOOT_INTR_VEC_RELOC
 config UPDATEABLE_IMAGE_NUMBER
 	int "Number of updateable images"
 	default 1
-	range 1 1 if SINGLE_APPLICATION_SLOT
 	help
 	  Enables support of multi image update.
 
