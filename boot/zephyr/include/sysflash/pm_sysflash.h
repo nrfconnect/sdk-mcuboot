@@ -15,7 +15,7 @@
 
 #ifndef CONFIG_SINGLE_APPLICATION_SLOT
 
-#if (MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS)
+#if ((MCUBOOT_IMAGE_NUMBER == 2) | (MCUBOOT_IMAGE_NUMBER == 3))  && defined(PM_B0_ADDRESS)
 /* If B0 is present then two bootloaders are present, and we must use
  * a single secondary slot for both primary slots.
  */
@@ -38,6 +38,21 @@ extern uint32_t _image_1_primary_slot_id[];
         (x == 1) ?                              \
            PM_MCUBOOT_SECONDARY_ID:             \
            255 )
+
+#elif (MCUBOOT_IMAGE_NUMBER == 3) && defined(PM_B0_ADDRESS) && \
+      defined(CONFIG_NRF53_RECOVERY_NETWORK_CORE)
+
+#define FLASH_AREA_IMAGE_PRIMARY(x)             \
+        ((x == 0) ?                             \
+           PM_MCUBOOT_PRIMARY_ID :              \
+         (x == 1) ?                             \
+          (uint32_t)_image_1_primary_slot_id :  \
+         (x == 2) ?                             \
+           PM_MCUBOOT_PRIMARY_1_ID :            \
+           255 )
+
+#define FLASH_AREA_IMAGE_SECONDARY(x)           \
+        FLASH_AREA_IMAGE_PRIMARY(x)
 
 #else  /* MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS) && \
         * !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
