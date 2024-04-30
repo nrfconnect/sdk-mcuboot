@@ -4,7 +4,6 @@
  * Copyright (c) 2016-2020 Linaro LTD
  * Copyright (c) 2016-2019 JUUL Labs
  * Copyright (c) 2019-2023 Arm Limited
- * Copyright (c) 2024 Nordic Semiconductor ASA
  *
  * Original license:
  *
@@ -2349,13 +2348,8 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         if (BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_NONE) {
             /* Attempt to read an image header from each slot. Ensure that image
              * headers in slots are aligned with headers in boot_data.
-	     * Note: Quite complicated internal logic of boot_read_image_headers
-	     * uses boot state, the last parm, to figure out in which slot which
-	     * header is located; when boot state is not provided, then it
-	     * is assumed that headers are at proper slots (we are not in
-	     * the middle of moving images, etc).
              */
-            rc = boot_read_image_headers(state, false, NULL);
+            rc = boot_read_image_headers(state, false, &bs);
             if (rc != 0) {
                 FIH_SET(fih_rc, FIH_FAILURE);
                 goto out;
