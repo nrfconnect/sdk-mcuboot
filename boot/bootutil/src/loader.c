@@ -1232,6 +1232,7 @@ static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
  * This function is supposed to be called after boot_validated_swap_type()
  * iterates over all the images in context_boot_go().
  */
+#if defined(MCUBOOT_ENC_IMAGES) && (BOOT_IMAGE_NUMBER > 1)
 static void sec_slot_cleanup_if_unusable(void)
 {
     uint8_t idx;
@@ -1256,6 +1257,7 @@ static void sec_slot_cleanup_if_unusable(void)
         }
     }
 }
+#endif /* defined(MCUBOOT_ENC_IMAGES) && (BOOT_IMAGE_NUMBER > 1) */
 #else
 static inline void sec_slot_touch(struct boot_loader_state *state)
 {
@@ -1263,9 +1265,11 @@ static inline void sec_slot_touch(struct boot_loader_state *state)
 static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
 {
 }
+#if defined(MCUBOOT_ENC_IMAGES) && (BOOT_IMAGE_NUMBER > 1)
 static inline void sec_slot_cleanup_if_unusable(void)
 {
 }
+#endif /* defined(MCUBOOT_ENC_IMAGES) && (BOOT_IMAGE_NUMBER > 1) */
 #endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
           defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
 
