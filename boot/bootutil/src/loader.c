@@ -1188,6 +1188,8 @@ done:
 }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT */
 
+#if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
+
 #if defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
 (defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP))
 
@@ -1269,7 +1271,6 @@ static inline void sec_slot_cleanup_if_unusable(void)
 #endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
           defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
 
-#if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
 /**
  * Determines which swap operation to perform, if any.  If it is determined
  * that a swap operation is required, the image in the secondary slot is checked
