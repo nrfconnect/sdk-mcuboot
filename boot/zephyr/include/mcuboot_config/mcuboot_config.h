@@ -44,6 +44,11 @@
 #define MCUBOOT_USE_PSA_CRYPTO
 #elif defined(CONFIG_BOOT_USE_NRF_EXTERNAL_CRYPTO)
 #define MCUBOOT_USE_NRF_EXTERNAL_CRYPTO
+#elif defined(CONFIG_BOOT_USE_NRF_EXTERNAL_CRYPTO)
+#define MCUBOOT_USE_NRF_EXTERNAL_CRYPTO
+
+#ifdef CONFIG_BOOT_SIGNATURE_TYPE_NONE_SHA512
+#define MCUBOOT_SHA512
 #endif
 
 /* Zephyr, regardless of C library used, provides snprintf */
