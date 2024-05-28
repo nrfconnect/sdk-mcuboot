@@ -141,12 +141,8 @@ int flash_area_sector_from_off(off_t off, struct flash_sector *sector)
 
 uint8_t flash_area_get_device_id(const struct flash_area *fa)
 {
-#if defined(CONFIG_ARM)
-    return fa->fa_id;
-#else
-    (void)fa;
-    return FLASH_DEVICE_ID;
-#endif
+	(void)fa;
+	return FLASH_DEVICE_ID;
 }
 
 #define ERASED_VAL 0xff
