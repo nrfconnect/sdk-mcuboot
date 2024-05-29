@@ -9,6 +9,11 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
+#if defined(CONFIG_NRF_SECURITY)
+/* We are not really using the MBEDTLS but need the ASN.1 parsing funcitons */
+#define MBEDTLS_ASN1_PARSE_C
+#endif
+
 #ifdef MCUBOOT_SIGN_ED25519
 #include "bootutil/sign_key.h"
 
@@ -73,7 +78,8 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     uint8_t *pubkey;
     uint8_t *end;
 
-    if (hlen != 32 || slen != 64) {
+    /* Fixme: Fix needed here, as ed25519 should only use sha512 */
+    if (!(hlen == 64 || hlen == 32) || slen != 64) {
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
@@ -87,7 +93,7 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
         goto out;
     }
 
-    rc = ED25519_verify(hash, 32, sig, pubkey);
+    rc = ED25519_verify(hash, hlen, sig, pubkey);
 
     if (rc == 0) {
         /* if verify returns 0, there was an error. */
