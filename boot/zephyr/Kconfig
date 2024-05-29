@@ -26,6 +26,13 @@ config BOOT_USE_MBEDTLS
 	help
 	  Use mbedTLS for crypto primitives.
 
+config BOOT_USE_PSA_CRYPTO
+	bool
+	# Hidden option
+	select NRF_OBERON
+	help
+	  Use PSA Crypto API
+
 config BOOT_USE_TINYCRYPT
 	bool
 	# Hidden option
@@ -75,7 +82,6 @@ choice BOOT_SIGNATURE_TYPE
 
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
-	select BOOT_USE_TINYCRYPT
 
 config BOOT_SIGNATURE_TYPE_RSA
 	bool "RSA signatures"
@@ -120,18 +126,40 @@ config BOOT_SIGNATURE_TYPE_ED25519
 if BOOT_SIGNATURE_TYPE_ED25519
 choice BOOT_ED25519_IMPLEMENTATION
 	prompt "Ecdsa implementation"
+	default BOOT_ED25519_PSA if NRF_SECURITY
 	default BOOT_ED25519_TINYCRYPT
 config BOOT_ED25519_TINYCRYPT
 	bool "Use tinycrypt"
 	select BOOT_USE_TINYCRYPT
+	depends on !NRF_SECURITY
 config BOOT_ED25519_MBEDTLS
 	bool "Use mbedTLS"
 	select BOOT_USE_MBEDTLS
 	select MBEDTLS
+	depends on !NRF_SECURITY
+config BOOT_ED25519_PSA
+	bool "Use PSA crypto"
+	select BOOT_USE_PSA_CRYPTO
+	select PSA_WANT_ALG_SHA256
+	select PSA_WANT_ECC_TWISTED_EDWARDS_255
+	select PSA_WANT_ALG_PURE_EDDSA
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
 endchoice
 endif
 
 endchoice
+
+if BOOT_ED25519_PSA && NRF_SECURITY
+
+config MBEDTLS_HEAP_SIZE
+	int
+	default 2048
+
+config MBEDTLS_ENABLE_HEAP
+	bool
+	default y
+
+endif
 
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
@@ -166,8 +194,12 @@ config MCUBOOT_CLEANUP_ARM_CORE
 	  start-up code which can cause a module fault and potentially make the
 	  module irrecoverable.
 
+if MBEDTLS
+
 config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
+
+endif
 
 config BOOT_HW_KEY
 	bool "Use HW key for image verification"

@@ -19,6 +19,8 @@
 
 #include "common.h"
 
+/*TODO: Fix this, it should not be selected that way but fighting config is a pain */
+#define MBEDTLS_ASN1_PARSE_C
 #if defined(MBEDTLS_ASN1_PARSE_C)
 
 #include "mbedtls/asn1.h"
