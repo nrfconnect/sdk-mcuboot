@@ -31,9 +31,11 @@
 
 #if defined(MCUBOOT_ENCRYPT_EC256) || defined(MCUBOOT_ENCRYPT_X25519)
 #include "bootutil/crypto/sha.h"
+#if !defined(MCUBOOT_USE_PSA_CRYPTO)
 #include "bootutil/crypto/hmac_sha256.h"
 #include "mbedtls/oid.h"
 #include "mbedtls/asn1.h"
+#endif
 #endif
 
 #include "bootutil/image.h"
@@ -169,6 +171,7 @@ parse_ec256_enckey(uint8_t **p, uint8_t *end, uint8_t *private_key)
 }
 #endif /* defined(MCUBOOT_ENCRYPT_EC256) */
 
+#if !defined(MCUBOOT_USE_PSA_CRYPTO)
 #if defined(MCUBOOT_ENCRYPT_X25519)
 #define X25519_OID "\x6e"
 static const uint8_t ec_pubkey_oid[] = MBEDTLS_OID_ISO_IDENTIFIED_ORG \
@@ -177,6 +180,7 @@ static const uint8_t ec_pubkey_oid[] = MBEDTLS_OID_ISO_IDENTIFIED_ORG \
 #define SHARED_KEY_LEN 32
 #define PRIV_KEY_LEN   32
 
+#if defined(MCUBOOT_USE_MBED_TLS)
 static int
 parse_x25519_enckey(uint8_t **p, uint8_t *end, uint8_t *private_key)
 {
@@ -223,6 +227,17 @@ parse_x25519_enckey(uint8_t **p, uint8_t *end, uint8_t *private_key)
     memcpy(private_key, *p, PRIV_KEY_LEN);
     return 0;
 }
+#else
+static int
+parse_x25519_enckey(uint8_t **p, uint8_t *end, uint8_t *private_key)
+{
+    ARG_UNUSED(p);
+    ARG_UNUSED(end);
+    ARG_UNUSED(private_key);
+
+    return 0;
+}
+#endif
 #endif /* defined(MCUBOOT_ENCRYPT_X25519) */
 
 #if defined(MCUBOOT_ENCRYPT_EC256) || defined(MCUBOOT_ENCRYPT_X25519)
@@ -335,6 +350,7 @@ error:
     return -1;
 }
 #endif
+#endif /* !defined(MCUBOOT_USE_PSA_CRYPTO) */
 
 int
 boot_enc_init(struct enc_key_data *enc_state, uint8_t slot)
@@ -429,6 +445,7 @@ boot_enc_decrypt(const uint8_t *buf, uint8_t *enckey)
 #if defined(MCUBOOT_ENCRYPT_X25519)
     bootutil_ecdh_x25519_context ecdh_x25519;
 #endif
+#if !defined(MCUBOOT_USE_PSA_CRYPTO)
 #if defined(MCUBOOT_ENCRYPT_EC256) || defined(MCUBOOT_ENCRYPT_X25519)
     bootutil_hmac_sha256_context hmac;
     bootutil_aes_ctr_context aes_ctr;
@@ -441,6 +458,7 @@ boot_enc_decrypt(const uint8_t *buf, uint8_t *enckey)
     uint8_t counter[BOOTUTIL_CRYPTO_AES_CTR_BLOCK_SIZE];
     uint16_t len;
 #endif
+#endif /* !defined(MCUBOOT_USE_PSA_CRYPTO) */
     int rc = -1;
 
 #if defined(MCUBOOT_ENCRYPT_RSA)
