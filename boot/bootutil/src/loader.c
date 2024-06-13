@@ -70,6 +70,9 @@ int pcd_version_cmp_net(const struct flash_area *fap, struct image_header *hdr);
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
+#ifdef PM_S1_ADDRESS
+static bool owner_nsib[BOOT_IMAGE_NUMBER] = {false};
+#endif
 
 #if defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO) || defined(MCUBOOT_DATA_SHARING)
 static struct image_max_size image_max_sizes[BOOT_IMAGE_NUMBER] = {0};
@@ -1338,6 +1341,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
     int swap_type;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     bool upgrade_valid = false;
+#if defined(PM_S1_ADDRESS)
+    owner_nsib[BOOT_CURR_IMG(state)] = false;
+#endif
 
 #if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP)
     const struct flash_area *secondary_fa =
@@ -1394,6 +1400,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
                         && reset_addr < (nsib_fa->fa_off + nsib_fa->fa_size)) {
                         /* Set primary to be NSIB upgrade slot */
                         BOOT_IMG_AREA(state, 0) = nsib_fa;
+                        owner_nsib[BOOT_CURR_IMG(state)] = true;
                     }
 #else
                 return BOOT_SWAP_TYPE_NONE;
@@ -1403,6 +1410,10 @@ boot_validated_swap_type(struct boot_loader_state *state,
             } else if (reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
                 /* The image in the secondary slot is not intended for any */
                 return BOOT_SWAP_TYPE_NONE;
+            }
+
+            if ((primary_fa->fa_off == PM_S0_ADDRESS) || (primary_fa->fa_off == PM_S1_ADDRESS)) {
+                owner_nsib[BOOT_CURR_IMG(state)] = true;
             }
         }
 #endif /* PM_S1_ADDRESS */
@@ -2370,6 +2381,13 @@ check_downgrade_prevention(struct boot_loader_state *state)
     (defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_SCRATCH))
     uint32_t security_counter[2];
     int rc;
+
+#if defined(PM_S1_ADDRESS)
+    if (owner_nsib[BOOT_CURR_IMG(state)]) {
+        /* Downgrade prevention on S0/S1 image is managed by NSIB */
+        return 0;
+    }
+#endif
 
     if (MCUBOOT_DOWNGRADE_PREVENTION_SECURITY_COUNTER) {
         /* If there was security no counter in slot 0, allow swap */
