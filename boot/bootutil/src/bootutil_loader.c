@@ -262,6 +262,13 @@ boot_update_security_counter(struct boot_loader_state *state, int slot, int hdr_
     const struct flash_area *fap = NULL;
     uint32_t img_security_cnt;
     int rc;
+    FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+    FIH_CALL(boot_nv_image_should_have_security_counter, fih_rc, BOOT_CURR_IMG(state));
+    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+        /* No security counter update needed. */
+        return 0;
+    }
 
     fap = BOOT_IMG_AREA(state, slot);
     assert(fap != NULL);
