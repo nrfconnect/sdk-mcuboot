@@ -540,6 +540,15 @@ bootutil_img_validate(struct boot_loader_state *state,
     fih_int security_cnt = fih_int_encode(INT_MAX);
     uint32_t img_security_cnt = 0;
     FIH_DECLARE(security_counter_valid, FIH_FAILURE);
+    FIH_DECLARE(security_counter_should_be_present, FIH_FAILURE);
+
+    FIH_CALL(boot_nv_image_should_have_security_counter, security_counter_should_be_present,
+             image_index);
+    if (FIH_NOT_EQ(security_counter_should_be_present, FIH_SUCCESS) &&
+        FIH_NOT_EQ(security_counter_should_be_present, FIH_FAILURE)) {
+        rc = -1;
+        goto out;
+    }
 #endif
 
     BOOT_LOG_DBG("bootutil_img_validate: flash area %p", fap);
@@ -736,6 +745,10 @@ bootutil_img_validate(struct boot_loader_state *state,
                 goto out;
             }
 
+            if (FIH_EQ(security_counter_should_be_present, FIH_FAILURE)) {
+                goto skip_security_counter_read;
+            }
+
             FIH_CALL(boot_nv_security_counter_get, fih_rc, image_index,
                                                            &security_cnt);
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
@@ -755,6 +768,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 
             /* The image's security counter has been successfully verified. */
             security_counter_valid = fih_rc;
+skip_security_counter_read:
             break;
         }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT */
@@ -774,10 +788,16 @@ bootutil_img_validate(struct boot_loader_state *state,
     FIH_SET(fih_rc, valid_signature);
 #endif
 #ifdef MCUBOOT_HW_ROLLBACK_PROT
+    if (FIH_EQ(security_counter_should_be_present, FIH_FAILURE)) {
+        goto skip_security_counter_check;
+    }
+
     if (FIH_NOT_EQ(security_counter_valid, FIH_SUCCESS)) {
         rc = -1;
         goto out;
     }
+
+skip_security_counter_check:
 #endif
 
 out:
