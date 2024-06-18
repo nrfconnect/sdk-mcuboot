@@ -53,6 +53,10 @@
 
 #ifndef MCUBOOT_MANIFEST_UPDATES
 
+#ifdef __ZEPHYR__
+#include <zephyr/sys/reboot.h>
+#endif
+
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
 #include <dfu/pcd.h>
 #ifdef CONFIG_PCD_READ_NETCORE_APP_VERSION
@@ -2145,6 +2149,12 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
                 rc = boot_perform_update(state, &bs);
             }
             assert(rc == 0);
+#if defined(PM_S1_ADDRESS) && defined(CONFIG_REBOOT)
+            if (owner_nsib[BOOT_CURR_IMG(state)]) {
+                    sys_reboot(SYS_REBOOT_COLD);
+
+            }
+#endif
             break;
 
         case BOOT_SWAP_TYPE_FAIL:
