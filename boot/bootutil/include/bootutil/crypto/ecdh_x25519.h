@@ -12,8 +12,7 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
-#if (defined(MCUBOOT_USE_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT)) != 1
+#if (defined(MCUBOOT_USE_MBED_TLS) + defined(MCUBOOT_USE_TINYCRYPT) + defined(MCUBOOT_USE_PSA_CRYPTO)) != 1
     #error "One crypto backend must be defined: either MBED_TLS or TINYCRYPT"
 #endif
 
