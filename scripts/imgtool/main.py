@@ -388,6 +388,8 @@ class BasedIntParamType(click.ParamType):
 @click.option('--public-key-format', type=click.Choice(['hash', 'full']),
               default='hash', help='In what format to add the public key to '
               'the image manifest: full key or hash of the key.')
+@click.option('--hash-type', type=click.Choice(['sha256', 'sha384', 'sha512']),
+              default='sha256')
 @click.option('-k', '--key', metavar='filename')
 @click.option('--fix-sig', metavar='filename',
               help='fixed signature for the image. It will be used instead of '
@@ -404,7 +406,7 @@ class BasedIntParamType(click.ParamType):
 @click.command(help='''Create a signed or unsigned image\n
                INFILE and OUTFILE are parsed as Intel HEX if the params have
                .hex extension, otherwise binary format is used''')
-def sign(key, public_key_format, align, version, pad_sig, header_size,
+def sign(key, public_key_format, hash_type, align, version, pad_sig, header_size,
          pad_header, slot_size, pad, confirm, max_sectors, overwrite_only,
          endian, encrypt_keylen, encrypt, infile, outfile, dependencies,
          load_addr, hex_addr, erased_val, save_enctlv, security_counter,
@@ -474,7 +476,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
             'value': raw_signature
         }
 
-    img.create(key, public_key_format, enckey, dependencies, boot_record,
+    img.create(key, public_key_format, hash_type, enckey, dependencies, boot_record,
                custom_tlvs, int(encrypt_keylen), clear, baked_signature,
                pub_key, vector_to_sign)
     img.save(outfile, hex_addr)
