@@ -63,6 +63,7 @@ TLV_VALUES = {
         'PUBKEY': 0x02,
         'SHA256': 0x10,
         'SHA384': 0x11,
+        'SHA512': 0x12,
         'RSA2048': 0x20,
         'ECDSASIG': 0x22,
         'RSA3072': 0x23,
@@ -315,13 +316,16 @@ class Image():
                 format=PublicFormat.Raw)
         return cipherkey, ciphermac, pubk
 
-    def create(self, key, public_key_format, enckey, dependencies=None,
+    def create(self, key, public_key_format, hash_type, enckey, dependencies=None,
                sw_type=None, custom_tlvs=None, encrypt_keylen=128, clear=False,
                fixed_sig=None, pub_key=None, vector_to_sign=None):
         self.enckey = enckey
 
         # Check what hashing algorithm should be used
-        if (key is not None and isinstance(key, ecdsa.ECDSA384P1) or
+        if (hash_type is "sha512"):
+            hash_algorithm = hashlib.sha512
+            hash_tlv = "SHA512"
+        elif (key is not None and isinstance(key, ecdsa.ECDSA384P1) or
                 pub_key is not None and isinstance(pub_key,
                                                    ecdsa.ECDSA384P1Public)):
             hash_algorithm = hashlib.sha384
