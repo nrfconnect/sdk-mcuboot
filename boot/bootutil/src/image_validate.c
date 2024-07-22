@@ -359,6 +359,7 @@ static const uint16_t allowed_unprot_tlvs[] = {
      IMAGE_TLV_PUBKEY,
      IMAGE_TLV_SHA256,
      IMAGE_TLV_SHA384,
+     IMAGE_TLV_SHA512,
      IMAGE_TLV_RSA2048_PSS,
      IMAGE_TLV_ECDSA224,
      IMAGE_TLV_ECDSA_SIG,
@@ -389,6 +390,7 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
     int image_hash_valid = 0;
 #ifdef EXPECTED_SIG_TLV
     FIH_DECLARE(valid_signature, FIH_FAILURE);
+
 #ifndef MCUBOOT_BUILTIN_KEY
     int key_id = -1;
 #else
@@ -437,6 +439,7 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
      * and are able to do.
      */
     while (true) {
+
         rc = bootutil_tlv_iter_next(&it, &off, &len, &type);
         if (rc < 0) {
             goto out;
@@ -479,6 +482,7 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
             FIH_CALL(boot_fih_memequal, fih_rc, hash, buf, sizeof(hash));
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
                 FIH_SET(fih_rc, FIH_FAILURE);
+
                 goto out;
             }
 

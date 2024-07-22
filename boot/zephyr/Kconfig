@@ -79,13 +79,15 @@ config SINGLE_APPLICATION_SLOT
 
 choice BOOT_SIGNATURE_TYPE
 	prompt "Signature type"
-	default BOOT_SIGNATURE_TYPE_RSA
+	default BOOT_SIGNATURE_TYPE_NONE_SHA512
 
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only sha256 check"
 
 config BOOT_SIGNATURE_TYPE_NONE_SHA512
 	bool "No signature; use only sha512 check"
+	select BOOT_USE_PSA_CRYPTO
+	select PSA_WANT_ALG_SHA512
 
 config BOOT_SIGNATURE_TYPE_RSA
 	bool "RSA signatures"
