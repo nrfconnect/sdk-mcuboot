@@ -34,7 +34,13 @@ target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
 )
 endif()
 
-if(CONFIG_BOOT_USE_MBEDTLS)
+if(CONFIG_BOOT_USE_PSA_CRYPTO)
+target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
+   ${ZEPHYR_MBEDTLS_MODULE_DIR}/include
+)
+endif()
+
+if(CONFIG_BOOT_USE_MBEDTLS OR CONFIG_BOOT_USE_PSA_CRYPTO AND NOT CONFIG_PSA_CORE_OBERON)
   zephyr_link_libraries(mbedTLS)
 endif()
 endif()
