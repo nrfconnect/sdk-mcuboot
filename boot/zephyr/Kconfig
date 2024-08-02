@@ -172,6 +172,10 @@ endif
 
 config BOOT_SIGNATURE_TYPE_ED25519
 	bool "Edwards curve digital signatures using ed25519"
+	help
+	  This is ed25519 signature calculated over SHA512 of SHA256 of application
+	  image; that is not completely correct approach as the SHA512 should be
+	  rather directly calculated over an image.
 	select BOOT_ENCRYPTION_SUPPORT
 
 if BOOT_SIGNATURE_TYPE_ED25519
@@ -195,6 +199,12 @@ config BOOT_ED25519_PSA
 	select BOOT_X25519_PSA_DEPENDENCIES if BOOT_ENCRYPT_IMAGE
 
 endchoice
+
+config BOOT_SIGNATURE_TYPE_ED25519_PURE
+	bool "Use the SHA512 with ED25519 directly"
+	help
+	  This selects proper implementation of the ED25519 where signature
+	  is applied to SHA512 calculated directly over image of an application.
 endif
 
 endchoice

@@ -49,8 +49,17 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
         return 0;
     }
 
+#if !defined(MCUBOOT_SIGN_ED25519_PURE)
+    /* Non SHA512 hash would not be accepted by psa_verify_hash so it has
+     * to be treated as message, where the PSA will calculate SHA512 on
+     * it. */
     status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message, message_len,
                                 signature, EDDSA_SIGNAGURE_LENGTH);
+#else
+    /* For ED255129 hash is expected to be SHA512 */
+    status = psa_verify_hash(kid, PSA_ALG_PURE_EDDSA, message, message_len,
+                             signature, EDDSA_SIGNAGURE_LENGTH);
+#endif
     if (status != PSA_SUCCESS) {
         BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
         ret = 0;
