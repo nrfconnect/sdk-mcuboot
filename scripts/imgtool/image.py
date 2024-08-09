@@ -317,7 +317,7 @@ class Image:
                     self.__class__.__name__,
                     len(self.payload))
 
-    def load(self, path, compression_header=None):
+    def load(self, path):
         """Load an image from a given file"""
         ext = os.path.splitext(path)[1][1:].lower()
         try:
@@ -330,8 +330,6 @@ class Image:
                 with open(path, 'rb') as f:
                     self.infile_data = f.read()
                     self.payload = copy.copy(self.infile_data)
-                    if compression_header is not None:
-                        self.payload = compression_header + self.payload
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
         self.image_size = len(self.payload)

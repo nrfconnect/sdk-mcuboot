@@ -513,7 +513,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                custom_tlvs, compression_tlvs, int(encrypt_keylen), clear,
                baked_signature, pub_key, vector_to_sign, user_sha)
 
-    if compression == "lzma2" :
+    if compression == "lzma2":
         compressed_img = image.Image(version=decode_version(version),
                   header_size=header_size, pad_header=pad_header,
                   pad=pad, confirm=confirm, align=int(align),
@@ -525,20 +525,20 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
         compression_filters = [
             {"id": lzma.FILTER_LZMA2, "preset": comp_default_preset,
                 "dict_size": comp_default_dictsize, "lp": comp_default_lp,
-                 "lc": comp_default_lc}
+                "lc": comp_default_lc}
         ]
         compressed_data = lzma.compress(img.get_infile_data(),filters=compression_filters,
             format=lzma.FORMAT_RAW)
         uncompressed_size = len(img.get_infile_data())
         compressed_size = len(compressed_data)
-        print("compressed image size:", compressed_size,
-            "bytes\noriginal image size:", uncompressed_size, "bytes")
+        print(f"compressed image size: {compressed_size} bytes")
+        print(f"original image size: {uncompressed_size} bytes")
         compression_tlvs["DECOMP_SIZE"] = struct.pack(
             img.get_struct_endian() + 'L', img.image_size)
         compression_tlvs["DECOMP_SHA"] = img.image_hash
         compression_tlvs_size = len(compression_tlvs["DECOMP_SIZE"])
         compression_tlvs_size += len(compression_tlvs["DECOMP_SHA"])
-        if img.get_signature() is not None and img.get_signature() != "" :
+        if img.get_signature():
             compression_tlvs["DECOMP_SIGNATURE"] = img.get_signature()
             compression_tlvs_size += len(compression_tlvs["DECOMP_SIGNATURE"])
         if (compressed_size + compression_tlvs_size) < uncompressed_size:
