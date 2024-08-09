@@ -808,7 +808,6 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
                  const struct flash_area *fap, struct boot_status *bs)
 {
     TARGET_STATIC uint8_t tmpbuf[BOOT_TMPBUF_SZ];
-    uint8_t image_index;
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
@@ -819,13 +818,11 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
     (void)bs;
     (void)rc;
 
-    image_index = BOOT_CURR_IMG(state);
-
 /* In the case of ram loading the image has already been decrypted as it is
  * decrypted when copied in ram */
 #if defined(MCUBOOT_ENC_IMAGES) && !defined(MCUBOOT_RAM_LOAD)
-    if (MUST_DECRYPT(fap, image_index, hdr)) {
-        rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
+    if (MUST_DECRYPT(fap, BOOT_CURR_IMG(state), hdr)) {
+        rc = boot_enc_load(BOOT_CURR_ENC(state), 1, hdr, fap, bs);
         if (rc < 0) {
             FIH_RET(fih_rc);
         }
@@ -835,8 +832,9 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
     }
 #endif
 
-    FIH_CALL(bootutil_img_validate, fih_rc, BOOT_CURR_ENC(state), image_index,
-             hdr, fap, tmpbuf, BOOT_TMPBUF_SZ, NULL, 0, NULL);
+    FIH_CALL(bootutil_img_validate, fih_rc, BOOT_CURR_ENC(state),
+             BOOT_CURR_IMG(state), hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
+             NULL, 0, NULL);
 
     FIH_RET(fih_rc);
 }
@@ -1483,19 +1481,50 @@ boot_copy_region(struct boot_loader_state *state,
     int chunk_sz;
     int rc;
 #ifdef MCUBOOT_ENC_IMAGES
-    uint32_t off;
+    uint32_t off = off_dst;
     uint32_t tlv_off;
     size_t blk_off;
     struct image_header *hdr;
     uint16_t idx;
     uint32_t blk_sz;
-    uint8_t image_index;
+    uint8_t image_index = BOOT_CURR_IMG(state);
+    bool encrypted_src;
+    bool encrypted_dst;
+    /* Assuming the secondary slot is source; note that 0 here not only
+     * means that primary slot is source, but also that there will be
+     * encryption happening, if it is 1 then there is decryption from
+     * secondary slot.
+     */
+    int source_slot = 1;
+    /* In case of encryption enabled, we may have to do more work than
+     * just copy bytes */
+    bool only_copy = false;
+#else
+    (void)state;
 #endif
 
     TARGET_STATIC uint8_t buf[BUF_SZ] __attribute__((aligned(4)));
 
-#if !defined(MCUBOOT_ENC_IMAGES)
-    (void)state;
+#ifdef MCUBOOT_ENC_IMAGES
+    encrypted_src = (flash_area_get_id(fap_src) != FLASH_AREA_IMAGE_PRIMARY(image_index));
+    encrypted_dst = (flash_area_get_id(fap_dst) != FLASH_AREA_IMAGE_PRIMARY(image_index));
+
+    if (encrypted_src != encrypted_dst) {
+        if (encrypted_dst) {
+            /* Need encryption, metadata from the primary slot */
+            hdr = boot_img_hdr(state, BOOT_PRIMARY_SLOT);
+            source_slot = 0;
+        } else {
+            /* Need decryption, metadata from the secondary slot */
+            hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
+            source_slot = 1;
+        }
+    } else {
+        /* In case when source and targe is the same area, this means that we
+         * only have to copy bytes, no encryption or decryption.
+         */
+        only_copy = true;
+    }
 #endif
 
     bytes_copied = 0;
@@ -1512,60 +1541,41 @@ boot_copy_region(struct boot_loader_state *state,
         }
 
 #ifdef MCUBOOT_ENC_IMAGES
-        image_index = BOOT_CURR_IMG(state);
-        if ((flash_area_get_id(fap_src) == FLASH_AREA_IMAGE_SECONDARY(image_index) ||
-             flash_area_get_id(fap_dst) == FLASH_AREA_IMAGE_SECONDARY(image_index)) &&
-            !(flash_area_get_id(fap_src) == FLASH_AREA_IMAGE_SECONDARY(image_index) &&
-              flash_area_get_id(fap_dst) == FLASH_AREA_IMAGE_SECONDARY(image_index))) {
-            /* assume the secondary slot as src, needs decryption */
-            hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
-#if !defined(MCUBOOT_SWAP_USING_MOVE)
-            off = off_src;
-            if (flash_area_get_id(fap_dst) == FLASH_AREA_IMAGE_SECONDARY(image_index)) {
-                /* might need encryption (metadata from the primary slot) */
-                hdr = boot_img_hdr(state, BOOT_PRIMARY_SLOT);
-                off = off_dst;
-            }
-#else
-            off = off_dst;
-            if (flash_area_get_id(fap_dst) == FLASH_AREA_IMAGE_SECONDARY(image_index)) {
-                hdr = boot_img_hdr(state, BOOT_PRIMARY_SLOT);
-            }
-#endif
-            if (IS_ENCRYPTED(hdr)) {
-                uint32_t abs_off = off + bytes_copied;
-                if (abs_off < hdr->ih_hdr_size) {
-                    /* do not decrypt header */
-                    if (abs_off + chunk_sz > hdr->ih_hdr_size) {
-                        /* The lower part of the chunk contains header data */
-                        blk_off = 0;
-                        blk_sz = chunk_sz - (hdr->ih_hdr_size - abs_off);
-                        idx = hdr->ih_hdr_size  - abs_off;
-                    } else {
-                        /* The chunk contains exclusively header data */
-                        blk_sz = 0; /* nothing to decrypt */
-                    }
+        /* If only copy, then does not matter if header indicates need for
+         * encryptio/decryptio, we just copy data. */
+        if (!only_copy && IS_ENCRYPTED(hdr)) {
+            uint32_t abs_off = off + bytes_copied;
+            if (abs_off < hdr->ih_hdr_size) {
+                /* do not decrypt header */
+                if (abs_off + chunk_sz > hdr->ih_hdr_size) {
+                    /* The lower part of the chunk contains header data */
+                    blk_off = 0;
+                    blk_sz = chunk_sz - (hdr->ih_hdr_size - abs_off);
+                    idx = hdr->ih_hdr_size  - abs_off;
                 } else {
-                    idx = 0;
-                    blk_sz = chunk_sz;
-                    blk_off = (abs_off - hdr->ih_hdr_size) & 0xf;
+                    /* The chunk contains exclusively header data */
+                    blk_sz = 0; /* nothing to decrypt */
                 }
+            } else {
+                idx = 0;
+                blk_sz = chunk_sz;
+                blk_off = (abs_off - hdr->ih_hdr_size) & 0xf;
+            }
 
-                if (blk_sz > 0)
-                {
-                    tlv_off = BOOT_TLV_OFF(hdr);
-                    if (abs_off + chunk_sz > tlv_off) {
-                        /* do not decrypt TLVs */
-                        if (abs_off >= tlv_off) {
-                            blk_sz = 0;
-                        } else {
-                            blk_sz = tlv_off - abs_off;
-                        }
+            if (blk_sz > 0)
+            {
+                tlv_off = BOOT_TLV_OFF(hdr);
+                if (abs_off + chunk_sz > tlv_off) {
+                    /* do not decrypt TLVs */
+                    if (abs_off >= tlv_off) {
+                        blk_sz = 0;
+                    } else {
+                        blk_sz = tlv_off - abs_off;
                     }
-                    boot_encrypt(BOOT_CURR_ENC(state), image_index, fap_src,
-                            (abs_off + idx) - hdr->ih_hdr_size, blk_sz,
-                            blk_off, &buf[idx]);
                 }
+                boot_encrypt(BOOT_CURR_ENC(state), source_slot,
+                        (abs_off + idx) - hdr->ih_hdr_size, blk_sz,
+                        blk_off, &buf[idx]);
             }
         }
 #endif
@@ -1671,7 +1681,7 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
 
 #ifdef MCUBOOT_ENC_IMAGES
     if (IS_ENCRYPTED(boot_img_hdr(state, BOOT_SECONDARY_SLOT))) {
-        rc = boot_enc_load(BOOT_CURR_ENC(state), image_index,
+        rc = boot_enc_load(BOOT_CURR_ENC(state), BOOT_SECONDARY_SLOT,
                 boot_img_hdr(state, BOOT_SECONDARY_SLOT),
                 fap_secondary_slot, bs);
 
@@ -1795,7 +1805,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
 #ifdef MCUBOOT_ENC_IMAGES
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
-            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
+            rc = boot_enc_load(BOOT_CURR_ENC(state), 0, hdr, fap, bs);
             assert(rc >= 0);
 
             if (rc == 0) {
@@ -1819,7 +1829,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
-            rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
+            rc = boot_enc_load(BOOT_CURR_ENC(state), 1, hdr, fap, bs);
             assert(rc >= 0);
 
             if (rc == 0) {
@@ -3046,7 +3056,7 @@ boot_decrypt_and_copy_image_to_sram(struct boot_loader_state *state,
         goto done;
     }
 
-    rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap_src, &bs);
+    rc = boot_enc_load(BOOT_CURR_ENC(state), slot, hdr, fap_src, &bs);
     if (rc < 0) {
         goto done;
     }
@@ -3072,13 +3082,13 @@ boot_decrypt_and_copy_image_to_sram(struct boot_loader_state *state,
              * Part of the chunk is encrypted payload */
             blk_off = ((bytes_copied) - hdr->ih_hdr_size) & 0xf;
             blk_sz = tlv_off - (bytes_copied);
-            boot_encrypt(BOOT_CURR_ENC(state), image_index, fap_src,
+            boot_encrypt(BOOT_CURR_ENC(state), slot,
                 (bytes_copied + idx) - hdr->ih_hdr_size, blk_sz,
                 blk_off, cur_dst);
         } else {
             /* Image encrypted payload section */
             blk_off = ((bytes_copied) - hdr->ih_hdr_size) & 0xf;
-            boot_encrypt(BOOT_CURR_ENC(state), image_index, fap_src,
+            boot_encrypt(BOOT_CURR_ENC(state), slot,
                     (bytes_copied + idx) - hdr->ih_hdr_size, blk_sz,
                     blk_off, cur_dst);
         }
