@@ -50,6 +50,11 @@
 #include "bootutil/boot_hooks.h"
 #include "bootutil/mcuboot_status.h"
 
+#if defined(MCUBOOT_DECOMPRESS_IMAGES)
+#include <nrf_compress/implementation.h>
+#include <compression/decompression.h>
+#endif
+
 #ifdef __ZEPHYR__
 #include <zephyr/sys/reboot.h>
 #endif
@@ -1012,10 +1017,10 @@ boot_is_header_valid(const struct image_header *hdr, const struct flash_area *fa
         return false;
     }
 #else
-    if ((hdr->ih_flags & IMAGE_F_COMPRESSED_LZMA1) &&
-        (hdr->ih_flags & IMAGE_F_COMPRESSED_LZMA2))
-    {
-        return false;
+    if (MUST_DECOMPRESS(fap, BOOT_CURR_IMG(state), hdr)) {
+        if (!boot_is_compressed_header_valid(hdr, fap, state)) {
+            return false;
+        }
     }
 #endif
 
@@ -1263,6 +1268,7 @@ check_validity:
              * attempts to validate and boot it.
              */
         }
+
 #if !defined(__BOOTSIM__)
         BOOT_LOG_ERR("Image in the %s slot is not valid!",
                      (slot == BOOT_PRIMARY_SLOT) ? "primary" : "secondary");
@@ -1919,6 +1925,9 @@ boot_copy_region(struct boot_loader_state *state,
 #else
     (void)state;
 #endif
+#if defined(MCUBOOT_DECOMPRESS_IMAGES) && !defined(MCUBOOT_ENC_IMAGES)
+    struct image_header *hdr;
+#endif
 
     TARGET_STATIC uint8_t buf[BUF_SZ] __attribute__((aligned(4)));
 
@@ -1941,6 +1950,16 @@ boot_copy_region(struct boot_loader_state *state,
          * only have to copy bytes, no encryption or decryption.
          */
         only_copy = true;
+    }
+#endif
+
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
+    hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
+
+    if (MUST_DECOMPRESS(fap_src, BOOT_CURR_IMG(state), hdr)) {
+        /* Use alternative function for compressed images */
+        return boot_copy_region_decompress(state, fap_src, fap_dst, off_src, off_dst, sz, buf,
+                                           BUF_SZ);
     }
 #endif
 
