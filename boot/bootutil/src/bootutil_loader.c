@@ -51,6 +51,11 @@
 #include <zephyr/kernel.h>
 #endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS */
 
+#if defined(MCUBOOT_DECOMPRESS_IMAGES)
+#include <nrf_compress/implementation.h>
+#include <compression/decompression.h>
+#endif
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 bool
@@ -120,10 +125,10 @@ boot_check_header_valid(struct boot_loader_state *state, int slot)
         return false;
     }
 #else
-    if ((hdr->ih_flags & IMAGE_F_COMPRESSED_LZMA1) &&
-        (hdr->ih_flags & IMAGE_F_COMPRESSED_LZMA2))
-    {
-        return false;
+    if (MUST_DECOMPRESS(fap, BOOT_CURR_IMG(state), hdr)) {
+        if (!boot_is_compressed_header_valid(hdr, fap, state)) {
+            return false;
+        }
     }
 #endif
 

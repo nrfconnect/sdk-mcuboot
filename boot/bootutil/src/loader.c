@@ -53,6 +53,11 @@
 
 #ifndef MCUBOOT_MANIFEST_UPDATES
 
+#if defined(MCUBOOT_DECOMPRESS_IMAGES)
+#include <nrf_compress/implementation.h>
+#include <compression/decompression.h>
+#endif
+
 #ifdef __ZEPHYR__
 #include <zephyr/sys/reboot.h>
 #endif
@@ -744,6 +749,7 @@ check_validity:
              * attempts to validate and boot it.
              */
         }
+
 #if !defined(__BOOTSIM__)
         BOOT_LOG_ERR("Image in the %s slot is not valid!",
                      (slot == BOOT_SLOT_PRIMARY) ? "primary" : "secondary");
@@ -1207,6 +1213,9 @@ boot_copy_region(struct boot_loader_state *state,
 #else
     (void)state;
 #endif
+#if defined(MCUBOOT_DECOMPRESS_IMAGES) && !defined(MCUBOOT_ENC_IMAGES)
+    struct image_header *hdr;
+#endif
 
     TARGET_STATIC uint8_t buf[BUF_SZ] __attribute__((aligned(4)));
 
@@ -1229,6 +1238,16 @@ boot_copy_region(struct boot_loader_state *state,
          * only have to copy bytes, no encryption or decryption.
          */
         only_copy = true;
+    }
+#endif
+
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
+    hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
+
+    if (MUST_DECOMPRESS(fap_src, BOOT_CURR_IMG(state), hdr)) {
+        /* Use alternative function for compressed images */
+        return boot_copy_region_decompress(state, fap_src, fap_dst, off_src, off_dst, sz, buf,
+                                           BUF_SZ);
     }
 #endif
 
