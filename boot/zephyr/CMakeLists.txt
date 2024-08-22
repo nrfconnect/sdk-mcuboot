@@ -249,6 +249,12 @@ if(CONFIG_BOOT_ENCRYPT_EC256)
     )
 endif()
 
+if(CONFIG_BOOT_DECOMPRESSION)
+  zephyr_library_sources(
+    decompression.c
+  )
+endif()
+
 if(CONFIG_MCUBOOT_SERIAL)
   zephyr_sources(${BOOT_DIR}/zephyr/serial_adapter.c)
   zephyr_sources(${BOOT_DIR}/boot_serial/src/boot_serial.c)
