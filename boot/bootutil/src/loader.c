@@ -49,6 +49,11 @@
 #include "bootutil/boot_hooks.h"
 #include "bootutil/mcuboot_status.h"
 
+#if defined(MCUBOOT_DECOMPRESS_IMAGES)
+#include <nrf_compress/implementation.h>
+#include <compression/decompression.h>
+#endif
+
 #ifdef __ZEPHYR__
 #include <zephyr/sys/reboot.h>
 #endif
@@ -571,35 +576,76 @@ boot_read_image_size(struct boot_loader_state *state, int slot, uint32_t *size)
         goto done;
     }
 
-    off = BOOT_TLV_OFF(boot_img_hdr(state, slot));
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
+    if (MUST_DECOMPRESS(fap, BOOT_CURR_IMG(state), boot_img_hdr(state, slot))) {
+        uint32_t tmp_size = 0;
 
-    if (flash_area_read(fap, off, &info, sizeof(info))) {
-        rc = BOOT_EFLASH;
-        goto done;
-    }
+        rc = bootutil_get_img_decomp_size(boot_img_hdr(state, slot), fap, &tmp_size);
 
-    protect_tlv_size = boot_img_hdr(state, slot)->ih_protect_tlv_size;
-    if (info.it_magic == IMAGE_TLV_PROT_INFO_MAGIC) {
-        if (protect_tlv_size != info.it_tlv_tot) {
+        if (rc) {
             rc = BOOT_EBADIMAGE;
             goto done;
         }
 
-        if (flash_area_read(fap, off + info.it_tlv_tot, &info, sizeof(info))) {
+        off = boot_img_hdr(state, slot)->ih_hdr_size + tmp_size;
+
+        rc = boot_size_protected_tlvs(boot_img_hdr(state, slot), fap, &tmp_size);
+
+        if (rc) {
+            rc = BOOT_EBADIMAGE;
+            goto done;
+        }
+
+        off += tmp_size;
+
+        if (flash_area_read(fap, (BOOT_TLV_OFF(boot_img_hdr(state, slot)) +
+                                  boot_img_hdr(state, slot)->ih_protect_tlv_size), &info,
+                            sizeof(info))) {
             rc = BOOT_EFLASH;
             goto done;
         }
-    } else if (protect_tlv_size != 0) {
-        rc = BOOT_EBADIMAGE;
-        goto done;
+
+        if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
+            rc = BOOT_EBADIMAGE;
+            goto done;
+        }
+
+        *size = off + info.it_tlv_tot;
+    } else {
+#else
+    if (1) {
+#endif
+        off = BOOT_TLV_OFF(boot_img_hdr(state, slot));
+
+        if (flash_area_read(fap, off, &info, sizeof(info))) {
+            rc = BOOT_EFLASH;
+            goto done;
+        }
+
+        protect_tlv_size = boot_img_hdr(state, slot)->ih_protect_tlv_size;
+        if (info.it_magic == IMAGE_TLV_PROT_INFO_MAGIC) {
+            if (protect_tlv_size != info.it_tlv_tot) {
+                rc = BOOT_EBADIMAGE;
+                goto done;
+            }
+
+            if (flash_area_read(fap, off + info.it_tlv_tot, &info, sizeof(info))) {
+                rc = BOOT_EFLASH;
+                goto done;
+            }
+        } else if (protect_tlv_size != 0) {
+            rc = BOOT_EBADIMAGE;
+            goto done;
+        }
+
+        if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
+            rc = BOOT_EBADIMAGE;
+            goto done;
+        }
+
+        *size = off + protect_tlv_size + info.it_tlv_tot;
     }
 
-    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
-        rc = BOOT_EBADIMAGE;
-        goto done;
-    }
-
-    *size = off + protect_tlv_size + info.it_tlv_tot;
     rc = 0;
 
 done:
@@ -928,10 +974,10 @@ boot_is_header_valid(const struct image_header *hdr, const struct flash_area *fa
         return false;
     }
 #else
-    if ((hdr->ih_flags & IMAGE_F_COMPRESSED_LZMA1) &&
-        (hdr->ih_flags & IMAGE_F_COMPRESSED_LZMA2))
-    {
-        return false;
+    if (MUST_DECOMPRESS(fap, BOOT_CURR_IMG(state), hdr)) {
+        if (!boot_is_compressed_header_valid(hdr, fap, state)) {
+            return false;
+        }
     }
 #endif
 
@@ -1111,6 +1157,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
              * attempts to validate and boot it.
              */
         }
+
 #if !defined(__BOOTSIM__)
         BOOT_LOG_ERR("Image in the %s slot is not valid!",
                      (slot == BOOT_PRIMARY_SLOT) ? "primary" : "secondary");
@@ -1534,11 +1581,24 @@ boot_copy_region(struct boot_loader_state *state,
     uint32_t blk_sz;
     uint8_t image_index;
 #endif
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
+    struct image_header *hdr;
+#endif
 
     TARGET_STATIC uint8_t buf[BUF_SZ] __attribute__((aligned(4)));
 
 #if !defined(MCUBOOT_ENC_IMAGES)
     (void)state;
+#endif
+
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
+    hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
+
+    if (MUST_DECOMPRESS(fap_src, BOOT_CURR_IMG(state), hdr)) {
+        /* Use alternative function for compressed images */
+        return boot_copy_region_decompress(state, fap_src, fap_dst, off_src, off_dst, sz, buf,
+                                           BUF_SZ);
+    }
 #endif
 
     bytes_copied = 0;
