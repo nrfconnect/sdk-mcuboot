@@ -1407,7 +1407,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
 #ifdef PM_S1_ADDRESS
 #ifdef PM_CPUNET_B0N_ADDRESS
-        if(reset_addr < PM_CPUNET_B0N_ADDRESS)
+        if(!(reset_addr >= PM_CPUNET_APP_ADDRESS && reset_addr < PM_CPUNET_APP_END_ADDRESS))
 #endif
         {
             const struct flash_area *primary_fa;
@@ -1480,7 +1480,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
          * update and indicate to the caller of this function that no update is
          * available
          */
-        if (upgrade_valid && reset_addr > PM_CPUNET_B0N_ADDRESS) {
+        if (upgrade_valid && reset_addr >= PM_CPUNET_APP_ADDRESS &&
+            reset_addr < PM_CPUNET_APP_END_ADDRESS) {
             struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
