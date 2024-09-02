@@ -1426,6 +1426,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
     bool upgrade_valid = false;
 #if defined(PM_S1_ADDRESS)
     owner_nsib[BOOT_CURR_IMG(state)] = false;
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+    const struct flash_area *revert_primary_fa = NULL;
+#endif
 #endif
 
 #if defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP)
@@ -1481,8 +1484,11 @@ boot_validated_swap_type(struct boot_loader_state *state,
                     /* Image is placed before Primary and within the NSIB slot */
                     if (reset_addr > nsib_fa->fa_off
                         && reset_addr < (nsib_fa->fa_off + nsib_fa->fa_size)) {
+                        /* Revert back to Primary if there is no swap */
+                        revert_primary_fa = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
+
                         /* Set primary to be NSIB upgrade slot */
-                        BOOT_IMG_AREA(state, 0) = nsib_fa;
+                        BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT) = nsib_fa;
                         owner_nsib[BOOT_CURR_IMG(state)] = true;
                     }
 #else
@@ -1554,6 +1560,15 @@ boot_validated_swap_type(struct boot_loader_state *state,
 #endif /* CONFIG_SOC_NRF5340_CPUAPP && PM_CPUNET_B0N_ADDRESS &&
 	  !CONFIG_NRF53_MULTI_IMAGE_UPDATE && CONFIG_PCD_APP */
     }
+
+#if defined(PM_S1_ADDRESS) && defined(CONFIG_SOC_NRF5340_CPUAPP) && \
+    defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+    if (!upgrade_valid && revert_primary_fa) {
+        /* Revert back to Primary */
+        BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT) = revert_primary_fa;
+        owner_nsib[BOOT_CURR_IMG(state)] = false;
+    }
+#endif
 
     return swap_type;
 }
