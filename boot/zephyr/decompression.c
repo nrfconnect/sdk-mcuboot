@@ -87,11 +87,20 @@ bool boot_is_compressed_header_valid(const struct image_header *hdr, const struc
     if (size >= size_check) {
         BOOT_LOG_ERR("Compressed image too large, decompressed image size: 0x%x, slot size: 0x%x",
                      size, size_check);
-
         return false;
     }
 
     return true;
+}
+
+static bool is_compression_object_valid(struct nrf_compress_implementation *compression)
+{
+	if (compression == NULL || compression->init == NULL || compression->deinit == NULL ||
+	    compression->decompress_bytes_needed == NULL || compression->decompress == NULL) {
+		return false;
+	}
+
+	return true;
 }
 
 int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index,
@@ -104,7 +113,8 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
     uint32_t write_pos = 0;
     uint32_t protected_tlv_size = 0;
     uint32_t decompressed_image_size;
-    struct nrf_compress_implementation *compression = NULL;
+    struct nrf_compress_implementation *compression_lzma = NULL;
+    struct nrf_compress_implementation *compression_arm_thumb = NULL;
     TARGET_STATIC struct image_header modified_hdr;
     bootutil_sha_context sha_ctx;
     uint8_t flash_erased_value;
@@ -122,27 +132,26 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
          */
         BOOT_LOG_ERR("Invalid image compression flags: no supported compression found");
         rc = BOOT_EBADIMAGE;
-
         goto finish_without_clean;
     }
 
-    compression = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_LZMA);
+    compression_lzma = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_LZMA);
+    compression_arm_thumb = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_ARM_THUMB);
 
-    if (compression == NULL || compression->init == NULL || compression->deinit == NULL ||
-        compression->decompress_bytes_needed == NULL || compression->decompress == NULL) {
+    if (!is_compression_object_valid(compression_lzma) ||
+	!is_compression_object_valid(compression_arm_thumb)) {
         /* Compression library missing or missing required function pointer */
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
-
         goto finish_without_clean;
     }
 
-    rc = compression->init(NULL);
+    rc = compression_lzma->init(NULL);
+    rc = compression_arm_thumb->init(NULL);
 
     if (rc) {
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
-
         goto finish_without_clean;
     }
 
@@ -157,7 +166,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
     if (rc) {
         BOOT_LOG_ERR("Unable to determine decompressed size of compressed image");
         rc = BOOT_EBADIMAGE;
-
         goto finish;
     }
 
@@ -172,7 +180,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
     if (rc) {
         BOOT_LOG_ERR("Unable to determine protected TLV size of compressed image");
         rc = BOOT_EBADIMAGE;
-
         goto finish;
     }
 
@@ -211,7 +218,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
             BOOT_LOG_ERR("Flash read failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                          (hdr->ih_hdr_size + read_pos), copy_size, fap->fa_id, rc);
             rc = BOOT_EFLASH;
-
             goto finish;
         }
 
@@ -225,7 +231,7 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
             uint32_t chunk_size;
             bool last_packet = false;
 
-            chunk_size = compression->decompress_bytes_needed(NULL);
+            chunk_size = compression_lzma->decompress_bytes_needed(NULL);
 
             if (chunk_size > (copy_size - tmp_off)) {
                 chunk_size = (copy_size - tmp_off);
@@ -235,13 +241,12 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                 last_packet = true;
             }
 
-            rc = compression->decompress(NULL, &tmp_buf[tmp_off], chunk_size, last_packet, &offset,
-                                         &output, &output_size);
+            rc = compression_lzma->decompress(NULL, &tmp_buf[tmp_off], chunk_size, last_packet,
+					      &offset, &output, &output_size);
 
             if (rc) {
                 BOOT_LOG_ERR("Decompression error: %d", rc);
                 rc = BOOT_EBADSTATUS;
-
                 goto finish;
             }
 
@@ -251,7 +256,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                 BOOT_LOG_ERR("Decompressed image larger than claimed TLV size, at least: %d",
                              write_pos);
                 rc = BOOT_EBADIMAGE;
-
                 goto finish;
             }
 
@@ -260,7 +264,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                 /* Last packet and we still have no output, this is a faulty update */
                 BOOT_LOG_ERR("All compressed data consumed without any output, image not valid");
                 rc = BOOT_EBADIMAGE;
-
                 goto finish;
             }
 
@@ -271,7 +274,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                 if (offset_zero_check >= OFFSET_ZERO_CHECK_TIMES) {
                     BOOT_LOG_ERR("Decompression system returning no output data, image not valid");
                     rc = BOOT_EBADIMAGE;
-
                     goto finish;
                 }
 
@@ -282,8 +284,60 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                 offset_zero_check = 0;
             }
 
+            /* Copy data to secondary buffer for calculating hash */
             if (output_size > 0) {
-                bootutil_sha_update(&sha_ctx, output, output_size);
+                if (hdr->ih_flags & IMAGE_F_COMPRESSED_ARM_THUMB_FLT) {
+                    /* Run this through the ARM thumb filter */
+                    uint32_t offset_arm_thumb = 0;
+                    uint8_t *output_arm_thumb = NULL;
+                    uint32_t processed_size = 0;
+                    uint32_t output_size_arm_thumb = 0;
+                    uint32_t output_size_arm_thumb_total = 0;
+
+                    while (processed_size < output_size) {
+                        uint32_t current_size = output_size - processed_size;
+                        bool arm_thumb_last_packet = false;
+
+                        if (current_size > CONFIG_NRF_COMPRESS_CHUNK_SIZE) {
+                            current_size = CONFIG_NRF_COMPRESS_CHUNK_SIZE;
+                        }
+
+                        if (last_packet && (processed_size + current_size) ==
+                            output_size) {
+                            arm_thumb_last_packet = true;
+                        }
+
+                        rc = compression_arm_thumb->decompress(NULL, &output[processed_size],
+                                                               current_size, arm_thumb_last_packet,
+                                                               &offset_arm_thumb,
+                                                               &output_arm_thumb,
+                                                               &output_size_arm_thumb);
+
+                        if (rc) {
+                            BOOT_LOG_ERR("Decompression error: %d", rc);
+                            rc = BOOT_EBADSTATUS;
+                            goto finish;
+                        } else if (current_size != offset_arm_thumb) {
+                            BOOT_LOG_ERR("Decompression expected offset mismatch: %d vs %d",
+                                         current_size, offset_arm_thumb);
+                            rc = BOOT_EBADSTATUS;
+                            goto finish;
+                        }
+
+                        bootutil_sha_update(&sha_ctx, output_arm_thumb, output_size_arm_thumb);
+                        output_size_arm_thumb_total += output_size_arm_thumb;
+                        processed_size += current_size;
+                    }
+
+                    if (output_size != output_size_arm_thumb_total) {
+                        BOOT_LOG_ERR("Decompression expected output_size mismatch: %d vs %d",
+                                     output_size, output_size_arm_thumb);
+                        rc = BOOT_EBADSTATUS;
+                        goto finish;
+                    }
+                } else {
+                    bootutil_sha_update(&sha_ctx, output, output_size);
+                }
             }
 
             tmp_off += offset;
@@ -302,7 +356,8 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
 
 finish:
     /* Clean up decompression system */
-    (void)compression->deinit(NULL);
+    (void)compression_lzma->deinit(NULL);
+    (void)compression_arm_thumb->deinit(NULL);
 
 finish_without_clean:
     bootutil_sha_drop(&sha_ctx);
@@ -353,7 +408,6 @@ static int boot_copy_protected_tlvs(const struct image_header *hdr,
                 BOOT_LOG_ERR("Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                              (off_dst + write_pos), *buf_pos, fap_dst->fa_id, rc);
                 rc = BOOT_EFLASH;
-
                 goto out;
             }
 
@@ -422,7 +476,6 @@ static int boot_copy_protected_tlvs(const struct image_header *hdr,
                         BOOT_LOG_ERR(
                             "Image data load failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                             (off + (len - data_size_left)), single_copy_size, fap_src->fa_id, rc);
-
                         goto out;
                     }
 
@@ -438,7 +491,6 @@ static int boot_copy_protected_tlvs(const struct image_header *hdr,
                            "Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                            (off_dst + write_pos), *buf_pos, fap_dst->fa_id, rc);
                         rc = BOOT_EFLASH;
-
                         goto out;
                     }
 
@@ -513,7 +565,6 @@ static int boot_sha_protected_tlvs(const struct image_header *hdr,
                 BOOT_LOG_ERR(
                     "Image data load failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                     (off + read_off), copy_size, fap_src->fa_id, rc);
-
                 goto out;
             }
 
@@ -616,7 +667,6 @@ int boot_size_unprotected_tlvs(const struct image_header *hdr, const struct flas
              */
             BOOT_LOG_ERR("No unprotected TLVs in post-decompressed image output, image is invalid");
             rc = BOOT_EBADIMAGE;
-
             goto out;
         }
 
@@ -671,7 +721,6 @@ static int boot_copy_unprotected_tlvs(const struct image_header *hdr,
                 BOOT_LOG_ERR("Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                              (off_dst + write_pos), *buf_pos, fap_dst->fa_id, rc);
                 rc = BOOT_EFLASH;
-
                 goto out;
             }
 
@@ -768,7 +817,6 @@ static int boot_copy_unprotected_tlvs(const struct image_header *hdr,
                     BOOT_LOG_ERR(
                         "Image data load failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                         (off + (len - data_size_left)), single_copy_size, fap_src->fa_id, rc);
-
                     goto out;
                 }
 
@@ -784,7 +832,6 @@ static int boot_copy_unprotected_tlvs(const struct image_header *hdr,
                         "Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                         (off_dst + write_pos), *buf_pos, fap_dst->fa_id, rc);
                     rc = BOOT_EFLASH;
-
                     goto out;
                 }
 
@@ -813,7 +860,8 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     uint32_t unprotected_tlv_size = 0;
     uint32_t tlv_write_size = 0;
     uint32_t decompressed_image_size;
-    struct nrf_compress_implementation *compression = NULL;
+    struct nrf_compress_implementation *compression_lzma = NULL;
+    struct nrf_compress_implementation *compression_arm_thumb = NULL;
     struct image_header *hdr;
     TARGET_STATIC uint8_t decomp_buf[CONFIG_BOOT_DECOMPRESSION_BUFFER_SIZE] __attribute__((aligned(4)));
     TARGET_STATIC struct image_header modified_hdr;
@@ -831,27 +879,26 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
          */
         BOOT_LOG_ERR("Invalid image compression flags: no supported compression found");
         rc = BOOT_EBADIMAGE;
-
         goto finish;
     }
 
-    compression = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_LZMA);
+    compression_lzma = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_LZMA);
+    compression_arm_thumb = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_ARM_THUMB);
 
-    if (compression == NULL || compression->init == NULL || compression->deinit == NULL ||
-        compression->decompress_bytes_needed == NULL || compression->decompress == NULL) {
+    if (!is_compression_object_valid(compression_lzma) ||
+	!is_compression_object_valid(compression_arm_thumb)) {
         /* Compression library missing or missing required function pointer */
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
-
         goto finish;
     }
 
-    rc = compression->init(NULL);
+    rc = compression_lzma->init(NULL);
+    rc = compression_arm_thumb->init(NULL);
 
     if (rc) {
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
-
         goto finish;
     }
 
@@ -864,7 +911,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     if (rc) {
         BOOT_LOG_ERR("Unable to determine decompressed size of compressed image");
         rc = BOOT_EBADIMAGE;
-
         goto finish;
     }
 
@@ -877,7 +923,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     if (rc) {
         BOOT_LOG_ERR("Unable to determine protected TLV size of compressed image");
         rc = BOOT_EBADIMAGE;
-
         goto finish;
     }
 
@@ -888,7 +933,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     if (rc) {
         BOOT_LOG_ERR("Unable to determine unprotected TLV size of compressed image");
         rc = BOOT_EBADIMAGE;
-
         goto finish;
     }
 
@@ -899,7 +943,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
         BOOT_LOG_ERR("Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                      off_dst, sizeof(modified_hdr), fap_dst->fa_id, rc);
         rc = BOOT_EFLASH;
-
         goto finish;
     }
 
@@ -918,7 +961,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
             BOOT_LOG_ERR("Flash read failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                          (off_src + hdr->ih_hdr_size + pos), copy_size, fap_src->fa_id, rc);
             rc = BOOT_EFLASH;
-
             goto finish;
         }
 
@@ -933,7 +975,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
             uint8_t *output = NULL;
             bool last_packet = false;
 
-            chunk_size = compression->decompress_bytes_needed(NULL);
+            chunk_size = compression_lzma->decompress_bytes_needed(NULL);
 
             if (chunk_size > (copy_size - tmp_off)) {
                 chunk_size = (copy_size - tmp_off);
@@ -943,13 +985,12 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                 last_packet = true;
             }
 
-            rc = compression->decompress(NULL, &buf[tmp_off], chunk_size, last_packet, &offset,
+            rc = compression_lzma->decompress(NULL, &buf[tmp_off], chunk_size, last_packet, &offset,
                                          &output, &output_size);
 
             if (rc) {
                 BOOT_LOG_ERR("Decompression error: %d", rc);
                 rc = BOOT_EBADSTATUS;
-
                 goto finish;
             }
 
@@ -969,6 +1010,45 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
                 /* Write data out from secondary buffer when it is full */
                 if (decomp_buf_size == sizeof(decomp_buf)) {
+                    if (hdr->ih_flags & IMAGE_F_COMPRESSED_ARM_THUMB_FLT) {
+                        /* Run this through the ARM thumb filter */
+                        uint32_t offset_arm_thumb = 0;
+                        uint32_t output_size_arm_thumb = 0;
+                        uint32_t processed_size = 0;
+                        uint8_t *output_arm_thumb = NULL;
+
+                        while (processed_size < sizeof(decomp_buf)) {
+                            uint32_t current_size = sizeof(decomp_buf);
+                            bool arm_thumb_last_packet = false;
+
+                            if (current_size > CONFIG_NRF_COMPRESS_CHUNK_SIZE) {
+                                current_size = CONFIG_NRF_COMPRESS_CHUNK_SIZE;
+                            }
+
+                            if (last_packet && (processed_size + current_size) ==
+                                sizeof(decomp_buf)) {
+                                arm_thumb_last_packet = true;
+                            }
+
+                            rc = compression_arm_thumb->decompress(NULL,
+                                                                   &decomp_buf[processed_size],
+                                                                   current_size,
+                                                                   arm_thumb_last_packet,
+                                                                   &offset_arm_thumb,
+                                                                   &output_arm_thumb,
+                                                                   &output_size_arm_thumb);
+
+                            if (rc) {
+                                BOOT_LOG_ERR("Decompression error: %d", rc);
+                                rc = BOOT_EBADSTATUS;
+                                goto finish;
+                            }
+
+                            memcpy(&decomp_buf[processed_size], output_arm_thumb, current_size);
+                            processed_size += current_size;
+                        }
+                    }
+
                     rc = flash_area_write(fap_dst, (off_dst + hdr->ih_hdr_size + write_pos),
                                           decomp_buf, sizeof(decomp_buf));
 
@@ -978,7 +1058,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                             (off_dst + hdr->ih_hdr_size + write_pos), sizeof(decomp_buf),
                             fap_dst->fa_id, rc);
                         rc = BOOT_EFLASH;
-
                         goto finish;
                     }
 
@@ -994,7 +1073,8 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     }
 
     /* Clean up decompression system */
-    (void)compression->deinit(NULL);
+    (void)compression_lzma->deinit(NULL);
+    (void)compression_arm_thumb->deinit(NULL);
 
     if (protected_tlv_size > 0) {
         rc = boot_copy_protected_tlvs(hdr, fap_src, fap_dst, (off_dst + hdr->ih_hdr_size +
@@ -1004,7 +1084,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
         if (rc) {
             BOOT_LOG_ERR("Protected TLV copy failure: %d", rc);
-
             goto finish;
         }
 
@@ -1019,7 +1098,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
     if (rc) {
         BOOT_LOG_ERR("Protected TLV copy failure: %d", rc);
-
         goto finish;
     }
 
@@ -1046,7 +1124,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                          (off_dst + hdr->ih_hdr_size + write_pos), sizeof(decomp_buf_size),
                          fap_dst->fa_id, rc);
             rc = BOOT_EFLASH;
-
             goto finish;
         }
 
@@ -1088,7 +1165,6 @@ int bootutil_get_img_decomp_size(const struct image_header *hdr, const struct fl
 
     if (len != sizeof(*img_decomp_size)) {
         BOOT_LOG_ERR("Invalid decompressed image size TLV: %d", len);
-
         return BOOT_EBADIMAGE;
     }
 
@@ -1097,7 +1173,6 @@ int bootutil_get_img_decomp_size(const struct image_header *hdr, const struct fl
     if (rc) {
         BOOT_LOG_ERR("Image data load failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
                      off, len, fap->fa_id, rc);
-
         return BOOT_EFLASH;
     }
 
