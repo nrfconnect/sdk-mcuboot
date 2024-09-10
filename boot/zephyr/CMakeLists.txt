@@ -138,6 +138,12 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/swap_move.c
   ${BOOT_DIR}/bootutil/src/caps.c
   )
+
+  if(NOT CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER EQUAL "-1" AND NOT CONFIG_BOOT_UPGRADE_ONLY)
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/swap_nsib.c
+    )
+  endif()
 endif()
 
 if(CONFIG_BOOT_RAM_LOAD OR CONFIG_SINGLE_APPLICATION_SLOT_RAM_LOAD)
