@@ -331,6 +331,18 @@ boot_write_enc_keys(const struct flash_area *fap, const struct boot_status *bs)
 
 uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct flash_area *fap)
 {
+#if defined(CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+        /* NSIB is a direct upgrade without any status or trailer, get the full size of the
+         * primary slot.
+         */
+        const struct flash_area *fap_nsib = BOOT_IMG_AREA(state, 0);
+        assert(fap_nsib != NULL);
+
+        return flash_area_get_size(fap_nsib);
+    }
+#endif /* CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1 */
+
 #if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) ||      \
     defined(MCUBOOT_FIRMWARE_LOADER) ||              \
     defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
