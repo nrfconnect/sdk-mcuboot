@@ -161,6 +161,14 @@ boot_read_image_headers(struct boot_loader_state *state, bool require_all,
             if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER && i == 0) {
                 continue;
             }
+#elif defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED)
+            /* Patch needed for NCS. The primary slot of the second image
+             * (image 1) will not contain a valid image header until an upgrade
+             * of mcuboot has happened (filling S1 with the new version).
+             */
+            if (BOOT_CURR_IMG(state) == LEGACY_CHILD_PARENT_S0_S1_UPDATE_IMAGE_ID && i == 0) {
+                continue;
+            }
 #endif /* CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1 */
             if (i > 0 && !require_all) {
                 return 0;
@@ -1157,10 +1165,13 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
 #if defined(MCUBOOT_OVERWRITE_ONLY) && defined(MCUBOOT_DOWNGRADE_PREVENTION)
     if (slot != BOOT_PRIMARY_SLOT) {
         /* Check if version of secondary slot is sufficient */
-
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) \
     && defined(CONFIG_PCD_APP) && defined(CONFIG_PCD_READ_NETCORE_APP_VERSION)
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+#elif defined(LEGACY_CHILD_PARENT_NETWORK_CORE_UPDATE_ENABLED)
+        if (BOOT_CURR_IMG(state) == LEGACY_CHILD_PARENT_NETWORK_CORE_UPDATE_IMAGE_ID) {
+#endif
             rc = pcd_version_cmp_net(fap, boot_img_hdr(state, BOOT_SECONDARY_SLOT));
         } else {
              rc = boot_version_cmp(
@@ -1243,12 +1254,18 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
          * Its flash_area hasn't got relevant boundaries.
          * Therfore need to override its boundaries for the check.
          */
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+#elif defined(LEGACY_CHILD_PARENT_NETWORK_CORE_UPDATE_ENABLED)
+        if (BOOT_CURR_IMG(state) == LEGACY_CHILD_PARENT_NETWORK_CORE_UPDATE_IMAGE_ID) {
+#endif
             min_addr = PM_CPUNET_APP_ADDRESS;
             max_addr = PM_CPUNET_APP_ADDRESS + PM_CPUNET_APP_SIZE;
             check_addresses = true;
         } else
 #endif
+#ifndef LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED
+        /* Sysbuild */
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
@@ -1276,6 +1293,23 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
 #endif
             check_addresses = true;
         }
+#else
+        /* Legacy child/parent support */
+        if (BOOT_CURR_IMG(state) == LEGACY_CHILD_PARENT_S0_S1_UPDATE_IMAGE_ID) {
+#if (CONFIG_NCS_IS_VARIANT_IMAGE)
+            min_addr = MIN(pri_fa->fa_off, PM_S0_ADDRESS);
+            max_addr = MAX((pri_fa->fa_off + pri_fa->fa_size), (PM_S0_ADDRESS + PM_S0_SIZE));
+#else
+            min_addr = MIN(pri_fa->fa_off, PM_S1_ADDRESS);
+            max_addr = MAX((pri_fa->fa_off + pri_fa->fa_size), (PM_S1_ADDRESS + PM_S1_SIZE));
+#endif
+            check_addresses = true;
+        } else {
+            min_addr = pri_fa->fa_off;
+            max_addr = pri_fa->fa_off + pri_fa->fa_size;
+            check_addresses = true;
+        }
+#endif /* !LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED */
 
         if (check_addresses == true && (reset_value < min_addr || reset_value > max_addr)) {
             BOOT_LOG_ERR("Reset address of image in secondary slot is not in the primary slot");
@@ -1490,13 +1524,18 @@ boot_validated_swap_type(struct boot_loader_state *state,
 #else
             if (reset_addr >= PM_S1_ADDRESS && reset_addr <= (PM_S1_ADDRESS + PM_S1_SIZE)) {
 #endif
+#if !defined(LEGACY_CHILD_PARENT_BUILD)
+                /* Sysbuild */
                 if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
                     /* This is not the s0/s1 upgrade image but the application image, pretend
                      * there is no image so the NSIB update can be loaded
                      */
                     return BOOT_SWAP_TYPE_NONE;
                 }
-#if 0 && defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+#else
+#if defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED) && defined(CONFIG_SOC_NRF5340_CPUAPP) && \
+defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+                /* Legacy parent/child image */
                 const struct flash_area *nsib_fa;
 
                 /* NSIB upgrade slot */
@@ -1512,6 +1551,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
                 /* Set primary to be NSIB upgrade slot */
                 BOOT_IMG_AREA(state, 0) = nsib_fa;
+#endif
 #endif
                 owner_nsib[BOOT_CURR_IMG(state)] = true;
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
@@ -2068,9 +2108,15 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         flash_area_close(fap);
     }
 
-#if defined(PM_S1_ADDRESS) && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+#if defined(PM_S1_ADDRESS) && (CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1 || defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED))
     if (owner_nsib[BOOT_CURR_IMG(state)]) {
+#ifndef LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED
+        /* Sysbuild */
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+#else
+        /* Legacy child/parent support */
+        if (BOOT_CURR_IMG(state) == LEGACY_CHILD_PARENT_S0_S1_UPDATE_IMAGE_ID) {
+#endif
             /* For NSIB, move the image instead of swapping it */
             nsib_swap_run(state, bs);
 
@@ -2749,6 +2795,15 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
                 rc = boot_perform_update(state, &bs);
             }
             assert(rc == 0);
+
+#if defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED) && defined(PM_S1_ADDRESS) && \
+defined(CONFIG_REBOOT)
+            /* Legacy child/parent support */
+            if (owner_nsib[BOOT_CURR_IMG(state)]) {
+                sys_reboot(SYS_REBOOT_COLD);
+            }
+#endif
+
             break;
 
         case BOOT_SWAP_TYPE_FAIL:
@@ -2823,7 +2878,12 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
          * does not need to also be validated by MCUBoot.
          */
         bool image_validated_by_nsib = BOOT_CURR_IMG(state) ==
+#ifndef LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED
                                        CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER;
+#else
+                                       LEGACY_CHILD_PARENT_S0_S1_UPDATE_IMAGE_ID;
+#endif
+
         if (!image_validated_by_nsib)
 #endif
         {
