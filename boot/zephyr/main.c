@@ -206,14 +206,7 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 
 #if defined(CONFIG_FW_INFO) && !defined(CONFIG_EXT_API_PROVIDE_EXT_API_UNUSED)
-    uintptr_t fw_start_addr;
-
-    rc = flash_device_base(rsp->br_flash_dev_id, &fw_start_addr);
-    assert(rc == 0);
-
-    fw_start_addr += rsp->br_image_off + rsp->br_hdr->ih_hdr_size;
-
-    const struct fw_info *firmware_info = fw_info_find(fw_start_addr);
+    const struct fw_info *firmware_info = fw_info_find((uint32_t) vt);
     bool provided = fw_info_ext_api_provide(firmware_info, true);
 
 #ifdef PM_S0_ADDRESS
