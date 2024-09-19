@@ -557,7 +557,7 @@ config BOOT_ENCRYPTION_KEY_FILE
 
 config BOOT_MAX_IMG_SECTORS_AUTO
 	bool "Calculate maximum sectors automatically"
-	default y
+	default y if !PARTITION_MANAGER_ENABLED
 	help
 	  If this option is enabled then the maximum number of supported sectors per image will
 	  be calculated automatically from the flash erase sizes and size of each partition for
