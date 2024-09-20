@@ -228,6 +228,8 @@ def verify(key, imgfile):
         print("Image has an invalid hash")
     elif ret == image.VerifyResult.INVALID_SIGNATURE:
         print("No signature found for the given key")
+    elif ret == image.VerifyResult.KEY_MISMATCH:
+        print("Key type does not match TLV record")
     else:
         print("Unknown return code: {}".format(ret))
     sys.exit(1)
@@ -312,6 +314,8 @@ class BasedIntParamType(click.ParamType):
 
 @click.argument('outfile')
 @click.argument('infile')
+@click.option('--non-bootable', default=False, is_flag=True,
+              help='Mark the image as non-bootable.')
 @click.option('--custom-tlv', required=False, nargs=2, default=[],
               multiple=True, metavar='[tag] [value]',
               help='Custom TLV that will be placed into protected area. '
@@ -409,7 +413,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
          endian, encrypt_keylen, encrypt, infile, outfile, dependencies,
          load_addr, hex_addr, erased_val, save_enctlv, security_counter,
          boot_record, custom_tlv, rom_fixed, max_align, clear, fix_sig,
-         fix_sig_pubkey, sig_out, vector_to_sign):
+         fix_sig_pubkey, sig_out, vector_to_sign, non_bootable):
 
     if confirm:
         # Confirmed but non-padded images don't make much sense, because
@@ -421,7 +425,8 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                       max_sectors=max_sectors, overwrite_only=overwrite_only,
                       endian=endian, load_addr=load_addr, rom_fixed=rom_fixed,
                       erased_val=erased_val, save_enctlv=save_enctlv,
-                      security_counter=security_counter, max_align=max_align)
+                      security_counter=security_counter, max_align=max_align,
+                      non_bootable=non_bootable)
     img.load(infile)
     key = load_key(key) if key else None
     enckey = load_key(encrypt) if encrypt else None

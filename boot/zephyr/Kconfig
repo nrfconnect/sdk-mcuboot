@@ -383,9 +383,21 @@ config BOOT_ENCRYPTION_KEY_FILE
 	  with the public key information will be written in a format expected by
 	  MCUboot.
 
+config BOOT_MAX_IMG_SECTORS_AUTO
+	bool "Calculate maximum sectors automatically"
+	default y if !PARTITION_MANAGER_ENABLED
+	help
+	  If this option is enabled then the maximum number of supported sectors per image will
+	  be calculated automatically from the flash erase sizes and size of each partition for
+	  the first image.
+
+	  If this information is not available, or multiple images are used, then this option
+	  should be disabled and BOOT_MAX_IMG_SECTORS should be set instead
+
 config BOOT_MAX_IMG_SECTORS
 	int "Maximum number of sectors per image slot"
 	default 128
+	depends on !BOOT_MAX_IMG_SECTORS_AUTO
 	help
 	  This option controls the maximum number of sectors that each of
 	  the two image areas can contain. Smaller values reduce MCUboot's
@@ -720,6 +732,33 @@ config MCUBOOT_BOOT_BANNER
 
 config BOOT_BANNER_STRING
         default "Using Zephyr OS build" if MCUBOOT_BOOT_BANNER
+
+config BOOT_DECOMPRESSION_SUPPORT
+	bool
+	help
+	  Hidden symbol which should be selected if a system provided decompression support.
+
+if BOOT_DECOMPRESSION_SUPPORT
+
+menuconfig BOOT_DECOMPRESSION
+	bool "Decompression"
+	help
+	  If enabled, will include support for compressed images being loaded to the secondary slot
+	  which then get decompressed into the primary slot. This mode allows the secondary slot to
+	  be smaller than primary slot which otherwise would not be allowed.
+
+if BOOT_DECOMPRESSION
+
+config BOOT_DECOMPRESSION_BUFFER_SIZE
+	int "Write buffer size"
+	range 16 16384
+	default 4096
+	help
+	  The size of a secondary buffer used for writing decompressed data to the storage device.
+
+endif # BOOT_DECOMPRESSION
+
+endif # BOOT_DECOMPRESSION_SUPPORT
 
 endmenu
 

@@ -49,7 +49,7 @@
 #ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
 
 #include <bootloader_init.h>
-#include <esp_loader.h>
+#include <esp_image_loader.h>
 
 #define IMAGE_INDEX_0   0
 #define IMAGE_INDEX_1   1
@@ -312,7 +312,9 @@ done:
  */
 static void do_boot(struct boot_rsp *rsp)
 {
+#ifndef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
     void *start;
+#endif /* CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 */
 
     BOOT_LOG_INF("br_image_off = 0x%x\n", rsp->br_image_off);
     BOOT_LOG_INF("ih_hdr_size = 0x%x\n", rsp->br_hdr->ih_hdr_size);
@@ -569,8 +571,13 @@ int main(void)
         FIH_PANIC;
     }
 
+#ifdef CONFIG_BOOT_RAM_LOAD
+    BOOT_LOG_INF("Bootloader chainload address offset: 0x%x",
+                 rsp.br_hdr->ih_load_addr);
+#else
     BOOT_LOG_INF("Bootloader chainload address offset: 0x%x",
                  rsp.br_image_off);
+#endif
 
 #if defined(MCUBOOT_DIRECT_XIP)
     BOOT_LOG_INF("Jumping to the image slot");

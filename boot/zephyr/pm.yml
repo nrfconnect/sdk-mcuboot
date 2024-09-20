@@ -1,4 +1,4 @@
-#include <autoconf.h>
+#include <zephyr/autoconf.h>
 
 mcuboot:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT

@@ -86,7 +86,7 @@ boot_read_image_header(struct boot_loader_state *state, int slot,
 
     off = 0;
     if (bs && !boot_status_is_reset(bs)) {
-	boot_find_status(BOOT_CURR_IMG(state), &fap);
+        boot_find_status(BOOT_CURR_IMG(state), &fap);
         if (fap == NULL || boot_read_swap_size(fap, &swap_size)) {
             rc = BOOT_EFLASH;
             goto done;
@@ -590,11 +590,19 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
 
 int app_max_size(struct boot_loader_state *state)
 {
-    uint32_t sector_sz;
+    uint32_t sector_sz_primary;
+    uint32_t sector_sz_secondary;
+    uint32_t sz_primary;
+    uint32_t sz_secondary;
 
-    sector_sz = boot_img_sector_size(state, BOOT_PRIMARY_SLOT, 0);
+    sector_sz_primary = boot_img_sector_size(state, BOOT_PRIMARY_SLOT, 0);
+    sector_sz_secondary = boot_img_sector_size(state, BOOT_SECONDARY_SLOT, 0);
 
-    return (app_max_sectors(state) * sector_sz);
+    /* Account for image flags and move sector */
+    sz_primary = app_max_sectors(state) * sector_sz_primary - sector_sz_primary;
+    sz_secondary = boot_img_num_sectors(state, BOOT_SECONDARY_SLOT) * sector_sz_secondary;
+
+    return (sz_primary <= sz_secondary ? sz_primary : sz_secondary);
 }
 
 #endif
