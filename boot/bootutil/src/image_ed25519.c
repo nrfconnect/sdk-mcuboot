@@ -25,13 +25,15 @@
 #include "bootutil/crypto/sha.h"
 
 #define EDDSA_SIGNATURE_LENGTH 64
-
-static const uint8_t ed25519_pubkey_oid[] = MBEDTLS_OID_ISO_IDENTIFIED_ORG "\x65\x70";
 #define NUM_ED25519_BYTES 32
 
 extern int ED25519_verify(const uint8_t *message, size_t message_len,
                           const uint8_t signature[EDDSA_SIGNATURE_LENGTH],
                           const uint8_t public_key[NUM_ED25519_BYTES]);
+
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+
+static const uint8_t ed25519_pubkey_oid[] = MBEDTLS_OID_ISO_IDENTIFIED_ORG "\x65\x70";
 
 /*
  * Parse the public key used for signing.
@@ -71,6 +73,7 @@ bootutil_import_key(uint8_t **cp, uint8_t *end)
 
     return 0;
 }
+#endif
 
 fih_ret
 bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
@@ -78,14 +81,17 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
 {
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
-    uint8_t *pubkey;
+    uint8_t *pubkey = NULL;
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
     uint8_t *end;
+#endif
 
     if (hlen != IMAGE_HASH_SIZE || slen != EDDSA_SIGNATURE_LENGTH) {
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
 
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
     pubkey = (uint8_t *)bootutil_keys[key_id].key;
     end = pubkey + *bootutil_keys[key_id].len;
 
@@ -94,6 +100,7 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
+#endif
 
     rc = ED25519_verify(hash, IMAGE_HASH_SIZE, sig, pubkey);
 
@@ -115,14 +122,17 @@ bootutil_verify_img(const uint8_t *img, uint32_t size,
 {
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
-    uint8_t *pubkey;
+    uint8_t *pubkey = NULL;
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
     uint8_t *end;
+#endif
 
     if (slen != EDDSA_SIGNATURE_LENGTH) {
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
 
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
     pubkey = (uint8_t *)bootutil_keys[key_id].key;
     end = pubkey + *bootutil_keys[key_id].len;
 
@@ -131,6 +141,7 @@ bootutil_verify_img(const uint8_t *img, uint32_t size,
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
+#endif
 
     rc = ED25519_verify(img, size, sig, pubkey);
 
