@@ -332,6 +332,22 @@ endif
 
 endchoice
 
+config BOOT_SIGNATURE_USING_KMU
+	bool "Use KMU stored keys for signature verification"
+	depends on NRF_SECURITY
+	depends on CRACEN_LIB_KMU
+	select PSA_WANT_ALG_GCM
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_AES_KEY_SIZE_256
+	select PSA_WANT_ALG_SP800_108_COUNTER_CMAC
+	select PSA_WANT_ALG_CMAC
+	select PSA_WANT_ALG_ECB_NO_PADDING
+	help
+	  MCUboot will use keys provisioned to the device key management unit for signature
+	  verification instead of compiling in key data from a file.
+
+if !BOOT_SIGNATURE_USING_KMU
+
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
 	default "root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
@@ -348,6 +364,8 @@ config BOOT_SIGNATURE_KEY_FILE
 	  The key file will be parsed by imgtool's getpub command and a .c source
 	  with the public key information will be written in a format expected by
 	  MCUboot.
+
+endif
 
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
@@ -370,6 +388,14 @@ config MCUBOOT_CLEANUP_RAM
 	depends on CPU_CORTEX_M4 || CPU_CORTEX_M33
 	help
 	  Sets contents of memory to 0 before jumping to application.
+
+# Disable MBEDTLS from being selected if NRF_SECURITY is enabled, and use default NRF_SECURITY
+# configuration file for MBEDTLS
+config MBEDTLS
+	depends on !NRF_SECURITY
+
+config NRF_SECURITY
+	select MBEDTLS_PROMPTLESS
 
 config MBEDTLS_CFG_FILE
 	# It might be awkward to define an Mbed TLS header file when TinyCrypt
