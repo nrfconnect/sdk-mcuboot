@@ -297,7 +297,7 @@ if(CONFIG_MCUBOOT_SERIAL)
   endif()
 endif()
 
-if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
+if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU OR NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
   # CONF_FILE points to the KConfig configuration files of the bootloader.
   foreach (filepath ${CONF_FILE})
     file(READ ${filepath} temp_text)
