@@ -194,6 +194,7 @@ endchoice # BOOT_IMG_HASH_ALG
 
 config BOOT_SIGNATURE_TYPE_PURE_ALLOW
 	bool
+	depends on NRF_SECURITY
 	help
 	  Hidden option set by configurations that allow Pure variant,
 	  for example ed25519. The pure variant means that image
@@ -293,6 +294,7 @@ config BOOT_ED25519_MBEDTLS
 
 config BOOT_ED25519_PSA
 	bool "Use PSA crypto"
+	depends on NRF_SECURITY
 	select BOOT_USE_PSA_CRYPTO
 	select BOOT_ED25519_PSA_DEPENDENCIES
 	select BOOT_X25519_PSA_DEPENDENCIES if BOOT_ENCRYPT_IMAGE
@@ -301,6 +303,22 @@ endchoice
 endif
 
 endchoice
+
+config BOOT_SIGNATURE_USING_KMU
+	bool "Use KMU stored keys for signature verification"
+	depends on NRF_SECURITY
+	depends on CRACEN_LIB_KMU
+	select PSA_WANT_ALG_GCM
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_AES_KEY_SIZE_256
+	select PSA_WANT_ALG_SP800_108_COUNTER_CMAC
+	select PSA_WANT_ALG_CMAC
+	select PSA_WANT_ALG_ECB_NO_PADDING
+	help
+	  MCUboot will use keys provisioned to the device key management unit for signature
+	  verification instead of compiling in key data from a file.
+
+if !BOOT_SIGNATURE_USING_KMU
 
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
@@ -319,6 +337,8 @@ config BOOT_SIGNATURE_KEY_FILE
 	  with the public key information will be written in a format expected by
 	  MCUboot.
 
+endif
+
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
 	depends on CPU_CORTEX_M
@@ -335,10 +355,18 @@ config MCUBOOT_CLEANUP_ARM_CORE
 	  start-up code which can cause a module fault and potentially make the
 	  module irrecoverable.
 
+# Disable MBEDTLS from being selected if NRF_SECURITY is enabled, and use default NRF_SECURITY
+# configuration file for MBEDTLS
+config MBEDTLS
+	depends on !NRF_SECURITY
+
+config NRF_SECURITY
+	select MBEDTLS_PROMPTLESS
+
 if MBEDTLS
 
 config MBEDTLS_CFG_FILE
-	default "mcuboot-mbedtls-cfg.h"
+	default "mcuboot-mbedtls-cfg.h" if !NRF_SECURITY
 
 endif
 
