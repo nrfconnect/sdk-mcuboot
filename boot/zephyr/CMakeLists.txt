@@ -51,12 +51,6 @@ if(EXISTS targets/${BOARD}.h)
   zephyr_library_compile_definitions(MCUBOOT_TARGET_CONFIG="${BOARD}.h")
 endif()
 
-if(DEFINED CONFIG_MBEDTLS)
-  zephyr_library_include_directories(
-    ${ZEPHYR_MBEDTLS_MODULE_DIR}/include
-  )
-endif()
-
 # Zephyr port-specific sources.
 zephyr_library_sources(
   main.c
@@ -107,10 +101,6 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/bootutil_misc.c
   ${BOOT_DIR}/bootutil/src/fault_injection_hardening.c
   )
-
-if(DEFINED CONFIG_BOOT_ENCRYPT_X25519)
-  zephyr_library_sources(${BOOT_DIR}/bootutil/src/encrypted_psa.c)
-endif()
 
 if(DEFINED CONFIG_MEASURED_BOOT OR DEFINED CONFIG_BOOT_SHARE_DATA)
   zephyr_library_sources(
@@ -240,28 +230,19 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
     ${FIAT_DIR}/include/
   )
 
-  if(NOT CONFIG_BOOT_ED25519_PSA)
-    zephyr_library_sources(
-      ${FIAT_DIR}/src/curve25519.c
-    )
-  else()
-    zephyr_library_sources(
-      ${MBEDTLS_ASN1_DIR}/src/asn1parse.c
-      ${BOOT_DIR}/bootutil/src/ed25519_psa.c
-    )
-  endif()
+  zephyr_library_sources(
+    ${FIAT_DIR}/src/curve25519.c
+  )
 endif()
 
-if(NOT CONFIG_BOOT_ED25519_PSA)
-  if(CONFIG_BOOT_ENCRYPT_EC256 OR CONFIG_BOOT_ENCRYPT_X25519)
-    zephyr_library_sources(
-      ${TINYCRYPT_DIR}/source/aes_encrypt.c
-      ${TINYCRYPT_DIR}/source/aes_decrypt.c
-      ${TINYCRYPT_DIR}/source/ctr_mode.c
-      ${TINYCRYPT_DIR}/source/hmac.c
-      ${TINYCRYPT_DIR}/source/ecc_dh.c
+if(CONFIG_BOOT_ENCRYPT_EC256 OR CONFIG_BOOT_ENCRYPT_X25519)
+  zephyr_library_sources(
+    ${TINYCRYPT_DIR}/source/aes_encrypt.c
+    ${TINYCRYPT_DIR}/source/aes_decrypt.c
+    ${TINYCRYPT_DIR}/source/ctr_mode.c
+    ${TINYCRYPT_DIR}/source/hmac.c
+    ${TINYCRYPT_DIR}/source/ecc_dh.c
     )
-  endif()
 endif()
 
 if(CONFIG_BOOT_ENCRYPT_EC256)
