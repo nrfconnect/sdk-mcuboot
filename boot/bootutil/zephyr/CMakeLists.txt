@@ -29,18 +29,12 @@ zephyr_library_link_libraries(MCUBOOT_BOOTUTIL)
 target_link_libraries(MCUBOOT_BOOTUTIL INTERFACE zephyr_interface)
 
 if(CONFIG_BOOT_USE_TINYCRYPT)
-  target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
-    ../../../ext/tinycrypt/lib/include
-  )
+target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
+  ../../../ext/tinycrypt/lib/include
+)
 endif()
 
-if(CONFIG_BOOT_USE_PSA_CRYPTO)
-  target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
-     ${ZEPHYR_MBEDTLS_MODULE_DIR}/include
-  )
-endif()
-
-if(CONFIG_BOOT_USE_MBEDTLS OR CONFIG_BOOT_USE_PSA_CRYPTO AND NOT CONFIG_PSA_CORE_OBERON)
+if(CONFIG_BOOT_USE_MBEDTLS)
   zephyr_link_libraries(mbedTLS)
 endif()
 endif()
