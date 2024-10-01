@@ -32,6 +32,7 @@ config BOOT_USE_PSA_CRYPTO
 	default y if NRF_SECURITY
 	# This is counter intuitive but that is how PSA heap is enabled.
 	select MBEDTLS_ENABLE_HEAP
+	select MBEDTLS_PSA_CRYPTO_C
 	help
 	  Hidden option set if using PSA crypt for cryptography functionality
 
