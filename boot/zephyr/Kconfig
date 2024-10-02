@@ -919,6 +919,7 @@ if BOOT_DECOMPRESSION_SUPPORT
 menuconfig BOOT_DECOMPRESSION
 	bool "Decompression"
 	select NRF_COMPRESS_CLEANUP
+	select PM_USE_CONFIG_SRAM_SIZE if SOC_NRF54L15_CPUAPP
 	help
 	  If enabled, will include support for compressed images being loaded to the secondary slot
 	  which then get decompressed into the primary slot. This mode allows the secondary slot to
