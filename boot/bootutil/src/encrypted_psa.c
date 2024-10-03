@@ -35,12 +35,13 @@ BOOT_LOG_MODULE_DECLARE(mcuboot_psa_enc);
 _Static_assert(EC_CIPHERKEY_INDEX + BOOT_ENC_KEY_SIZE == EXPECTED_ENC_LEN,
         "Please fix ECIES-X25519 component indexes");
 
+#define SHARED_KEY_LEN 32
+#define PRIV_KEY_LEN   32
+
+#if !defined(MCUBOOT_ENC_RAW_PRIVATE_KEY)
 #define X25519_OID "\x6e"
 static const uint8_t ec_pubkey_oid[] = MBEDTLS_OID_ISO_IDENTIFIED_ORG \
                                        MBEDTLS_OID_ORG_GOV X25519_OID;
-
-#define SHARED_KEY_LEN 32
-#define PRIV_KEY_LEN   32
 
 /* Fixme: This duplicates code from encrypted.c and depends on mbedtls */
 static int
@@ -89,6 +90,7 @@ parse_x25519_enckey(uint8_t **p, uint8_t *end, uint8_t *private_key)
     memcpy(private_key, *p, PRIV_KEY_LEN);
     return 0;
 }
+#endif /* !defined(MCUBOOT_ENC_RAW_PRIVATE_KEY) */
 
 void bootutil_aes_ctr_init(bootutil_aes_ctr_context *ctx)
 {
@@ -113,9 +115,17 @@ int
 boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
 {
     uint8_t derived_key[BOOTUTIL_CRYPTO_AES_CTR_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE];
+#if !defined(MCUBOOT_ENC_RAW_PRIVATE_KEY)
     uint8_t *cp;
     uint8_t *cpend;
     uint8_t private_key[PRIV_KEY_LEN];
+#else
+    /* Fixme: the key position is now hardcoded as index into DER stream,
+     * in the proper implementation the imgtool generated key should be
+     * just stripped to raw key. */
+    const uint8_t *private_key = &bootutil_enc_key.key[16];
+#endif
+
     size_t len;
     psa_status_t psa_ret = PSA_ERROR_BAD_STATE;
     psa_status_t psa_cleanup_ret = PSA_ERROR_BAD_STATE;
@@ -123,10 +133,20 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
     psa_key_attributes_t kattr = PSA_KEY_ATTRIBUTES_INIT;
     psa_key_derivation_operation_t key_do = PSA_KEY_DERIVATION_OPERATION_INIT;
     psa_algorithm_t key_do_alg;
+#if !defined(MCUBOOT_ENC_RAW_PRIVATE_KEY)
     int rc = -1;
 
     cp = (uint8_t *)bootutil_enc_key.key;
     cpend = cp + *bootutil_enc_key.len;
+
+    /*
+     * Load the stored X25519 decryption private key
+     */
+    rc = parse_x25519_enckey(&cp, cpend, private_key);
+    if (rc) {
+        return rc;
+    }
+#endif
 
     /* The psa_cipher_decrypt needs initialization vector of proper length at
      * the beginning of the input buffer.
@@ -140,20 +160,14 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
         return -1;
     }
 
-    /*
-     * Load the stored X25519 decryption private key
-     */
-    rc = parse_x25519_enckey(&cp, cpend, private_key);
-    if (rc) {
-        return rc;
-    }
-
     psa_set_key_type(&kattr, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY));
     psa_set_key_usage_flags(&kattr, PSA_KEY_USAGE_DERIVE);
     psa_set_key_algorithm(&kattr, PSA_ALG_ECDH);
 
-    psa_ret = psa_import_key(&kattr, private_key, sizeof(private_key), &kid);
+    psa_ret = psa_import_key(&kattr, private_key, PRIV_KEY_LEN, &kid);
+#if !defined(MCUBOOT_ENC_RAW_PRIVATE_KEY)
     memset(private_key, 0, sizeof(private_key));
+#endif
     psa_reset_key_attributes(&kattr);
     if (psa_ret != PSA_SUCCESS) {
         BOOT_LOG_ERR("Built-in key import failed %d", psa_ret);
