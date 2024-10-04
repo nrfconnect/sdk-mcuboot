@@ -34,7 +34,6 @@
 
 #if (defined(MCUBOOT_USE_TINYCRYPT) + \
      defined(MCUBOOT_USE_CC310) + \
-     defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_PSA_OR_MBED_TLS)) != 1
     #error "One crypto backend must be defined: either CC310/TINYCRYPT/MBED_TLS/PSA_CRYPTO"
 #endif
@@ -71,18 +70,12 @@
 #include "bootutil/sign_key.h"
 #include "common.h"
 
-#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
-    #include <bl_crypto.h>
-    #define NUM_ECC_BYTES (256 / 8)
-#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #if (defined(MCUBOOT_USE_TINYCRYPT) || defined(MCUBOOT_USE_MBED_TLS) || \
-     defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)) \
-     && !defined(MCUBOOT_USE_PSA_CRYPTO)
+     defined(MCUBOOT_USE_CC310)) && !defined(MCUBOOT_USE_PSA_CRYPTO)
 /*
  * Declaring these like this adds NULL termination.
  */
@@ -134,6 +127,8 @@ static int bootutil_import_key(uint8_t **cp, uint8_t *end)
 }
 #endif /* (MCUBOOT_USE_TINYCRYPT || MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310) && !MCUBOOT_USE_PSA_CRYPTO */
 
+#if defined(MCUBOOT_USE_TINYCRYPT)
+#ifndef MCUBOOT_ECDSA_NEED_ASN1_SIG
 /*
  * cp points to ASN1 string containing an integer.
  * Verify the tag, and that the length is 32 bytes. Helper function.
@@ -183,8 +178,8 @@ static int bootutil_decode_sig(uint8_t signature[NUM_ECC_BYTES * 2], uint8_t *cp
     }
     return 0;
 }
+#endif /* not MCUBOOT_ECDSA_NEED_ASN1_SIG */
 
-#if defined(MCUBOOT_USE_TINYCRYPT)
 typedef uintptr_t bootutil_ecdsa_context;
 static inline void bootutil_ecdsa_init(bootutil_ecdsa_context *ctx)
 {
@@ -253,12 +248,8 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
 {
     (void)ctx;
     (void)pk_len;
+    (void)sig_len;
     (void)hash_len;
-    uint8_t dsig[2 * NUM_ECC_BYTES];
-
-    if (bootutil_decode_sig(dsig, sig, sig + sig_len)) {
-        return -1;
-    }
 
     /* Only support uncompressed keys. */
     if (pk[0] != 0x04) {
@@ -266,7 +257,7 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
     }
     pk++;
 
-    return cc310_ecdsa_verify_secp256r1(hash, pk, dsig, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE);
+    return cc310_ecdsa_verify_secp256r1(hash, pk, sig, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE);
 }
 
 static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
@@ -621,49 +612,6 @@ static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
 }
 
 #endif /* MCUBOOT_USE_MBED_TLS */
-
-#if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
-typedef uintptr_t bootutil_ecdsa_context;
-static inline void bootutil_ecdsa_init(bootutil_ecdsa_context *ctx)
-{
-    (void)ctx;
-}
-
-static inline void bootutil_ecdsa_drop(bootutil_ecdsa_context *ctx)
-{
-    (void)ctx;
-}
-
-static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
-                                        uint8_t *pk, size_t pk_len,
-                                        uint8_t *hash, size_t hash_len,
-                                        uint8_t *sig, size_t sig_len)
-{
-    (void)ctx;
-    (void)pk_len;
-    (void)hash_len;
-    uint8_t dsig[2 * NUM_ECC_BYTES];
-
-    if (bootutil_decode_sig(dsig, sig, sig + sig_len)) {
-        return -1;
-    }
-
-    /* Only support uncompressed keys. */
-    if (pk[0] != 0x04) {
-        return -1;
-    }
-    pk++;
-
-    return bl_secp256r1_validate(hash, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE, pk, dsig);
-}
-
-static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
-                                                  uint8_t **cp,uint8_t *end)
-{
-    (void)ctx;
-    return bootutil_import_key(cp, end);
-}
-#endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
 
 #ifdef __cplusplus
 }
