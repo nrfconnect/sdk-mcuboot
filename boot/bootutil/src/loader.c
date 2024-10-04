@@ -1264,7 +1264,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         }
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) \
-    && !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP)
+    && !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
         /* If the update is valid, and it targets the network core: perform the
          * update and indicate to the caller of this function that no update is
          * available
@@ -1292,8 +1292,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
         }
-#endif /* CONFIG_SOC_NRF5340_CPUAPP && PM_CPUNET_B0N_ADDRESS &&
-	  !CONFIG_NRF53_MULTI_IMAGE_UPDATE && CONFIG_PCD_APP */
+#endif /* CONFIG_SOC_NRF5340_CPUAPP */
     }
 
     return swap_type;
