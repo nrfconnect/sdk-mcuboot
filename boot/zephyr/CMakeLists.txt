@@ -108,7 +108,7 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/fault_injection_hardening.c
   )
 
-if(DEFINED CONFIG_BOOT_ENCRYPT_X25519 AND DEFINED CONFIG_BOOT_ED25519_PSA)
+if(DEFINED CONFIG_BOOT_ENCRYPT_X25519)
   zephyr_library_sources(${BOOT_DIR}/bootutil/src/encrypted_psa.c)
 endif()
 
