@@ -118,7 +118,7 @@ bootutil_verify_img(const uint8_t *img, uint32_t size,
     uint8_t *pubkey;
     uint8_t *end;
 
-    if (slen != EDDSA_SIGNATURE_LENGTH) {
+    if (slen != EDDSA_SIGNAGURE_LENGTH) {
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
