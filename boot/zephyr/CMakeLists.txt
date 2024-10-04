@@ -528,7 +528,7 @@ if(SYSBUILD)
   set(mcuboot_image_upgrade_footer_size ${required_upgrade_size} CACHE INTERNAL "Estimated MCUboot update image trailer size" FORCE)
 endif()
 
-if(CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL OR CONFIG_MCUBOOT_CLEANUP_NONSECURE_RAM)
+if(CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL)
 zephyr_library_sources(
   ${BOOT_DIR}/zephyr/nrf_cleanup.c
 )
