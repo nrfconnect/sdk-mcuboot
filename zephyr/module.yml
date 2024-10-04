@@ -1,6 +1,5 @@
 samples:
   - boot/zephyr
 build:
-  cmake-ext: True
-  kconfig-ext: True
+  cmake: ./boot/bootutil/zephyr
   sysbuild-cmake: boot/zephyr/sysbuild
