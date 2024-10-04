@@ -111,41 +111,4 @@ out:
     FIH_RET(fih_rc);
 }
 
-fih_ret
-bootutil_verify_img(const uint8_t *img, uint32_t size,
-                    uint8_t *sig, size_t slen, uint8_t key_id)
-{
-    int rc;
-    FIH_DECLARE(fih_rc, FIH_FAILURE);
-    uint8_t *pubkey;
-    uint8_t *end;
-
-    if (slen != EDDSA_SIGNAGURE_LENGTH) {
-        FIH_SET(fih_rc, FIH_FAILURE);
-        goto out;
-    }
-
-    pubkey = (uint8_t *)bootutil_keys[key_id].key;
-    end = pubkey + *bootutil_keys[key_id].len;
-
-    rc = bootutil_import_key(&pubkey, end);
-    if (rc) {
-        FIH_SET(fih_rc, FIH_FAILURE);
-        goto out;
-    }
-
-    rc = ED25519_verify(img, size, sig, pubkey);
-
-    if (rc == 0) {
-        /* if verify returns 0, there was an error. */
-        FIH_SET(fih_rc, FIH_FAILURE);
-        goto out;
-    }
-
-    FIH_SET(fih_rc, FIH_SUCCESS);
-out:
-
-    FIH_RET(fih_rc);
-}
-
 #endif /* MCUBOOT_SIGN_ED25519 */

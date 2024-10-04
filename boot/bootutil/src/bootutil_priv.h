@@ -262,9 +262,6 @@ struct boot_loader_state {
 fih_ret bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig,
                             size_t slen, uint8_t key_id);
 
-fih_ret bootutil_verify_img(const uint8_t *img, uint32_t size,
-                            uint8_t *sig, size_t slen, uint8_t key_id);
-
 fih_ret boot_fih_memequal(const void *s1, const void *s2, size_t n);
 
 int boot_find_status(int image_index, const struct flash_area **fap);
