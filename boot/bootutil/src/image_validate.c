@@ -96,7 +96,7 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
 #ifdef MCUBOOT_ENC_IMAGES
     /* Encrypted images only exist in the secondary slot */
     if (MUST_DECRYPT(fap, image_index, hdr) &&
-            !boot_enc_valid(enc_state, image_index, fap)) {
+            !boot_enc_valid(enc_state, 1)) {
         return -1;
     }
 #endif
@@ -148,10 +148,13 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
 #ifdef MCUBOOT_ENC_IMAGES
         if (MUST_DECRYPT(fap, image_index, hdr)) {
             /* Only payload is encrypted (area between header and TLVs) */
+            int slot = flash_area_id_to_multi_image_slot(image_index,
+                            flash_area_get_id(fap));
+
             if (off >= hdr_size && off < tlv_off) {
                 blk_off = (off - hdr_size) & 0xf;
-                boot_encrypt(enc_state, image_index, fap, off - hdr_size,
-                        blk_sz, blk_off, tmp_buf);
+                boot_encrypt(enc_state, slot, off - hdr_size,
+                             blk_sz, blk_off, tmp_buf);
             }
         }
 #endif
