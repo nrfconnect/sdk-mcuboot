@@ -20,15 +20,7 @@
 Image signing and management.
 """
 
-from . import version as versmod
-from .boot_record import create_sw_component_data
-import click
-import copy
-from enum import Enum
-import array
-from intelhex import IntelHex
 import hashlib
-import array
 import os.path
 import struct
 from enum import Enum
@@ -68,8 +60,6 @@ IMAGE_F = {
         'NON_BOOTABLE':          0x0000010,
         'RAM_LOAD':              0x0000020,
         'ROM_FIXED':             0x0000100,
-        'COMPRESSED_LZMA1':      0x0000200,
-        'COMPRESSED_LZMA2':      0x0000400,
 }
 
 TLV_VALUES = {
@@ -89,9 +79,6 @@ TLV_VALUES = {
         'DEPENDENCY': 0x40,
         'SEC_CNT': 0x50,
         'BOOT_RECORD': 0x60,
-        'DECOMP_SIZE': 0x70,
-        'DECOMP_SHA': 0x71,
-        'DECOMP_SIGNATURE': 0x72,
 }
 
 TLV_SIZE = 4
@@ -250,9 +237,6 @@ class Image:
         if load_addr and rom_fixed:
             raise click.UsageError("Can not set rom_fixed and load_addr at the same time")
 
-        self.image_hash = None
-        self.image_size = None
-        self.signature = None
         self.version = version or versmod.decode_version("0")
         self.header_size = header_size
         self.pad_header = pad_header
@@ -268,7 +252,6 @@ class Image:
         self.rom_fixed = rom_fixed
         self.erased_val = 0xff if erased_val is None else int(erased_val, 0)
         self.payload = []
-        self.infile_data = []
         self.enckey = None
         self.save_enctlv = save_enctlv
         self.enctlv_len = 0
@@ -317,39 +300,19 @@ class Image:
                     self.__class__.__name__,
                     len(self.payload))
 
-    def load(self, path, compression_header=None):
+    def load(self, path):
         """Load an image from a given file"""
         ext = os.path.splitext(path)[1][1:].lower()
         try:
             if ext == INTEL_HEX_EXT:
                 ih = IntelHex(path)
-                self.infile_data = ih.tobinarray()
-                self.payload = copy.copy(self.infile_data)
+                self.payload = ih.tobinarray()
                 self.base_addr = ih.minaddr()
             else:
                 with open(path, 'rb') as f:
-                    self.infile_data = f.read()
-                    self.payload = copy.copy(self.infile_data)
-                    if compression_header is not None:
-                        self.payload = compression_header + self.payload
+                    self.payload = f.read()
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
-        self.image_size = len(self.payload)
-
-        # Add the image header if needed.
-        if self.pad_header and self.header_size > 0:
-            if self.base_addr:
-                # Adjust base_addr for new header
-                self.base_addr -= self.header_size
-            self.payload = bytes([self.erased_val] * self.header_size) + \
-                self.payload
-
-        self.check_header()
-
-    def load_compressed(self, data, compression_header):
-        """Load an image from buffer"""
-        self.payload = compression_header + data
-        self.image_size = len(self.payload)
 
         # Add the image header if needed.
         if self.pad_header and self.header_size > 0:
@@ -444,8 +407,7 @@ class Image:
         return cipherkey, ciphermac, pubk
 
     def create(self, key, public_key_format, enckey, dependencies=None,
-               sw_type=None, custom_tlvs=None, compression_tlvs=None,
-               compression_type=None, encrypt_keylen=128, clear=False,
+               sw_type=None, custom_tlvs=None, encrypt_keylen=128, clear=False,
                fixed_sig=None, pub_key=None, vector_to_sign=None, user_sha='auto'):
         self.enckey = enckey
 
@@ -508,9 +470,6 @@ class Image:
             dependencies_num = len(dependencies[DEP_IMAGES_KEY])
             protected_tlv_size += (dependencies_num * 16)
 
-        if compression_tlvs is not None:
-            for value in compression_tlvs.values():
-                protected_tlv_size += TLV_SIZE + len(value)
         if custom_tlvs is not None:
             for value in custom_tlvs.values():
                 protected_tlv_size += TLV_SIZE + len(value)
@@ -532,15 +491,11 @@ class Image:
                 else:
                     self.payload.extend(pad)
 
-        compression_flags = 0x0
-        if compression_tlvs is not None:
-            if compression_type == "lzma2":
-                compression_flags = IMAGE_F['COMPRESSED_LZMA2']
         # This adds the header to the payload as well
         if encrypt_keylen == 256:
-            self.add_header(enckey, protected_tlv_size, compression_flags, 256)
+            self.add_header(enckey, protected_tlv_size, 256)
         else:
-            self.add_header(enckey, protected_tlv_size, compression_flags)
+            self.add_header(enckey, protected_tlv_size)
 
         prot_tlv = TLV(self.endian, TLV_PROT_INFO_MAGIC)
 
@@ -570,9 +525,6 @@ class Image:
                     )
                     prot_tlv.add('DEPENDENCY', payload)
 
-            if compression_tlvs is not None:
-                for tag, value in compression_tlvs.items():
-                    prot_tlv.add(tag, value)
             if custom_tlvs is not None:
                 for tag, value in custom_tlvs.items():
                     prot_tlv.add(tag, value)
@@ -591,7 +543,6 @@ class Image:
         digest = sha.digest()
         message = digest;
         tlv.add(hash_tlv, digest)
-        self.image_hash = digest
 
         if vector_to_sign == 'payload':
             # Stop amending data to the image
@@ -671,16 +622,10 @@ class Image:
 
         self.check_trailer()
 
-    def get_struct_endian(self):
-        return STRUCT_ENDIAN_DICT[self.endian]
-
     def get_signature(self):
         return self.signature
 
-    def get_infile_data(self):
-        return self.infile_data
-
-    def add_header(self, enckey, protected_tlv_size, compression_flags, aes_length=128):
+    def add_header(self, enckey, protected_tlv_size, aes_length=128):
         """Install the image header."""
 
         flags = 0
@@ -718,7 +663,7 @@ class Image:
                              protected_tlv_size,  # TLV Info header +
                                                   # Protected TLVs
                              len(self.payload) - self.header_size,  # ImageSz
-                             flags | compression_flags,
+                             flags,
                              self.version.major,
                              self.version.minor or 0,
                              self.version.revision or 0,
