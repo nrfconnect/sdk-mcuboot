@@ -508,14 +508,16 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
                 found_flag = &found_decompressed_sha;
                 break;
             case IMAGE_TLV_DECOMP_SIGNATURE:
-                expected_size = SIG_BUF_SIZE;
                 found_flag = &found_decompressed_signature;
                 break;
             default:
                 continue;
             };
 
-            if (len != expected_size) {
+            if (type == IMAGE_TLV_DECOMP_SIGNATURE && !EXPECTED_SIG_LEN(len)) {
+                rc = -1;
+                goto out;
+            } else if (type != IMAGE_TLV_DECOMP_SIGNATURE && len != expected_size) {
                 rc = -1;
                 goto out;
             }

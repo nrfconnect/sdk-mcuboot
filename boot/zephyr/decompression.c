@@ -1027,7 +1027,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
     /* Check if we have unwritten data buffered up and, if so, write it out */
     if (decomp_buf_size > 0) {
-        uint32_t write_padding_size = decomp_buf_size % write_alignment;
+        uint32_t write_padding_size = write_alignment - (decomp_buf_size % write_alignment);
 
         /* Check if additional write padding should be applied to meet the minimum write size */
         if (write_padding_size) {
