@@ -253,7 +253,7 @@ config BOOT_SIGNATURE_TYPE_ED25519
 	select BOOT_ENCRYPTION_SUPPORT if !BOOT_SIGNATURE_TYPE_PURE
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !BOOT_SIGNATURE_TYPE_PURE
 	# The SHA is used only for key hashing, not for images.
-	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
+	select BOOT_IMG_HASH_ALG_SHA512_ALLOW if BOOT_USE_PSA_CRYPTO
 	select BOOT_SIGNATURE_TYPE_PURE_ALLOW
 	help
 	  This is ed25519 signature calculated over SHA512 of SHA256 of application
