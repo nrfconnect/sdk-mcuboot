@@ -4,6 +4,9 @@ mcuboot:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT
   placement:
     before: [mcuboot_primary]
+#if defined(CONFIG_HIDE_CHILD_PARENT_CONFIG)
+    align: {end: 0x1000}
+#endif
 
 mcuboot_primary_app:
   # All images to be placed in MCUboot's slot 0 should be placed in this
