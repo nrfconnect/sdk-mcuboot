@@ -1388,6 +1388,11 @@ done:
 #define SEC_SLOT_TOUCHED 1
 #define SEC_SLOT_ASSIGNED 2
 
+#if !defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED)
+/* Sysbuild */
+static uint8_t sec_slot_assignmnet[MCUBOOT_IMAGE_NUMBER] = {0};
+#else
+/* Legacy child/parent image */
 #if (MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS) && \
       !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
 /* This configuration is peculiar - the one physical secondary slot is
@@ -1399,21 +1404,56 @@ done:
 #endif
 
 static uint8_t sec_slot_assignmnet[SEC_SLOT_PHYSICAL_CNT] = {0};
+#endif
 
 static inline void sec_slot_touch(struct boot_loader_state *state)
 {
+#if !defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED)
+    /* Sysbuild */
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+        if (sec_slot_assignmnet[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] == SEC_SLOT_VIRGIN) {
+            sec_slot_assignmnet[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_TOUCHED;
+        }
+    } else if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
+        if (sec_slot_assignmnet[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] == SEC_SLOT_VIRGIN) {
+            sec_slot_assignmnet[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_TOUCHED;
+        }
+    }
+#endif
+
+    if (sec_slot_assignmnet[BOOT_CURR_IMG(state)] == SEC_SLOT_VIRGIN) {
+        sec_slot_assignmnet[BOOT_CURR_IMG(state)] = SEC_SLOT_TOUCHED;
+    }
+#else
+    /* Legacy child/parent image */
     uint8_t idx = (SEC_SLOT_PHYSICAL_CNT == 1) ? 0 : BOOT_CURR_IMG(state);
 
     if (SEC_SLOT_VIRGIN == sec_slot_assignmnet[idx]) {
         sec_slot_assignmnet[idx] = SEC_SLOT_TOUCHED;
     }
+#endif
 }
 
 static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
 {
+#if !defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED)
+    /* Sysbuild */
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+        sec_slot_assignmnet[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_ASSIGNED;
+    } else if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
+        sec_slot_assignmnet[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_ASSIGNED;
+    }
+#endif
+
+    sec_slot_assignmnet[BOOT_CURR_IMG(state)] = SEC_SLOT_ASSIGNED;
+#else
+    /* Legacy child/parent image */
     uint8_t idx = (SEC_SLOT_PHYSICAL_CNT == 1) ? 0 : BOOT_CURR_IMG(state);
 
     sec_slot_assignmnet[idx] = SEC_SLOT_ASSIGNED;
+#endif
 }
 
 /**
@@ -1429,7 +1469,13 @@ static void sec_slot_cleanup_if_unusable(void)
 {
     uint8_t idx;
 
+#if !defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED)
+    /* Sysbuild */
+    for (idx = 0; idx < MCUBOOT_IMAGE_NUMBER; idx++) {
+#else
+    /* Legacy child/parent image */
     for (idx = 0; idx < SEC_SLOT_PHYSICAL_CNT; idx++) {
+#endif
         if (SEC_SLOT_TOUCHED == sec_slot_assignmnet[idx]) {
             const struct flash_area *secondary_fa;
             int rc;
@@ -1439,12 +1485,12 @@ static void sec_slot_cleanup_if_unusable(void)
             if (!rc) {
                 rc = flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
                 if (!rc) {
-                    BOOT_LOG_ERR("Cleaned-up secondary slot of %d. image.", idx);
+                    BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", idx);
                 }
             }
 
             if (rc) {
-                BOOT_LOG_ERR("Can not cleanup secondary slot of %d. image.", idx);
+                BOOT_LOG_ERR("Failed to clean-up secondary slot of image %d: %d", idx, rc);
             }
         }
     }
