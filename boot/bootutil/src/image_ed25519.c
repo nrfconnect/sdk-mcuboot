@@ -155,11 +155,24 @@ bootutil_verify_img(const uint8_t *img, uint32_t size,
     pubkey = (uint8_t *)bootutil_keys[key_id].key;
     end = pubkey + *bootutil_keys[key_id].len;
 
+#if !defined(MCUBOOT_KEY_IMPORT_BYPASS_ASN)
     rc = bootutil_import_key(&pubkey, end);
     if (rc) {
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
+#else
+    /* Directly use the key contents from the ASN stream,
+     * these are the last NUM_ED25519_BYTES.
+     * There is no check whether this is the correct key,
+     * here, by the algorithm selected.
+     */
+    if (*bootutil_keys[key_id].len < NUM_ED25519_BYTES) {
+        FIH_SET(fih_rc, FIH_FAILURE);
+        goto out;
+    }
+
+    pubkey = end - NUM_ED25519_BYTES;
 #endif
 
     rc = ED25519_verify(img, size, sig, pubkey);
