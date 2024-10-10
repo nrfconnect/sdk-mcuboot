@@ -375,7 +375,7 @@ bootutil_get_img_security_cnt(struct image_header *hdr,
 #if defined(MCUBOOT_SIGN_PURE)
 /* Returns:
  *  0 -- found
- *  1 -- not found
+ *  1 -- not found or found but not true
  * -1 -- failed for some reason
  *
  * Value of TLV does not matter, presence decides.
@@ -395,6 +395,14 @@ static int bootutil_check_for_pure(const struct image_header *hdr,
 
     /* Search for the TLV */
     rc = bootutil_tlv_iter_next(&it, &off, &len, NULL);
+    if (rc == 0 && len == 1) {
+        bool val;
+
+        rc = LOAD_IMAGE_DATA(hdr, fap, off, &val, 1);
+        if (rc == 0) {
+            rc = !val;
+        }
+    }
 
     return rc;
 }
@@ -730,7 +738,7 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
     }
 #elif defined(MCUBOOT_SIGN_PURE)
     /* This returns true on EQ, rc is err on non-0 */
-    rc = !FIH_EQ(valid_signature, FIH_SUCCESS);
+    rc = FIH_NOT_EQ(valid_signature, FIH_SUCCESS);
 #endif
 #ifdef EXPECTED_SIG_TLV
     FIH_SET(fih_rc, valid_signature);
