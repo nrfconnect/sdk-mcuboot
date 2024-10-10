@@ -302,6 +302,20 @@ endif
 
 endchoice
 
+config BOOT_SIGNATURE_USING_KMU
+	bool "Use KMU stored keys for signature verification"
+	select PSA_WANT_ALG_GCM
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_AES_KEY_SIZE_256
+	select PSA_WANT_ALG_SP800_108_COUNTER_CMAC
+	select PSA_WANT_ALG_CMAC
+	select PSA_WANT_ALG_ECB_NO_PADDING
+	help
+	  The MCUboot will use keys provisioned to board for signature verification
+	  instead of compiling in a key data.
+
+if !BOOT_SIGNATURE_USING_KMU
+
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
 	default "root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
@@ -318,6 +332,8 @@ config BOOT_SIGNATURE_KEY_FILE
 	  The key file will be parsed by imgtool's getpub command and a .c source
 	  with the public key information will be written in a format expected by
 	  MCUboot.
+
+endif
 
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
