@@ -106,4 +106,12 @@ static inline size_t boot_scratch_area_size(const struct boot_loader_state *stat
  */
 int app_max_size(struct boot_loader_state *state);
 
+#if defined(PM_S1_ADDRESS) && !defined(MCUBOOT_OVERWRITE_ONLY) && \
+(CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1 || defined(LEGACY_CHILD_PARENT_S0_S1_UPDATE_ENABLED))
+/**
+ * Performs an NSIB update
+ */
+void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs);
+#endif
+
 #endif /* H_SWAP_PRIV_ */

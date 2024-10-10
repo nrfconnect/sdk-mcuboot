@@ -134,6 +134,19 @@ zephyr_library_sources(
   )
 endif()
 
+if(NOT SYSBUILD)
+  # Check if this is a legacy child/parent image build
+  cmake_path(GET CMAKE_BINARY_DIR PARENT_PATH parent_build_dir)
+  string(LENGTH ${parent_build_dir} parent_build_dir_len)
+  math(EXPR parent_build_dir_len "${parent_build_dir_len} + 1")
+  string(SUBSTRING ${CMAKE_BINARY_DIR} ${parent_build_dir_len} -1 current_dir_name)
+
+  if(("${current_dir_name}" STREQUAL "mcuboot" OR "${current_dir_name}" STREQUAL "s1_image") AND EXISTS ${parent_build_dir}/image_preload.cmake)
+    zephyr_compile_definitions(LEGACY_CHILD_PARENT_BUILD=1)
+    set(LEGACY_CHILD_PARENT_BUILD y)
+  endif()
+endif()
+
 if(CONFIG_SINGLE_APPLICATION_SLOT)
 zephyr_library_sources(
   ${BOOT_DIR}/zephyr/single_loader.c
@@ -152,6 +165,18 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/swap_move.c
   ${BOOT_DIR}/bootutil/src/caps.c
   )
+
+  if(NOT CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER EQUAL "-1" AND NOT CONFIG_BOOT_UPGRADE_ONLY)
+    # Sysbuild
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/swap_nsib.c
+    )
+  elseif(LEGACY_CHILD_PARENT_BUILD AND CONFIG_SOC_NRF5340_CPUAPP AND (CONFIG_UPDATEABLE_IMAGE_NUMBER GREATER "2" OR (CONFIG_UPDATEABLE_IMAGE_NUMBER EQUAL "2" AND NOT CONFIG_PCD_APP)) AND NOT CONFIG_BOOT_UPGRADE_ONLY)
+    # Legacy child/parent image support
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/swap_nsib.c
+    )
+  endif()
 endif()
 
 if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
