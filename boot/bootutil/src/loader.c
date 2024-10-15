@@ -105,6 +105,17 @@ static struct sector_buffer_t sector_buffers;
 #endif
 #endif
 
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1 && defined(MCUBOOT_OVERWRITE_ONLY) && \
+    defined(MCUBOOT_DOWNGRADE_PREVENTION)
+/* s0/s1 package version of the current MCUboot image */
+static const struct image_version mcuboot_s0_s1_image_version = {
+    .iv_major = CONFIG_MCUBOOT_MCUBOOT_S0_S1_VERSION_MAJOR,
+    .iv_minor = CONFIG_MCUBOOT_MCUBOOT_S0_S1_VERSION_MINOR,
+    .iv_revision = CONFIG_MCUBOOT_MCUBOOT_S0_S1_VERSION_REVISION,
+    .iv_build_num = CONFIG_MCUBOOT_MCUBOOT_S0_S1_VERSION_BUILD_NUMBER,
+};
+#endif
+
 #if (BOOT_IMAGE_NUMBER > 1)
 #define IMAGES_ITER(x) for ((x) = 0; (x) < BOOT_IMAGE_NUMBER; ++(x))
 #else
@@ -1166,11 +1177,45 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
              rc = boot_version_cmp(
                                  &boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
                                  &boot_img_hdr(state, BOOT_PRIMARY_SLOT)->ih_ver);
+
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+            if (rc >= 0 && BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+                /* Also check the new version of MCUboot against that of the current s0/s1 MCUboot
+                 * trailer version to prevent downgrades
+                 */
+                int version_check;
+
+                version_check = boot_version_cmp(&boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
+                                                 &mcuboot_s0_s1_image_version);
+
+                /* Only update rc if the currently running version is newer */
+                if (version_check < rc) {
+                    rc = version_check;
+                }
+            }
+#endif
         }
 #else
 	rc = boot_version_cmp(
 			&boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
 			&boot_img_hdr(state, BOOT_PRIMARY_SLOT)->ih_ver);
+
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+        if (rc >= 0 && BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+            /* Also check the new version of MCUboot against that of the current s0/s1 MCUboot
+             * trailer version to prevent downgrades
+             */
+            int version_check;
+
+            version_check = boot_version_cmp(&boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
+                                             &mcuboot_s0_s1_image_version);
+
+            /* Only update rc if the currently running version is newer */
+            if (version_check < rc) {
+                rc = version_check;
+            }
+        }
+#endif
 #endif
         if (rc < 0 && boot_check_header_erased(state, BOOT_PRIMARY_SLOT)) {
             BOOT_LOG_ERR("insufficient version in secondary slot");
