@@ -7,7 +7,13 @@
 #if USE_PARTITION_MANAGER
 /* Blocking the rest of the file */
 #define __SYSFLASH_H__
+#if CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER != -1
+/* Sysbuild */
 #include <sysflash/pm_sysflash.h>
+#else
+/* Legacy child/parent */
+#include <sysflash/pm_sysflash_legacy_child_parent.h>
+#endif
 #endif
 
 #ifndef __SYSFLASH_H__
