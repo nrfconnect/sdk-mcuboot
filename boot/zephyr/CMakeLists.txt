@@ -145,8 +145,18 @@ zephyr_library_sources(
   )
 zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
 else()
+  if(NOT CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER EQUAL "-1")
+    # Sysbuild
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/loader.c
+    )
+  else()
+    # Legacy child/parent image
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/loader_legacy_child_parent.c
+    )
+  endif()
 zephyr_library_sources(
-  ${BOOT_DIR}/bootutil/src/loader.c
   ${BOOT_DIR}/bootutil/src/swap_misc.c
   ${BOOT_DIR}/bootutil/src/swap_scratch.c
   ${BOOT_DIR}/bootutil/src/swap_move.c
