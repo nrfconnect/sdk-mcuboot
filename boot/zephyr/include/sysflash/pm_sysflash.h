@@ -15,48 +15,36 @@
 
 #ifndef CONFIG_SINGLE_APPLICATION_SLOT
 
-#if (MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS)
-/* If B0 is present then two bootloaders are present, and we must use
- * a single secondary slot for both primary slots.
- */
-extern uint32_t _image_1_primary_slot_id[];
-#endif /* (MCUBOOT_IMAGE_NUMBER == 2 && defined(PM_B0_ADDRESS) */
-
-#if (MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS) && \
-      !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
-
-#define FLASH_AREA_IMAGE_PRIMARY(x)             \
-        ((x == 0) ?                             \
-           PM_MCUBOOT_PRIMARY_ID :              \
-         (x == 1) ?                             \
-          (uint32_t)_image_1_primary_slot_id :  \
-           255 )
-
-#define FLASH_AREA_IMAGE_SECONDARY(x)           \
-        ((x == 0) ?                             \
-            PM_MCUBOOT_SECONDARY_ID:            \
-        (x == 1) ?                              \
-           PM_MCUBOOT_SECONDARY_ID:             \
-           255 )
-
-#else  /* MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS) && \
-        * !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
-        */
-
 /* Each pair of slots is separated by , and there is no terminating character */
-#define FLASH_AREA_IMAGE_0_SLOTS    PM_MCUBOOT_PRIMARY_ID, PM_MCUBOOT_SECONDARY_ID
-#define FLASH_AREA_IMAGE_1_SLOTS    PM_MCUBOOT_PRIMARY_1_ID, PM_MCUBOOT_SECONDARY_1_ID
-#define FLASH_AREA_IMAGE_2_SLOTS    PM_MCUBOOT_PRIMARY_2_ID, PM_MCUBOOT_SECONDARY_2_ID
+#define FLASH_AREA_IMAGE_0_SLOTS    PM_MCUBOOT_PRIMARY_ID, PM_MCUBOOT_SECONDARY_ID,
+#define FLASH_AREA_IMAGE_1_SLOTS    PM_MCUBOOT_PRIMARY_1_ID, PM_MCUBOOT_SECONDARY_1_ID,
+#define FLASH_AREA_IMAGE_2_SLOTS    PM_MCUBOOT_PRIMARY_2_ID, PM_MCUBOOT_SECONDARY_2_ID,
+#define FLASH_AREA_IMAGE_3_SLOTS    PM_MCUBOOT_PRIMARY_3_ID, PM_MCUBOOT_SECONDARY_3_ID,
 
-#if (MCUBOOT_IMAGE_NUMBER == 1)
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+#ifdef CONFIG_NCS_IS_VARIANT_IMAGE
+#define MCUBOOT_S0_S1_SLOTS PM_S0_ID, PM_MCUBOOT_SECONDARY_ID,
+#else
+#define MCUBOOT_S0_S1_SLOTS PM_S1_ID, PM_MCUBOOT_SECONDARY_ID,
+#endif
+#else
+#define MCUBOOT_S0_S1_SLOTS
+#endif
+
+#if (MCUBOOT_IMAGE_NUMBER == 1) || (MCUBOOT_IMAGE_NUMBER == 2 && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1)
 #define ALL_AVAILABLE_SLOTS FLASH_AREA_IMAGE_0_SLOTS
-#elif (MCUBOOT_IMAGE_NUMBER == 2)
-#define ALL_AVAILABLE_SLOTS FLASH_AREA_IMAGE_0_SLOTS, \
+#elif (MCUBOOT_IMAGE_NUMBER == 2) || (MCUBOOT_IMAGE_NUMBER == 3 && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1)
+#define ALL_AVAILABLE_SLOTS FLASH_AREA_IMAGE_0_SLOTS \
                             FLASH_AREA_IMAGE_1_SLOTS
-#elif (MCUBOOT_IMAGE_NUMBER == 3)
-#define ALL_AVAILABLE_SLOTS FLASH_AREA_IMAGE_0_SLOTS, \
-                            FLASH_AREA_IMAGE_1_SLOTS, \
+#elif (MCUBOOT_IMAGE_NUMBER == 3) || (MCUBOOT_IMAGE_NUMBER == 4 && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1)
+#define ALL_AVAILABLE_SLOTS FLASH_AREA_IMAGE_0_SLOTS \
+                            FLASH_AREA_IMAGE_1_SLOTS \
                             FLASH_AREA_IMAGE_2_SLOTS
+#elif (MCUBOOT_IMAGE_NUMBER == 4)
+#define ALL_AVAILABLE_SLOTS FLASH_AREA_IMAGE_0_SLOTS \
+                            FLASH_AREA_IMAGE_1_SLOTS \
+                            FLASH_AREA_IMAGE_2_SLOTS \
+                            FLASH_AREA_IMAGE_3_SLOTS
 #else
 #error Unsupported number of images
 #endif
@@ -65,6 +53,7 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 {
     static const int all_slots[] = {
 	ALL_AVAILABLE_SLOTS
+	MCUBOOT_S0_S1_SLOTS
     };
     return all_slots[img * 2 + slot];
 };
@@ -72,6 +61,8 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #undef FLASH_AREA_IMAGE_0_SLOTS
 #undef FLASH_AREA_IMAGE_1_SLOTS
 #undef FLASH_AREA_IMAGE_2_SLOTS
+#undef FLASH_AREA_IMAGE_3_SLOTS
+#undef MCUBOOT_S0_S1_SLOTS
 #undef ALL_AVAILABLE_SLOTS
 
 #define FLASH_AREA_IMAGE_PRIMARY(x) __flash_area_ids_for_slot(x, 0)
@@ -80,10 +71,6 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #if !defined(CONFIG_BOOT_SWAP_USING_MOVE)
 #define FLASH_AREA_IMAGE_SCRATCH    PM_MCUBOOT_SCRATCH_ID
 #endif
-
-#endif /* MCUBOOT_IMAGE_NUMBER == 2) && defined(PM_B0_ADDRESS) && \
-        * !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
-        */
 
 #else /* CONFIG_SINGLE_APPLICATION_SLOT */
 
