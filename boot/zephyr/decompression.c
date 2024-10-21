@@ -29,6 +29,14 @@
 #define EXPECTED_SIG_TLV IMAGE_TLV_ED25519
 #endif
 
+#define DECOMP_BUF_SIZE CONFIG_BOOT_DECOMPRESSION_BUFFER_SIZE
+#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
+#define DECOMP_BUF_EXTRA_SIZE 2
+#else
+#define DECOMP_BUF_EXTRA_SIZE 0
+#endif
+#define DECOMP_BUF_ALLOC_SIZE (DECOMP_BUF_SIZE + DECOMP_BUF_EXTRA_SIZE)
+
 /* Number of times that consumed data by decompression system can be 0 in a row before aborting */
 #define OFFSET_ZERO_CHECK_TIMES 3
 
@@ -315,11 +323,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
 
                         if (rc) {
                             BOOT_LOG_ERR("Decompression error: %d", rc);
-                            rc = BOOT_EBADSTATUS;
-                            goto finish;
-                        } else if (current_size != offset_arm_thumb) {
-                            BOOT_LOG_ERR("Decompression expected offset mismatch: %d vs %d",
-                                         current_size, offset_arm_thumb);
                             rc = BOOT_EBADSTATUS;
                             goto finish;
                         }
@@ -863,7 +866,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     struct nrf_compress_implementation *compression_lzma = NULL;
     struct nrf_compress_implementation *compression_arm_thumb = NULL;
     struct image_header *hdr;
-    TARGET_STATIC uint8_t decomp_buf[CONFIG_BOOT_DECOMPRESSION_BUFFER_SIZE] __attribute__((aligned(4)));
+    TARGET_STATIC uint8_t decomp_buf[DECOMP_BUF_ALLOC_SIZE] __attribute__((aligned(4)));
     TARGET_STATIC struct image_header modified_hdr;
 
     hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
@@ -950,6 +953,10 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     while (pos < hdr->ih_img_size) {
         uint32_t copy_size = hdr->ih_img_size - pos;
         uint32_t tmp_off = 0;
+#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
+        uint8_t excess_data_buffer[DECOMP_BUF_EXTRA_SIZE];
+        bool excess_data_buffer_full = false;
+#endif
 
         if (copy_size > buf_size) {
             copy_size = buf_size;
@@ -985,8 +992,8 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                 last_packet = true;
             }
 
-            rc = compression_lzma->decompress(NULL, &buf[tmp_off], chunk_size, last_packet, &offset,
-                                         &output, &output_size);
+            rc = compression_lzma->decompress(NULL, &buf[tmp_off], chunk_size, last_packet,
+                                              &offset, &output, &output_size);
 
             if (rc) {
                 BOOT_LOG_ERR("Decompression error: %d", rc);
@@ -996,42 +1003,55 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
             /* Copy data to secondary buffer for writing out */
             while (output_size > 0) {
-                uint32_t data_size = (sizeof(decomp_buf) - decomp_buf_size);
+                uint32_t data_size = (DECOMP_BUF_SIZE - decomp_buf_size);
 
                 if (data_size > output_size) {
                     data_size = output_size;
                 }
 
-                memcpy(&decomp_buf[decomp_buf_size], &output[compression_buffer_pos], data_size);
+#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
+                if (hdr->ih_flags & IMAGE_F_COMPRESSED_ARM_THUMB_FLT) {
+                    memcpy(&decomp_buf[decomp_buf_size + DECOMP_BUF_EXTRA_SIZE],
+                           &output[compression_buffer_pos], data_size);
+                } else
+#endif
+                {
+                    memcpy(&decomp_buf[decomp_buf_size], &output[compression_buffer_pos],
+                           data_size);
+                }
+
                 compression_buffer_pos += data_size;
 
                 decomp_buf_size += data_size;
                 output_size -= data_size;
 
                 /* Write data out from secondary buffer when it is full */
-                if (decomp_buf_size == sizeof(decomp_buf)) {
+                if (decomp_buf_size == DECOMP_BUF_SIZE) {
+#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
                     if (hdr->ih_flags & IMAGE_F_COMPRESSED_ARM_THUMB_FLT) {
-                        /* Run this through the ARM thumb filter */
-                        uint32_t offset_arm_thumb = 0;
-                        uint32_t output_size_arm_thumb = 0;
+                        uint32_t filter_writeback_pos = 0;
                         uint32_t processed_size = 0;
-                        uint8_t *output_arm_thumb = NULL;
 
-                        while (processed_size < sizeof(decomp_buf)) {
-                            uint32_t current_size = sizeof(decomp_buf);
+                        /* Run this through the ARM thumb filter */
+                        while (processed_size < DECOMP_BUF_SIZE) {
+                            uint32_t offset_arm_thumb = 0;
+                            uint32_t output_size_arm_thumb = 0;
+                            uint8_t *output_arm_thumb = NULL;
+                            uint32_t current_size = DECOMP_BUF_SIZE;
                             bool arm_thumb_last_packet = false;
 
                             if (current_size > CONFIG_NRF_COMPRESS_CHUNK_SIZE) {
                                 current_size = CONFIG_NRF_COMPRESS_CHUNK_SIZE;
                             }
 
-                            if (last_packet && (processed_size + current_size) ==
-                                sizeof(decomp_buf)) {
+                            if (last_packet && (processed_size + current_size) == DECOMP_BUF_SIZE
+                                && output_size == 0) {
                                 arm_thumb_last_packet = true;
                             }
 
                             rc = compression_arm_thumb->decompress(NULL,
-                                                                   &decomp_buf[processed_size],
+                                                                   &decomp_buf[processed_size +
+                                                                            DECOMP_BUF_EXTRA_SIZE],
                                                                    current_size,
                                                                    arm_thumb_last_packet,
                                                                    &offset_arm_thumb,
@@ -1044,25 +1064,70 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                                 goto finish;
                             }
 
-                            memcpy(&decomp_buf[processed_size], output_arm_thumb, current_size);
+                            memcpy(&decomp_buf[filter_writeback_pos], output_arm_thumb,
+                                   output_size_arm_thumb);
+                            filter_writeback_pos += output_size_arm_thumb;
                             processed_size += current_size;
                         }
+
+                        if (excess_data_buffer_full == true)
+                        {
+                            /* Restore extra data removed from previous iteration to the write
+                             * buffer
+                             */
+                            memmove(&decomp_buf[DECOMP_BUF_EXTRA_SIZE], decomp_buf,
+                                    filter_writeback_pos);
+                            memcpy(decomp_buf, excess_data_buffer, DECOMP_BUF_EXTRA_SIZE);
+                            excess_data_buffer_full = false;
+                            filter_writeback_pos += DECOMP_BUF_EXTRA_SIZE;
+                        }
+
+                        if ((filter_writeback_pos % sizeof(uint32_t)) != 0)
+                        {
+                            /* Since there are an extra 2 bytes here, remove them and stash for
+                             * later usage to prevent flash write issues with non-word boundary
+                             * writes
+                             */
+                            memcpy(excess_data_buffer, &decomp_buf[filter_writeback_pos -
+                                                                   DECOMP_BUF_EXTRA_SIZE],
+                                   DECOMP_BUF_EXTRA_SIZE);
+                            excess_data_buffer_full = true;
+                            filter_writeback_pos -= DECOMP_BUF_EXTRA_SIZE;
+                        }
+
+                        rc = flash_area_write(fap_dst, (off_dst + hdr->ih_hdr_size + write_pos),
+                                              decomp_buf, filter_writeback_pos);
+
+                        if (rc != 0) {
+                            BOOT_LOG_ERR(
+                                "Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
+                                (off_dst + hdr->ih_hdr_size + write_pos), DECOMP_BUF_SIZE,
+                                fap_dst->fa_id, rc);
+                            rc = BOOT_EFLASH;
+                            goto finish;
+                        }
+
+                        write_pos += filter_writeback_pos;
+                        decomp_buf_size = 0;
+                        filter_writeback_pos = 0;
+                    } else
+#endif
+                    {
+                        rc = flash_area_write(fap_dst, (off_dst + hdr->ih_hdr_size + write_pos),
+                                              decomp_buf, DECOMP_BUF_SIZE);
+
+                        if (rc != 0) {
+                            BOOT_LOG_ERR(
+                                "Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
+                                (off_dst + hdr->ih_hdr_size + write_pos), DECOMP_BUF_SIZE,
+                                fap_dst->fa_id, rc);
+                            rc = BOOT_EFLASH;
+                            goto finish;
+                        }
+
+                        write_pos += DECOMP_BUF_SIZE;
+                        decomp_buf_size = 0;
                     }
-
-                    rc = flash_area_write(fap_dst, (off_dst + hdr->ih_hdr_size + write_pos),
-                                          decomp_buf, sizeof(decomp_buf));
-
-                    if (rc != 0) {
-                        BOOT_LOG_ERR(
-                            "Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
-                            (off_dst + hdr->ih_hdr_size + write_pos), sizeof(decomp_buf),
-                            fap_dst->fa_id, rc);
-                        rc = BOOT_EFLASH;
-                        goto finish;
-                    }
-
-                    write_pos += sizeof(decomp_buf);
-                    decomp_buf_size = 0;
                 }
             }
 
@@ -1071,6 +1136,27 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
         pos += copy_size;
     }
+
+#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
+    if (hdr->ih_flags & IMAGE_F_COMPRESSED_ARM_THUMB_FLT && decomp_buf_size > 0) {
+        /* Extra data that has not been written out that needs ARM thumb filter applied */
+        uint32_t offset_arm_thumb = 0;
+        uint32_t output_size_arm_thumb = 0;
+        uint8_t *output_arm_thumb = NULL;
+
+        rc = compression_arm_thumb->decompress(NULL, &decomp_buf[DECOMP_BUF_EXTRA_SIZE],
+                                               decomp_buf_size, true, &offset_arm_thumb,
+                                               &output_arm_thumb, &output_size_arm_thumb);
+
+        if (rc) {
+            BOOT_LOG_ERR("Decompression error: %d", rc);
+            rc = BOOT_EBADSTATUS;
+            goto finish;
+        }
+
+         memcpy(decomp_buf, output_arm_thumb, output_size_arm_thumb);
+     }
+#endif
 
     /* Clean up decompression system */
     (void)compression_lzma->deinit(NULL);
