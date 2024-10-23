@@ -21,7 +21,7 @@ jobs:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
 
-   - name: Run the commit tags
+    - name: Run the commit tags
       uses: nrfconnect/action-commit-tags@main
       with:
         target: .
