@@ -103,6 +103,7 @@ void bootutil_aes_ctr_init(bootutil_aes_ctr_context *ctx)
 }
 
 #if defined(MCUBOOT_ENC_IMAGES)
+extern const struct bootutil_key bootutil_enc_key;
 /*
  * Decrypt an encryption key TLV.
  *
