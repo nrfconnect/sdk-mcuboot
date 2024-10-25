@@ -962,9 +962,9 @@ menuconfig BOOT_DECOMPRESSION
 if BOOT_DECOMPRESSION
 
 config BOOT_DECOMPRESSION_BUFFER_SIZE
-	int "Write buffer size"
+	int
 	range 16 16384
-	default 4096
+	default NRF_COMPRESS_CHUNK_SIZE
 	help
 	  The size of a secondary buffer used for writing decompressed data to the storage device.
 
