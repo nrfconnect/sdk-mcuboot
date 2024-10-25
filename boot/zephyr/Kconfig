@@ -194,7 +194,6 @@ endchoice # BOOT_IMG_HASH_ALG
 
 config BOOT_SIGNATURE_TYPE_PURE_ALLOW
 	bool
-	depends on NRF_SECURITY
 	help
 	  Hidden option set by configurations that allow Pure variant,
 	  for example ed25519. The pure variant means that image
