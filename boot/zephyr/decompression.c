@@ -121,6 +121,7 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
     uint32_t write_pos = 0;
     uint32_t protected_tlv_size = 0;
     uint32_t decompressed_image_size;
+    uint32_t output_size_total = 0;
     struct nrf_compress_implementation *compression_lzma = NULL;
     struct nrf_compress_implementation *compression_arm_thumb = NULL;
     TARGET_STATIC struct image_header modified_hdr;
@@ -300,7 +301,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                     uint8_t *output_arm_thumb = NULL;
                     uint32_t processed_size = 0;
                     uint32_t output_size_arm_thumb = 0;
-                    uint32_t output_size_arm_thumb_total = 0;
 
                     while (processed_size < output_size) {
                         uint32_t current_size = output_size - processed_size;
@@ -328,18 +328,12 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                         }
 
                         bootutil_sha_update(&sha_ctx, output_arm_thumb, output_size_arm_thumb);
-                        output_size_arm_thumb_total += output_size_arm_thumb;
+                        output_size_total += output_size_arm_thumb;
                         processed_size += current_size;
-                    }
-
-                    if (output_size != output_size_arm_thumb_total) {
-                        BOOT_LOG_ERR("Decompression expected output_size mismatch: %d vs %d",
-                                     output_size, output_size_arm_thumb);
-                        rc = BOOT_EBADSTATUS;
-                        goto finish;
                     }
                 } else {
                     bootutil_sha_update(&sha_ctx, output, output_size);
+                    output_size_total += output_size;
                 }
             }
 
@@ -347,6 +341,13 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
         }
 
         read_pos += copy_size;
+    }
+
+    if (modified_hdr.ih_img_size != output_size_total) {
+        BOOT_LOG_ERR("Decompression expected output_size mismatch: %d vs %d",
+                     modified_hdr.ih_img_size, output_size_total);
+        rc = BOOT_EBADSTATUS;
+        goto finish;
     }
 
     /* If there are any protected TLVs present, add them after the main decompressed image */
@@ -869,6 +870,11 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     TARGET_STATIC uint8_t decomp_buf[DECOMP_BUF_ALLOC_SIZE] __attribute__((aligned(4)));
     TARGET_STATIC struct image_header modified_hdr;
 
+#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
+    uint8_t excess_data_buffer[DECOMP_BUF_EXTRA_SIZE];
+    bool excess_data_buffer_full = false;
+#endif
+
     hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
 
     /* Setup decompression system */
@@ -953,10 +959,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     while (pos < hdr->ih_img_size) {
         uint32_t copy_size = hdr->ih_img_size - pos;
         uint32_t tmp_off = 0;
-#if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
-        uint8_t excess_data_buffer[DECOMP_BUF_EXTRA_SIZE];
-        bool excess_data_buffer_full = false;
-#endif
 
         if (copy_size > buf_size) {
             copy_size = buf_size;
@@ -1194,7 +1196,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
         uint32_t write_padding_size = write_alignment - (decomp_buf_size % write_alignment);
 
         /* Check if additional write padding should be applied to meet the minimum write size */
-        if (write_padding_size) {
+        if (write_alignment > 1 && write_padding_size) {
             uint8_t flash_erased_value;
 
             flash_erased_value = flash_area_erased_val(fap_dst);
