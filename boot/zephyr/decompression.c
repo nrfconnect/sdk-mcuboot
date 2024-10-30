@@ -657,7 +657,17 @@ int boot_size_unprotected_tlvs(const struct image_header *hdr, const struct flas
         } else if (rc > 0) {
             rc = 0;
             break;
-        } else if (bootutil_tlv_iter_is_prot(&it, off)) {
+        } else if (bootutil_tlv_iter_is_prot(&it, off) && type != IMAGE_TLV_DECOMP_SHA &&
+                   type != IMAGE_TLV_DECOMP_SIGNATURE) {
+            /* Include size of protected hash and signature as these will be replacing the
+             * original ones
+             */
+            continue;
+        } else if (type == EXPECTED_HASH_TLV || type == EXPECTED_SIG_TLV) {
+            /* Exclude the original unprotected TLVs for signature and hash, the length of the
+             * signature of the compressed data might not be the same size as the signaute of the
+             * decompressed data, as is the case when using ECDSA-P256
+             */
             continue;
         }
 
