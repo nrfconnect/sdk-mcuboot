@@ -1177,7 +1177,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     if (protected_tlv_size > 0) {
         rc = boot_copy_protected_tlvs(hdr, fap_src, fap_dst, (off_dst + hdr->ih_hdr_size +
                                                               write_pos), protected_tlv_size,
-                                      decomp_buf, sizeof(decomp_buf_size), &decomp_buf_size,
+                                      decomp_buf, DECOMP_BUF_SIZE, &decomp_buf_size,
                                       &tlv_write_size);
 
         if (rc) {
@@ -1191,7 +1191,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     tlv_write_size = 0;
     rc = boot_copy_unprotected_tlvs(hdr, fap_src, fap_dst, (off_dst + hdr->ih_hdr_size +
                                                             write_pos), unprotected_tlv_size,
-                                    decomp_buf, sizeof(decomp_buf_size), &decomp_buf_size,
+                                    decomp_buf, DECOMP_BUF_SIZE, &decomp_buf_size,
                                     &tlv_write_size);
 
     if (rc) {
@@ -1219,7 +1219,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
         if (rc != 0) {
             BOOT_LOG_ERR("Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
-                         (off_dst + hdr->ih_hdr_size + write_pos), sizeof(decomp_buf_size),
+                         (off_dst + hdr->ih_hdr_size + write_pos), decomp_buf_size,
                          fap_dst->fa_id, rc);
             rc = BOOT_EFLASH;
             goto finish;
