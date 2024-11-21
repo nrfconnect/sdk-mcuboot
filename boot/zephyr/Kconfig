@@ -80,7 +80,7 @@ config BOOT_PSA_IMG_HASH_ALG_SHA256_DEPENDENCIES
 
 config BOOT_ED25519_PSA_DEPENDENCIES
 	bool
-	select PSA_WANT_ALG_SHA_256 if BOOT_IMG_HASH_ALG_SHA256
+	select PSA_WANT_ALG_SHA_256
 	select PSA_WANT_ALG_SHA_512
 	select PSA_WANT_ALG_PURE_EDDSA
 	select PSA_WANT_ECC_TWISTED_EDWARDS_255
@@ -228,11 +228,6 @@ config BOOT_SIGNATURE_TYPE_ED25519
 	bool "Edwards curve digital signatures using ed25519"
 	select BOOT_ENCRYPTION_SUPPORT
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
-	select BOOT_IMG_HASH_ALG_SHA512_ALLOW if BOOT_USE_PSA_CRYPTO
-	help
-	  This is ed25519 signature calculated over SHA512 of SHA256 of application
-	  image; that is not completely correct approach as the SHA512 should be
-	  rather directly calculated over an image.
 
 if BOOT_SIGNATURE_TYPE_ED25519
 choice BOOT_ED25519_IMPLEMENTATION
