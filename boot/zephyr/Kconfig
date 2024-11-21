@@ -29,10 +29,7 @@ config BOOT_USE_MBEDTLS
 
 config BOOT_USE_PSA_CRYPTO
 	bool
-	default y if NRF_SECURITY
-	# This is counter intuitive but that is how PSA heap is enabled.
-	select MBEDTLS_ENABLE_HEAP
-	select MBEDTLS_PSA_CRYPTO_C
+	# Hidden option
 	help
 	  Hidden option set if using PSA crypt for cryptography functionality
 
@@ -68,58 +65,6 @@ config NRFXLIB_CRYPTO
 config NRF_CC310_BL
 	bool
 	default n
-
-if BOOT_USE_PSA_CRYPTO
-
-config BOOT_PSA_IMG_HASH_ALG_SHA256_DEPENDENCIES
-	bool
-	default y if BOOT_IMG_HASH_ALG_SHA256
-	select PSA_WANT_ALG_SHA_256
-	help
-	  Dependencies for hashing with SHA256
-
-config BOOT_ED25519_PSA_DEPENDENCIES
-	bool
-	select PSA_WANT_ALG_SHA_256
-	select PSA_WANT_ALG_SHA_512
-	select PSA_WANT_ALG_PURE_EDDSA
-	select PSA_WANT_ECC_TWISTED_EDWARDS_255
-	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
-	help
-	  Dependencies for ed25519 signature
-
-if BOOT_ENCRYPT_IMAGE
-
-config BOOT_X25519_PSA_DEPENDENCIES
-	bool
-	select PSA_WANT_ALG_ECDH
-	select PSA_WANT_ALG_HMAC
-	select PSA_WANT_ALG_HKDF
-	select PSA_WANT_ALG_CTR
-	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
-	select PSA_WANT_KEY_TYPE_DERIVE
-	select PSA_WANT_KEY_TYPE_AES
-	select PSA_WANT_ECC_MONTGOMERY_255
-	help
-	  Dependencies for x25519 shared-random key encryption and AES
-	  encryption. The PSA_WANT_ALG_CTR and PSA_WANT_KEY_TYPE_AES
-	  enable Counter based block cipher and AES key, and algorithm support,
-	  to use with it; the others are used for shared key decryption
-	  and derivation.
-
-endif # BOOT_ENCRYPT_IMAGE
-
-if MBEDTLS_ENABLE_HEAP
-
-config MBEDTLS_HEAP_SIZE
-	default 2048 if BOOT_USE_PSA_CRYPTO
-	help
-	  The PSA internals need to be able to allocate memory for operation
-	  and it uses mbedTLS heap for that.
-
-endif # MBEDTLS_ENABLE_HEAP
-
-endif # BOOT_USE_PSA_CRYPTO
 
 menu "MCUBoot settings"
 
@@ -178,7 +123,6 @@ endchoice # BOOT_IMG_HASH_ALG
 
 choice BOOT_SIGNATURE_TYPE
 	prompt "Signature type"
-	default BOOT_SIGNATURE_TYPE_ED25519 if BOARD_NRF54L15PDK_NRF54L15_CPUAPP
 	default BOOT_SIGNATURE_TYPE_RSA
 
 config BOOT_SIGNATURE_TYPE_NONE
@@ -233,24 +177,13 @@ if BOOT_SIGNATURE_TYPE_ED25519
 choice BOOT_ED25519_IMPLEMENTATION
 	prompt "Ecdsa implementation"
 	default BOOT_ED25519_TINYCRYPT
-
 config BOOT_ED25519_TINYCRYPT
 	bool "Use tinycrypt"
 	select BOOT_USE_TINYCRYPT
-	depends on !NRF_SECURITY
-
 config BOOT_ED25519_MBEDTLS
 	bool "Use mbedTLS"
 	select BOOT_USE_MBEDTLS
 	select MBEDTLS
-	depends on !NRF_SECURITY
-
-config BOOT_ED25519_PSA
-	bool "Use PSA crypto"
-	select BOOT_USE_PSA_CRYPTO
-	select BOOT_ED25519_PSA_DEPENDENCIES
-	select BOOT_X25519_PSA_DEPENDENCIES if BOOT_ENCRYPT_IMAGE
-
 endchoice
 endif
 
@@ -289,12 +222,8 @@ config MCUBOOT_CLEANUP_ARM_CORE
 	  start-up code which can cause a module fault and potentially make the
 	  module irrecoverable.
 
-if MBEDTLS
-
 config MBEDTLS_CFG_FILE
 	default "mcuboot-mbedtls-cfg.h"
-
-endif
 
 config BOOT_HW_KEY
 	bool "Use HW key for image verification"
