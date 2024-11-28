@@ -16,7 +16,7 @@
 #include <cracen_psa_kmu.h>
 #endif
 
-BOOT_LOG_MODULE_DECLARE(ed25519_psa);
+BOOT_LOG_MODULE_REGISTER(ed25519_psa);
 
 #define SHA512_DIGEST_LENGTH    64
 #define EDDSA_KEY_LENGTH        32
