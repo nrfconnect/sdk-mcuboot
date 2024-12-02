@@ -12,6 +12,7 @@
 
 #include <psa/crypto.h>
 #include <psa/crypto_types.h>
+#include <zephyr/sys/util.h>
 #if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 #include <cracen_psa_kmu.h>
 #endif
@@ -39,7 +40,9 @@ static psa_key_id_t kmu_key_ids[3] =  {
     MAKE_PSA_KMU_KEY_ID(PSA_KEY_STARTING_ID + PSA_KEY_INDEX_SIZE),
     MAKE_PSA_KMU_KEY_ID(PSA_KEY_STARTING_ID + (2 * PSA_KEY_INDEX_SIZE))
 };
-#define KMU_KEY_COUNT (sizeof(kmu_key_ids)/sizeof(kmu_key_ids[0]))
+
+BUILD_ASSERT(CONFIG_BOOT_SIGNATURE_KMU_SLOTS <= ARRAY_SIZE(kmu_key_ids),
+	     "Invalid number of KMU slots, up to 3 are supported on nRF54L15");
 #endif
 
 #if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
@@ -114,7 +117,7 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
 
     status = PSA_ERROR_BAD_STATE;
 
-    for (int i = 0; i < KMU_KEY_COUNT; ++i) {
+    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; ++i) {
         psa_key_id_t kid = kmu_key_ids[i];
 
         status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message,
