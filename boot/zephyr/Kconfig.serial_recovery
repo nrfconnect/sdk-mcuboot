@@ -46,9 +46,14 @@ config BOOT_SERIAL_CDC_ACM
 
 endchoice
 
+DT_COMPAT_SIM_FLASH:= zephyr,sim-flash
+DT_SIM_FLASH_PATH := $(dt_nodelabel_path,flash_sim0)
+
 config MCUBOOT_SERIAL_DIRECT_IMAGE_UPLOAD
 	bool "Allow to select image number for DFU"
-	depends on !SINGLE_APPLICATION_SLOT
+	# Allow this option to be selected in cases where support for direct uploading to nRF5340
+	# network core should be supported
+	depends on !SINGLE_APPLICATION_SLOT || (SINGLE_APPLICATION_SLOT && SOC_NRF5340_CPUAPP && BOOT_IMAGE_ACCESS_HOOK_NRF5340 && FLASH_SIMULATOR && $(dt_compat_enabled,$(DT_COMPAT_SIM_FLASH)))
 	help
 	  With the option enabled, the mcuboot serial recovery will
 	  respect the "image" field in mcumgr image update frame
