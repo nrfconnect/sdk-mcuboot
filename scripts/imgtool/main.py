@@ -565,7 +565,8 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
             compressed_img.create(key, public_key_format, enckey,
                dependencies, boot_record, custom_tlvs, compression_tlvs,
                compression, int(encrypt_keylen), clear, baked_signature,
-               pub_key, vector_to_sign)
+               pub_key, vector_to_sign, user_sha=user_sha,
+               is_pure=is_pure)
             img = compressed_img
     img.save(outfile, hex_addr)
     if sig_out is not None:
