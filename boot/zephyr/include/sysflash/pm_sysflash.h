@@ -84,4 +84,12 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 
 #endif /* CONFIG_SINGLE_APPLICATION_SLOT */
 
+#ifndef SOC_FLASH_0_ID
+#define SOC_FLASH_0_ID 0
+#endif
+
+#ifndef SPI_FLASH_0_ID
+#define SPI_FLASH_0_ID 1
+#endif
+
 #endif /* __PM_SYSFLASH_H__ */
