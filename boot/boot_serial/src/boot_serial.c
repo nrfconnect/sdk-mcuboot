@@ -81,17 +81,6 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define ARRAY_SIZE ZCBOR_ARRAY_SIZE
 #endif
 
-#if defined(MCUBOOT_SHA512)
-    #define IMAGE_HASH_SIZE (64)
-    #define IMAGE_SHA_TLV   IMAGE_TLV_SHA512
-#elif defined(MCUBOOT_SIGN_EC384)
-    #define IMAGE_HASH_SIZE (48)
-    #define IMAGE_SHA_TLV   IMAGE_TLV_SHA384
-#else
-    #define IMAGE_HASH_SIZE (32)
-    #define IMAGE_SHA_TLV   IMAGE_TLV_SHA256
-#endif
-
 #ifndef MCUBOOT_SERIAL_MAX_RECEIVE_SIZE
 #define MCUBOOT_SERIAL_MAX_RECEIVE_SIZE 512
 #endif
@@ -102,7 +91,7 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define BOOT_SERIAL_IMAGE_STATE_SIZE_MAX 0
 #endif
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
-#define BOOT_SERIAL_HASH_SIZE_MAX (IMAGE_HASH_SIZE + 4)
+#define BOOT_SERIAL_HASH_SIZE_MAX 36
 #else
 #define BOOT_SERIAL_HASH_SIZE_MAX 0
 #endif
@@ -274,7 +263,7 @@ bs_list(char *buf, int len)
     const struct flash_area *fap;
     uint8_t image_index;
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
-    uint8_t hash[IMAGE_HASH_SIZE];
+    uint8_t hash[32];
 #endif
 
     zcbor_map_start_encode(cbor_state, 1);
@@ -347,7 +336,7 @@ bs_list(char *buf, int len)
             }
 
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
-            /* Retrieve hash of image for identification */
+            /* Retrieve SHA256 hash of image for identification */
             rc = boot_serial_get_hash(&hdr, fap, hash);
 #endif
 
@@ -451,7 +440,7 @@ bs_set(char *buf, int len)
      */
     uint8_t image_index = 0;
     size_t decoded = 0;
-    uint8_t hash[IMAGE_HASH_SIZE];
+    uint8_t hash[32];
     bool confirm;
     struct zcbor_string img_hash;
     bool ok;
@@ -534,7 +523,7 @@ bs_set(char *buf, int len)
                 }
             }
 
-            /* Retrieve hash of image for identification */
+            /* Retrieve SHA256 hash of image for identification */
             rc = boot_serial_get_hash(&hdr, fap, hash);
             flash_area_close(fap);
 
@@ -1478,9 +1467,9 @@ static int boot_serial_get_hash(const struct image_header *hdr,
             break;
         }
 
-        if (type == IMAGE_SHA_TLV) {
+        if (type == IMAGE_TLV_SHA256) {
             /* Get the image's hash value from the manifest section. */
-            if (len != IMAGE_HASH_SIZE) {
+            if (len != 32) {
                 return -1;
             }
 
