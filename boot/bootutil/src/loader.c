@@ -1399,24 +1399,24 @@ done:
 #define SEC_SLOT_TOUCHED 1
 #define SEC_SLOT_ASSIGNED 2
 
-static uint8_t sec_slot_assignment[MCUBOOT_IMAGE_NUMBER] = {0};
+static uint8_t sec_slot_assignmnet[MCUBOOT_IMAGE_NUMBER] = {0};
 
 static inline void sec_slot_touch(struct boot_loader_state *state)
 {
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
     if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
-        if (sec_slot_assignment[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] == SEC_SLOT_VIRGIN) {
-            sec_slot_assignment[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_TOUCHED;
+        if (sec_slot_assignmnet[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] == SEC_SLOT_VIRGIN) {
+            sec_slot_assignmnet[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_TOUCHED;
         }
     } else if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
-        if (sec_slot_assignment[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] == SEC_SLOT_VIRGIN) {
-            sec_slot_assignment[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_TOUCHED;
+        if (sec_slot_assignmnet[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] == SEC_SLOT_VIRGIN) {
+            sec_slot_assignmnet[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_TOUCHED;
         }
     }
 #endif
 
-    if (sec_slot_assignment[BOOT_CURR_IMG(state)] == SEC_SLOT_VIRGIN) {
-        sec_slot_assignment[BOOT_CURR_IMG(state)] = SEC_SLOT_TOUCHED;
+    if (sec_slot_assignmnet[BOOT_CURR_IMG(state)] == SEC_SLOT_VIRGIN) {
+        sec_slot_assignmnet[BOOT_CURR_IMG(state)] = SEC_SLOT_TOUCHED;
     }
 }
 
@@ -1424,13 +1424,13 @@ static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
 {
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
     if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
-        sec_slot_assignment[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_ASSIGNED;
+        sec_slot_assignmnet[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_ASSIGNED;
     } else if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
-        sec_slot_assignment[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_ASSIGNED;
+        sec_slot_assignmnet[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_ASSIGNED;
     }
 #endif
 
-    sec_slot_assignment[BOOT_CURR_IMG(state)] = SEC_SLOT_ASSIGNED;
+    sec_slot_assignmnet[BOOT_CURR_IMG(state)] = SEC_SLOT_ASSIGNED;
 }
 
 /**
@@ -1447,7 +1447,7 @@ static void sec_slot_cleanup_if_unusable(void)
     uint8_t idx;
 
     for (idx = 0; idx < MCUBOOT_IMAGE_NUMBER; idx++) {
-        if (SEC_SLOT_TOUCHED == sec_slot_assignment[idx]) {
+        if (SEC_SLOT_TOUCHED == sec_slot_assignmnet[idx]) {
             const struct flash_area *secondary_fa;
             int rc;
 
