@@ -604,8 +604,6 @@ class Image:
         sha.update(self.payload)
         digest = sha.digest()
         tlv.add(hash_tlv, digest)
-        # for external usage
-        self.image_hash = digest
         # Unless pure, we are signing digest.
         message = digest
 
