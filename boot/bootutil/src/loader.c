@@ -1401,18 +1401,6 @@ done:
 
 static uint8_t sec_slot_assignment[MCUBOOT_IMAGE_NUMBER] = {0};
 
-#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
-static inline void sec_slot_untouch(struct boot_loader_state *state)
-{
-    sec_slot_assignment[CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER] = SEC_SLOT_VIRGIN;
-    sec_slot_assignment[CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER] = SEC_SLOT_VIRGIN;
-}
-#else
-static inline void sec_slot_untouch(struct boot_loader_state *state)
-{
-}
-#endif
-
 static inline void sec_slot_touch(struct boot_loader_state *state)
 {
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
@@ -1479,9 +1467,6 @@ static void sec_slot_cleanup_if_unusable(void)
     }
 }
 #else
-static inline void sec_slot_untouch(struct boot_loader_state *state)
-{
-}
 static inline void sec_slot_touch(struct boot_loader_state *state)
 {
 }
@@ -1572,8 +1557,6 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 /* NSIB upgrade but for the wrong slot, must be erased */
                 BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
                 flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
-                sec_slot_untouch(state);
-                BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
                 return BOOT_SWAP_TYPE_FAIL;
             } else if (reset_addr < primary_fa->fa_off || reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
                 /* The image in the secondary slot is not intended for any */
