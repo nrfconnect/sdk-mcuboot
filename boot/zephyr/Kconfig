@@ -796,10 +796,6 @@ config BOOT_BANNER_STRING
 
 config BOOT_DECOMPRESSION_SUPPORT
 	bool
-	depends on NRF_COMPRESS && NRF_COMPRESS_DECOMPRESSION && (NRF_COMPRESS_LZMA_VERSION_LZMA1 || NRF_COMPRESS_LZMA_VERSION_LZMA2)
-	depends on !SINGLE_APPLICATION_SLOT && !BOOT_ENCRYPT_IMAGE && BOOT_UPGRADE_ONLY
-	depends on UPDATEABLE_IMAGE_NUMBER = 1
-	default y
 	help
 	  Hidden symbol which should be selected if a system provided decompression support.
 
@@ -807,8 +803,6 @@ if BOOT_DECOMPRESSION_SUPPORT
 
 menuconfig BOOT_DECOMPRESSION
 	bool "Decompression"
-	select NRF_COMPRESS_CLEANUP
-	select PM_USE_CONFIG_SRAM_SIZE if SOC_NRF54L15_CPUAPP
 	help
 	  If enabled, will include support for compressed images being loaded to the secondary slot
 	  which then get decompressed into the primary slot. This mode allows the secondary slot to
@@ -817,9 +811,9 @@ menuconfig BOOT_DECOMPRESSION
 if BOOT_DECOMPRESSION
 
 config BOOT_DECOMPRESSION_BUFFER_SIZE
-	int
+	int "Write buffer size"
 	range 16 16384
-	default NRF_COMPRESS_CHUNK_SIZE
+	default 4096
 	help
 	  The size of a secondary buffer used for writing decompressed data to the storage device.
 
