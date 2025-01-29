@@ -20,7 +20,15 @@
 Image signing and management.
 """
 
+from . import version as versmod
+from .boot_record import create_sw_component_data
+import click
+import copy
+from enum import Enum
+import array
+from intelhex import IntelHex
 import hashlib
+import array
 import os.path
 import struct
 from enum import Enum
@@ -40,6 +48,8 @@ from . import version as versmod, keys
 from .boot_record import create_sw_component_data
 from .keys import rsa, ecdsa, x25519
 
+from collections import namedtuple
+
 IMAGE_MAGIC = 0x96f3b83d
 IMAGE_HEADER_SIZE = 32
 BIN_EXT = "bin"
@@ -58,6 +68,9 @@ IMAGE_F = {
         'NON_BOOTABLE':          0x0000010,
         'RAM_LOAD':              0x0000020,
         'ROM_FIXED':             0x0000100,
+        'COMPRESSED_LZMA1':      0x0000200,
+        'COMPRESSED_LZMA2':      0x0000400,
+        'COMPRESSED_ARM_THUMB':  0x0000800,
 }
 
 TLV_VALUES = {
@@ -65,10 +78,12 @@ TLV_VALUES = {
         'PUBKEY': 0x02,
         'SHA256': 0x10,
         'SHA384': 0x11,
+        'SHA512': 0x12,
         'RSA2048': 0x20,
         'ECDSASIG': 0x22,
         'RSA3072': 0x23,
         'ED25519': 0x24,
+        'SIG_PURE': 0x25,
         'ENCRSA2048': 0x30,
         'ENCKW': 0x31,
         'ENCEC256': 0x32,
@@ -76,6 +91,9 @@ TLV_VALUES = {
         'DEPENDENCY': 0x40,
         'SEC_CNT': 0x50,
         'BOOT_RECORD': 0x60,
+        'DECOMP_SIZE': 0x70,
+        'DECOMP_SHA': 0x71,
+        'DECOMP_SIGNATURE': 0x72,
 }
 
 TLV_SIZE = 4
@@ -135,11 +153,74 @@ class TLV():
         return header + bytes(self.buf)
 
 
+SHAAndAlgT = namedtuple('SHAAndAlgT', ['sha', 'alg'])
+
+TLV_SHA_TO_SHA_AND_ALG = {
+    TLV_VALUES['SHA256'] : SHAAndAlgT('256', hashlib.sha256),
+    TLV_VALUES['SHA384'] : SHAAndAlgT('384', hashlib.sha384),
+    TLV_VALUES['SHA512'] : SHAAndAlgT('512', hashlib.sha512),
+}
+
+
+USER_SHA_TO_ALG_AND_TLV = {
+    'auto'   : (hashlib.sha256, 'SHA256'),
+    '256'    : (hashlib.sha256, 'SHA256'),
+    '384'    : (hashlib.sha384, 'SHA384'),
+    '512'    : (hashlib.sha512, 'SHA512')
+}
+
+
+def is_sha_tlv(tlv):
+    return tlv in TLV_SHA_TO_SHA_AND_ALG.keys()
+
+
+def tlv_sha_to_sha(tlv):
+    return TLV_SHA_TO_SHA_AND_ALG[tlv].sha
+
+
+# Auto selecting hash algorithm for type(key)
+ALLOWED_KEY_SHA = {
+    keys.ECDSA384P1         : ['384'],
+    keys.ECDSA384P1Public   : ['384'],
+    keys.ECDSA256P1         : ['256'],
+    keys.RSA                : ['256'],
+    keys.RSAPublic          : ['256'],
+    # This two are set to 256 for compatibility, the right would be 512
+    keys.Ed25519            : ['256', '512'],
+    keys.X25519             : ['256', '512']
+}
+
+def key_and_user_sha_to_alg_and_tlv(key, user_sha):
+    """Matches key and user requested sha to sha alogrithm and TLV name.
+
+       The returned tuple will contain hash functions and TVL name.
+       The function is designed to succeed or completely fail execution,
+       as providing incorrect pair here basically prevents doing
+       any more work.
+    """
+    if key is None:
+        # If key is none, we allow whatever user has selected for sha
+        return USER_SHA_TO_ALG_AND_TLV[user_sha]
+
+    # If key is not None, then we have to filter hash to only allowed
+    allowed = None
+    try:
+        allowed = ALLOWED_KEY_SHA[type(key)]
+    except KeyError:
+        raise click.UsageError("Colud not find allowed hash algorithms for {}"
+                               .format(type(key)))
+    if user_sha == 'auto':
+        return USER_SHA_TO_ALG_AND_TLV[allowed[0]]
+
+    if user_sha in allowed:
+        return USER_SHA_TO_ALG_AND_TLV[user_sha]
+
+    raise click.UsageError("Key {} can not be used with --sha {}; allowed sha are one of {}"
+                           .format(key.sig_type(), user_sha, allowed))
+
+
 def get_digest(tlv_type, hash_region):
-    if tlv_type == TLV_VALUES["SHA384"]:
-        sha = hashlib.sha384()
-    elif tlv_type == TLV_VALUES["SHA256"]:
-        sha = hashlib.sha256()
+    sha = TLV_SHA_TO_SHA_AND_ALG[tlv_type].alg()
 
     sha.update(hash_region)
     return sha.digest()
@@ -147,9 +228,16 @@ def get_digest(tlv_type, hash_region):
 
 def tlv_matches_key_type(tlv_type, key):
     """Check if provided key matches to TLV record in the image"""
-    return (key is None or
-            type(key) == keys.ECDSA384P1 and tlv_type == TLV_VALUES["SHA384"] or
-            type(key) != keys.ECDSA384P1 and tlv_type == TLV_VALUES["SHA256"])
+    try:
+        # We do not need the result here, and the key_and_user_sha_to_alg_and_tlv
+        # will either succeed finding match or rise exception, so on success we
+        # return True, on exception we return False.
+        _, _ = key_and_user_sha_to_alg_and_tlv(key, tlv_sha_to_sha(tlv_type))
+        return True
+    except:
+        pass
+
+    return False
 
 
 class Image:
@@ -165,6 +253,9 @@ class Image:
         if load_addr and rom_fixed:
             raise click.UsageError("Can not set rom_fixed and load_addr at the same time")
 
+        self.image_hash = None
+        self.image_size = None
+        self.signature = None
         self.version = version or versmod.decode_version("0")
         self.header_size = header_size
         self.pad_header = pad_header
@@ -180,6 +271,7 @@ class Image:
         self.rom_fixed = rom_fixed
         self.erased_val = 0xff if erased_val is None else int(erased_val, 0)
         self.payload = []
+        self.infile_data = []
         self.enckey = None
         self.save_enctlv = save_enctlv
         self.enctlv_len = 0
@@ -234,13 +326,31 @@ class Image:
         try:
             if ext == INTEL_HEX_EXT:
                 ih = IntelHex(path)
-                self.payload = ih.tobinarray()
+                self.infile_data = ih.tobinarray()
+                self.payload = copy.copy(self.infile_data)
                 self.base_addr = ih.minaddr()
             else:
                 with open(path, 'rb') as f:
-                    self.payload = f.read()
+                    self.infile_data = f.read()
+                    self.payload = copy.copy(self.infile_data)
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
+        self.image_size = len(self.payload)
+
+        # Add the image header if needed.
+        if self.pad_header and self.header_size > 0:
+            if self.base_addr:
+                # Adjust base_addr for new header
+                self.base_addr -= self.header_size
+            self.payload = bytes([self.erased_val] * self.header_size) + \
+                self.payload
+
+        self.check_header()
+
+    def load_compressed(self, data, compression_header):
+        """Load an image from buffer"""
+        self.payload = compression_header + data
+        self.image_size = len(self.payload)
 
         # Add the image header if needed.
         if self.pad_header and self.header_size > 0:
@@ -335,18 +445,15 @@ class Image:
         return cipherkey, ciphermac, pubk
 
     def create(self, key, public_key_format, enckey, dependencies=None,
-               sw_type=None, custom_tlvs=None, encrypt_keylen=128, clear=False,
-               fixed_sig=None, pub_key=None, vector_to_sign=None):
+               sw_type=None, custom_tlvs=None, compression_tlvs=None,
+               compression_type=None, encrypt_keylen=128, clear=False,
+               fixed_sig=None, pub_key=None, vector_to_sign=None, user_sha='auto'):
         self.enckey = enckey
 
-        # Check what hashing algorithm should be used
-        if (key and isinstance(key, ecdsa.ECDSA384P1)
-                or pub_key and isinstance(pub_key, ecdsa.ECDSA384P1Public)):
-            hash_algorithm = hashlib.sha384
-            hash_tlv = "SHA384"
-        else:
-            hash_algorithm = hashlib.sha256
-            hash_tlv = "SHA256"
+        # key decides on sha, then pub_key; of both are none default is used
+        check_key = key if key is not None else pub_key
+        hash_algorithm, hash_tlv = key_and_user_sha_to_alg_and_tlv(check_key, user_sha)
+
         # Calculate the hash of the public key
         if key is not None:
             pub = key.get_public_bytes()
@@ -402,6 +509,9 @@ class Image:
             dependencies_num = len(dependencies[DEP_IMAGES_KEY])
             protected_tlv_size += (dependencies_num * 16)
 
+        if compression_tlvs is not None:
+            for value in compression_tlvs.values():
+                protected_tlv_size += TLV_SIZE + len(value)
         if custom_tlvs is not None:
             for value in custom_tlvs.values():
                 protected_tlv_size += TLV_SIZE + len(value)
@@ -423,11 +533,17 @@ class Image:
                 else:
                     self.payload.extend(pad)
 
+        compression_flags = 0x0
+        if compression_tlvs is not None:
+            if compression_type in ["lzma2", "lzma2armthumb"]:
+                compression_flags = IMAGE_F['COMPRESSED_LZMA2']
+                if compression_type == "lzma2armthumb":
+                    compression_flags |= IMAGE_F['COMPRESSED_ARM_THUMB']
         # This adds the header to the payload as well
         if encrypt_keylen == 256:
-            self.add_header(enckey, protected_tlv_size, 256)
+            self.add_header(enckey, protected_tlv_size, compression_flags, 256)
         else:
-            self.add_header(enckey, protected_tlv_size)
+            self.add_header(enckey, protected_tlv_size, compression_flags)
 
         prot_tlv = TLV(self.endian, TLV_PROT_INFO_MAGIC)
 
@@ -457,6 +573,9 @@ class Image:
                     )
                     prot_tlv.add('DEPENDENCY', payload)
 
+            if compression_tlvs is not None:
+                for tag, value in compression_tlvs.items():
+                    prot_tlv.add(tag, value)
             if custom_tlvs is not None:
                 for tag, value in custom_tlvs.items():
                     prot_tlv.add(tag, value)
@@ -466,12 +585,16 @@ class Image:
 
         tlv = TLV(self.endian)
 
-        # Note that ecdsa wants to do the hashing itself, which means
-        # we get to hash it twice.
+        # These signature is done over sha of image. In case of
+        # EC signatures so called Pure algorithm, designated to be run
+        # over entire message is used with sha of image as message,
+        # so, for example, in case of ED25519 we have here SHAxxx-ED25519-SHA512.
         sha = hash_algorithm()
         sha.update(self.payload)
         digest = sha.digest()
+        message = digest;
         tlv.add(hash_tlv, digest)
+        self.image_hash = digest
 
         if vector_to_sign == 'payload':
             # Stop amending data to the image
@@ -499,7 +622,7 @@ class Image:
                     sig = key.sign(bytes(self.payload))
                 else:
                     print(os.path.basename(__file__) + ": sign the digest")
-                    sig = key.sign_digest(digest)
+                    sig = key.sign_digest(message)
                 tlv.add(key.sig_tlv(), sig)
                 self.signature = sig
             elif fixed_sig is not None and key is None:
@@ -551,10 +674,16 @@ class Image:
 
         self.check_trailer()
 
+    def get_struct_endian(self):
+        return STRUCT_ENDIAN_DICT[self.endian]
+
     def get_signature(self):
         return self.signature
 
-    def add_header(self, enckey, protected_tlv_size, aes_length=128):
+    def get_infile_data(self):
+        return self.infile_data
+
+    def add_header(self, enckey, protected_tlv_size, compression_flags, aes_length=128):
         """Install the image header."""
 
         flags = 0
@@ -592,7 +721,7 @@ class Image:
                              protected_tlv_size,  # TLV Info header +
                                                   # Protected TLVs
                              len(self.payload) - self.header_size,  # ImageSz
-                             flags,
+                             flags | compression_flags,
                              self.version.major,
                              self.version.minor or 0,
                              self.version.revision or 0,
@@ -678,7 +807,7 @@ class Image:
         while tlv_off < tlv_end:
             tlv = b[tlv_off:tlv_off + TLV_SIZE]
             tlv_type, _, tlv_len = struct.unpack('BBH', tlv)
-            if tlv_type == TLV_VALUES["SHA256"] or tlv_type == TLV_VALUES["SHA384"]:
+            if is_sha_tlv(tlv_type):
                 if not tlv_matches_key_type(tlv_type, key):
                     return VerifyResult.KEY_MISMATCH, None, None
                 off = tlv_off + TLV_SIZE

@@ -251,8 +251,10 @@ The algorithm works as follows:
 
 This algorithm is designed so that the higher sector of the primary slot is
 used only for allowing sectors to move up. Therefore the most
-memory-size-effective slot layout is when the primary slot is exactly one sector
-larger than the secondary slot, although same-sized slots are allowed as well.
+memory-size-effective slot layout is when the primary slot is larger than
+the secondary slot by exactly one sector plus the size of the swap status area,
+rounded up to the total size of the sectors it occupies,
+although same-sized slots are allowed as well.
 The algorithm is limited to support sectors of the same
 sector layout. All slot's sectors should be of the same size.
 
@@ -656,7 +658,7 @@ types described above via a set of tables.  These tables are reproduced below.
     State III
                      | primary slot | secondary slot |
     -----------------+--------------+----------------|
-               magic | Good         | Unset          |
+               magic | Good         | Any            |
             image-ok | 0xff         | Any            |
            copy-done | 0x01         | Any            |
     -----------------+--------------+----------------'
@@ -974,9 +976,8 @@ The swap status region allows the bootloader to recover in case it restarts in
 the middle of an image swap operation.  The swap status region consists of a
 series of single-byte records.  These records are written independently, and
 therefore must be padded according to the minimum write size imposed by the
-flash hardware.  In the below figure, a min-write-size of 1 is assumed for
-simplicity.  The structure of the swap status region is illustrated below.  In
-this figure, a min-write-size of 1 is assumed for simplicity.
+flash hardware.  The structure of the swap status region is illustrated below.
+In this figure, a min-write-size of 1 is assumed for simplicity.
 
 ```
      0                   1                   2                   3

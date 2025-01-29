@@ -81,6 +81,17 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define ARRAY_SIZE ZCBOR_ARRAY_SIZE
 #endif
 
+#if defined(MCUBOOT_SHA512)
+    #define IMAGE_HASH_SIZE (64)
+    #define IMAGE_SHA_TLV   IMAGE_TLV_SHA512
+#elif defined(MCUBOOT_SIGN_EC384)
+    #define IMAGE_HASH_SIZE (48)
+    #define IMAGE_SHA_TLV   IMAGE_TLV_SHA384
+#else
+    #define IMAGE_HASH_SIZE (32)
+    #define IMAGE_SHA_TLV   IMAGE_TLV_SHA256
+#endif
+
 #ifndef MCUBOOT_SERIAL_MAX_RECEIVE_SIZE
 #define MCUBOOT_SERIAL_MAX_RECEIVE_SIZE 512
 #endif
@@ -91,7 +102,7 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define BOOT_SERIAL_IMAGE_STATE_SIZE_MAX 0
 #endif
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
-#define BOOT_SERIAL_HASH_SIZE_MAX 36
+#define BOOT_SERIAL_HASH_SIZE_MAX (IMAGE_HASH_SIZE + 4)
 #else
 #define BOOT_SERIAL_HASH_SIZE_MAX 0
 #endif
@@ -263,7 +274,7 @@ bs_list(char *buf, int len)
     const struct flash_area *fap;
     uint8_t image_index;
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
-    uint8_t hash[32];
+    uint8_t hash[IMAGE_HASH_SIZE];
 #endif
 
     zcbor_map_start_encode(cbor_state, 1);
@@ -275,7 +286,7 @@ bs_list(char *buf, int len)
         int swap_status = boot_swap_type_multi(image_index);
 #endif
 
-        for (slot = 0; slot < MCUBOOT_IMAGE_NUMBER; slot++) {
+        for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
             FIH_DECLARE(fih_rc, FIH_FAILURE);
             uint8_t tmpbuf[64];
 
@@ -336,7 +347,7 @@ bs_list(char *buf, int len)
             }
 
 #ifdef MCUBOOT_SERIAL_IMG_GRP_HASH
-            /* Retrieve SHA256 hash of image for identification */
+            /* Retrieve hash of image for identification */
             rc = boot_serial_get_hash(&hdr, fap, hash);
 #endif
 
@@ -440,7 +451,7 @@ bs_set(char *buf, int len)
      */
     uint8_t image_index = 0;
     size_t decoded = 0;
-    uint8_t hash[32];
+    uint8_t hash[IMAGE_HASH_SIZE];
     bool confirm;
     struct zcbor_string img_hash;
     bool ok;
@@ -523,7 +534,7 @@ bs_set(char *buf, int len)
                 }
             }
 
-            /* Retrieve SHA256 hash of image for identification */
+            /* Retrieve hash of image for identification */
             rc = boot_serial_get_hash(&hdr, fap, hash);
             flash_area_close(fap);
 
@@ -610,13 +621,13 @@ bs_slot_info(uint8_t op, char *buf, int len)
     zcbor_list_start_encode(cbor_state, MCUBOOT_IMAGE_NUMBER);
 
     IMAGES_ITER(image_index) {
-        for (slot = 0; slot < MCUBOOT_IMAGE_NUMBER; slot++) {
+        for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
             if (slot == 0) {
                     ok = zcbor_map_start_encode(cbor_state, CBOR_ENTRIES_SLOT_INFO_IMAGE_MAP) &&
                          zcbor_tstr_put_lit(cbor_state, "image") &&
                          zcbor_uint32_put(cbor_state, (uint32_t)image_index) &&
                          zcbor_tstr_put_lit(cbor_state, "slots") &&
-                         zcbor_list_start_encode(cbor_state, MCUBOOT_IMAGE_NUMBER);
+                         zcbor_list_start_encode(cbor_state, BOOT_NUM_SLOTS);
 
                     if (!ok) {
                             goto finish;
@@ -680,8 +691,8 @@ bs_slot_info(uint8_t op, char *buf, int len)
                             goto finish;
                     }
 
-                    if (slot == (MCUBOOT_IMAGE_NUMBER - 1)) {
-                        ok = zcbor_list_end_encode(cbor_state, MCUBOOT_IMAGE_NUMBER);
+                    if (slot == (BOOT_NUM_SLOTS - 1)) {
+                        ok = zcbor_list_end_encode(cbor_state, BOOT_NUM_SLOTS);
 
                         if (!ok) {
                             goto finish;
@@ -780,7 +791,7 @@ bs_upload(char *buf, int len)
     const uint8_t *img_chunk = NULL;    /* Pointer to buffer with received image chunk */
     size_t img_chunk_len = 0;           /* Length of received image chunk */
     size_t img_chunk_off = SIZE_MAX;    /* Offset of image chunk within image  */
-    uint8_t rem_bytes;                  /* Reminder bytes after aligning chunk write to
+    size_t rem_bytes;                   /* Reminder bytes after aligning chunk write to
                                          * to flash alignment */
     uint32_t img_num_tmp = UINT_MAX;    /* Temp variable for image number */
     static uint32_t img_num = 0;
@@ -947,7 +958,7 @@ bs_upload(char *buf, int len)
     if (flash_area_align(fap) > 1 &&
         (((size_t)img_chunk) & (flash_area_align(fap) - 1)) != 0) {
         /* Buffer address incompatible with write address, use buffer to write */
-        uint8_t write_size = MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE;
+        size_t write_size = MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE;
         uint8_t wbs_aligned[MCUBOOT_SERIAL_UNALIGNED_BUFFER_SIZE];
 
         while (img_chunk_len >= flash_area_align(fap)) {
@@ -1467,9 +1478,9 @@ static int boot_serial_get_hash(const struct image_header *hdr,
             break;
         }
 
-        if (type == IMAGE_TLV_SHA256) {
+        if (type == IMAGE_SHA_TLV) {
             /* Get the image's hash value from the manifest section. */
-            if (len != 32) {
+            if (len != IMAGE_HASH_SIZE) {
                 return -1;
             }
 

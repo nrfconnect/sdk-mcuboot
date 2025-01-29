@@ -32,6 +32,10 @@
 #include "bootutil/image.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#if defined(MCUBOOT_DATA_SHARING_BOOTINFO)
+static bool saved_bootinfo = false;
+#endif
+
 #if !defined(MCUBOOT_CUSTOM_DATA_SHARING_FUNCTION)
 /**
  * @var shared_memory_init_done
@@ -233,7 +237,9 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
                           const uint8_t slot, const struct image_max_size *max_app_sizes)
 {
     int rc;
+#if !defined(MCUBOOT_SINGLE_APPLICATION_SLOT)
     uint8_t image = 0;
+#endif
 
 #if defined(MCUBOOT_SINGLE_APPLICATION_SLOT)
     uint8_t mode = MCUBOOT_MODE_SINGLE_SLOT;
@@ -253,6 +259,8 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
     uint8_t mode = MCUBOOT_MODE_RAM_LOAD;
 #elif defined(MCUBOOT_FIRMWARE_LOADER)
     uint8_t mode = MCUBOOT_MODE_FIRMWARE_LOADER;
+#elif defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
+    uint8_t mode = MCUBOOT_MODE_SINGLE_SLOT_RAM_LOAD;
 #else
 #error "Unknown mcuboot operating mode"
 #endif
@@ -294,6 +302,11 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
     };
 #endif
 
+    if (saved_bootinfo) {
+        /* Boot info has already been saved, nothing to do */
+        return 0;
+    }
+
     /* Write out all fields */
     rc = boot_add_data_to_shared_area(TLV_MAJOR_BLINFO, BLINFO_MODE,
                                       sizeof(mode), &mode);
@@ -311,11 +324,13 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
                                           sizeof(recovery), &recovery);
     }
 
+#if !defined(MCUBOOT_SINGLE_APPLICATION_SLOT)
     if (!rc) {
         rc = boot_add_data_to_shared_area(TLV_MAJOR_BLINFO,
                                           BLINFO_RUNNING_SLOT,
                                           sizeof(slot), (void *)&slot);
     }
+#endif
 
 #if defined(MCUBOOT_VERSION_AVAILABLE)
     if (!rc) {
@@ -326,6 +341,7 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
     }
 #endif
 
+#if !defined(MCUBOOT_SINGLE_APPLICATION_SLOT)
     while (image < BOOT_IMAGE_NUMBER && !rc) {
         if (max_app_sizes[image].calculated == true) {
             rc = boot_add_data_to_shared_area(TLV_MAJOR_BLINFO,
@@ -336,6 +352,11 @@ int boot_save_shared_data(const struct image_header *hdr, const struct flash_are
         }
 
         ++image;
+    }
+#endif
+
+    if (!rc) {
+        saved_bootinfo = true;
     }
 
     return rc;
