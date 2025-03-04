@@ -88,8 +88,7 @@ config BOOT_PSA_IMG_HASH_ALG_SHA512_DEPENDENCIES
 config BOOT_ED25519_PSA_DEPENDENCIES
 	bool
 	select PSA_WANT_ALG_PURE_EDDSA
-	# Seems that upstream mbedTLS does not have TE
-	#select PSA_WANT_ECC_TWISTED_EDWARDS_255
+	select PSA_WANT_ECC_TWISTED_EDWARDS_255
 	select PSA_WANT_ECC_MONTGOMERY_255
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
 	help
@@ -119,7 +118,7 @@ endif # BOOT_ENCRYPT_IMAGE
 config BOOT_ECDSA_PSA_DEPENDENCIES
 	bool
 	select PSA_WANT_ALG_ECDSA
-	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT if !PSA_CORE_LITE
 	select PSA_WANT_ECC_SECP_R1_256
 	help
 	  Dependencies for ECDSA signature
@@ -248,7 +247,8 @@ choice BOOT_SIGNATURE_TYPE
 
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
-	select BOOT_USE_TINYCRYPT
+	select BOOT_USE_TINYCRYPT if !SOC_SERIES_NRF54LX
+	select BOOT_USE_PSA_CRYPTO if SOC_SERIES_NRF54LX
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 
 config BOOT_SIGNATURE_TYPE_RSA
@@ -280,6 +280,7 @@ config BOOT_SIGNATURE_TYPE_ECDSA_P256
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice BOOT_ECDSA_IMPLEMENTATION
 	prompt "Ecdsa implementation"
+	default BOOT_ECDSA_PSA if NRF_SECURITY
 	default BOOT_ECDSA_TINYCRYPT
 
 config BOOT_ECDSA_TINYCRYPT
@@ -296,11 +297,12 @@ config BOOT_ECDSA_CC310
 
 config BOOT_ECDSA_PSA
 	bool "Use psa cryptoo"
+	depends on NRF_SECURITY
 	select BOOT_USE_PSA_CRYPTO
 	select PSA_CRYPTO_CLIENT
 	select PSA_CRYPTO_C
-	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
-	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
+	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !PSA_CORE_LITE
+	select BOOT_IMG_HASH_ALG_SHA512_ALLOW if !PSA_CORE_LITE
 	select BOOT_ECDSA_PSA_DEPENDENCIES
 
 endchoice # Ecdsa implementation
@@ -332,6 +334,7 @@ config BOOT_SIGNATURE_TYPE_PURE
 
 choice BOOT_ED25519_IMPLEMENTATION
 	prompt "Ecdsa implementation"
+	default BOOT_ED25519_PSA if NRF_SECURITY
 	default BOOT_ED25519_TINYCRYPT
 
 config BOOT_ED25519_TINYCRYPT
@@ -352,7 +355,7 @@ config BOOT_ED25519_MBEDTLS
 
 config BOOT_ED25519_PSA
 	bool "Use PSA crypto"
-	select MBEDTLS
+	depends on NRF_SECURITY
 	select BOOT_USE_PSA_CRYPTO
 	select PSA_CRYPTO_CLIENT
 	select PSA_CRYPTO_C
@@ -429,6 +432,7 @@ config MBEDTLS_CFG_FILE
 	# is used, but the fact is that Mbed TLS' ASN1 parse module is used
 	# also when TinyCrypt is used as crypto backend.
 	default "mcuboot-mbedtls-cfg.h" if BOOT_USE_TINYCRYPT
+	default "config-tls-generic.h" if NRF_SECURITY && (MBEDTLS_BUILTIN || BOOT_USE_PSA_CRYPTO)
 	default "mcuboot-mbedtls-cfg.h" if BOOT_USE_MBEDTLS && !MBEDTLS_BUILTIN
 
 config BOOT_HW_KEY
