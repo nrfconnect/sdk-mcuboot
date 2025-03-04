@@ -245,7 +245,6 @@ bootutil_img_hash(struct enc_key_data *enc_state, int image_index,
 #   define KEY_BUF_SIZE         (SIG_BUF_SIZE + 24)
 #endif /* !MCUBOOT_HW_KEY */
 
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 #if !defined(MCUBOOT_HW_KEY)
 static int
 bootutil_find_key(uint8_t *keyhash, uint8_t keyhash_len)
@@ -311,7 +310,6 @@ bootutil_find_key(uint8_t image_index, uint8_t *key, uint16_t key_len)
 }
 #endif /* !MCUBOOT_HW_KEY */
 #endif /* !MCUBOOT_BUILTIN_KEY */
-#endif /* !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) */
 #endif /* EXPECTED_SIG_TLV */
 
 /**
@@ -628,7 +626,6 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
             break;
         }
 #endif /* defined(EXPECTED_HASH_TLV) && !defined(MCUBOOT_SIGN_PURE) */
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 #ifdef EXPECTED_KEY_TLV
         case EXPECTED_KEY_TLV:
         {
@@ -659,17 +656,14 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
             break;
         }
 #endif /* EXPECTED_KEY_TLV */
-#endif /* !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) */
 #ifdef EXPECTED_SIG_TLV
         case EXPECTED_SIG_TLV:
         {
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
             /* Ignore this signature if it is out of bounds. */
             if (key_id < 0 || key_id >= bootutil_key_cnt) {
                 key_id = -1;
                 continue;
             }
-#endif /* !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) */
             if (!EXPECTED_SIG_LEN(len) || len > sizeof(buf)) {
                 rc = -1;
                 goto out;
