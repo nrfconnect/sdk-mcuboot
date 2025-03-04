@@ -1612,7 +1612,7 @@ boot_copy_region(struct boot_loader_state *state,
 #else
     (void)state;
 #endif
-#if defined(MCUBOOT_DECOMPRESS_IMAGES) && !defined(MCUBOOT_ENC_IMAGES)
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
     struct image_header *hdr;
 #endif
 

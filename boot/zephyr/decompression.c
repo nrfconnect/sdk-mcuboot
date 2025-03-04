@@ -58,17 +58,11 @@ bool boot_is_compressed_header_valid(const struct image_header *hdr, const struc
     uint32_t protected_tlvs_size;
     uint32_t decompressed_size;
 
-    primary_fa_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), BOOT_PRIMARY_SLOT);
-
-    if (primary_fa_id == fap->fa_id) {
-        BOOT_LOG_ERR("Primary slots cannot be compressed, image: %d", BOOT_CURR_IMG(state));
-        return false;
-    }
-
     if (BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT) == NULL) {
         opened_flash_area = true;
     }
 
+    primary_fa_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), BOOT_PRIMARY_SLOT);
     rc = flash_area_open(primary_fa_id, &BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT));
     assert(rc == 0);
 
@@ -117,55 +111,6 @@ static bool is_compression_object_valid(struct nrf_compress_implementation *comp
 	return true;
 }
 
-#ifdef MCUBOOT_ENC_IMAGES
-int bootutil_get_img_decrypted_comp_size(const struct image_header *hdr,
-                                         const struct flash_area *fap, uint32_t *img_comp_size)
-{
-    if (hdr == NULL || fap == NULL || img_comp_size == NULL) {
-        return BOOT_EBADARGS;
-    } else if (hdr->ih_protect_tlv_size == 0) {
-        return BOOT_EBADIMAGE;
-    }
-
-    if (!IS_ENCRYPTED(hdr)) {
-        /* Update is not encrypted so use size from header */
-        *img_comp_size = hdr->ih_img_size;
-    } else {
-        struct image_tlv_iter it;
-        uint32_t off;
-        uint16_t len;
-        int32_t rc;
-
-        rc = bootutil_tlv_iter_begin(&it, hdr, fap, IMAGE_TLV_COMP_DEC_SIZE, true);
-
-        if (rc) {
-            return rc;
-        }
-
-        rc = bootutil_tlv_iter_next(&it, &off, &len, NULL);
-
-        if (rc != 0) {
-            return -1;
-        }
-
-        if (len != sizeof(*img_comp_size)) {
-            BOOT_LOG_ERR("Invalid decompressed image size TLV: %d", len);
-            return BOOT_EBADIMAGE;
-        }
-
-        rc = LOAD_IMAGE_DATA(hdr, fap, off, img_comp_size, len);
-
-        if (rc) {
-            BOOT_LOG_ERR("Image data load failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
-                         off, len, fap->fa_id, rc);
-            return BOOT_EFLASH;
-        }
-    }
-
-    return 0;
-}
-#endif
-
 int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index,
                                  struct image_header *hdr, const struct flash_area *fap,
                                  uint8_t *tmp_buf, uint32_t tmp_buf_sz, uint8_t *hash_result,
@@ -183,27 +128,7 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
     bootutil_sha_context sha_ctx;
     uint8_t flash_erased_value;
 
-#ifdef MCUBOOT_ENC_IMAGES
-    uint32_t comp_size = 0;
-
-    rc = bootutil_get_img_decrypted_comp_size(hdr, fap, &comp_size);
-
-    if (rc) {
-        BOOT_LOG_ERR("Invalid/missing image decrypted compressed size value");
-        rc = BOOT_EBADIMAGE;
-        goto finish_end;
-    }
-#endif
-
     bootutil_sha_init(&sha_ctx);
-
-#ifdef MCUBOOT_ENC_IMAGES
-    /* Encrypted images only exist in the secondary slot */
-    if (MUST_DECRYPT(fap, image_index, hdr) &&
-            !boot_enc_valid(enc_state, 1)) {
-        return -1;
-    }
-#endif
 
     /* Setup decompression system */
 #if CONFIG_NRF_COMPRESS_LZMA_VERSION_LZMA1
@@ -287,13 +212,8 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
     /* Read in compressed data, decompress and add to hash calculation */
     read_pos = 0;
 
-#ifdef MCUBOOT_ENC_IMAGES
-    while (read_pos < comp_size) {
-        uint32_t copy_size = comp_size - read_pos;
-#else
     while (read_pos < hdr->ih_img_size) {
         uint32_t copy_size = hdr->ih_img_size - read_pos;
-#endif
         uint32_t tmp_off = 0;
         uint8_t offset_zero_check = 0;
 
@@ -309,14 +229,6 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
             rc = BOOT_EFLASH;
             goto finish;
         }
-
-#ifdef MCUBOOT_ENC_IMAGES
-                if (MUST_DECRYPT(fap, image_index, hdr)) {
-                    boot_enc_decrypt(enc_state, 1, read_pos,
-                                     copy_size, (read_pos & 0xf),
-                                     tmp_buf);
-                }
-#endif
 
         /* Decompress data in chunks, writing it back with a larger write offset of the primary
          * slot than read size of the secondary slot
@@ -334,11 +246,7 @@ int bootutil_img_hash_decompress(struct enc_key_data *enc_state, int image_index
                 chunk_size = (copy_size - tmp_off);
             }
 
-#ifdef MCUBOOT_ENC_IMAGES
-            if ((read_pos + tmp_off + chunk_size) >= comp_size) {
-#else
             if ((read_pos + tmp_off + chunk_size) >= hdr->ih_img_size) {
-#endif
                 last_packet = true;
             }
 
@@ -458,9 +366,6 @@ finish:
 finish_without_clean:
     bootutil_sha_drop(&sha_ctx);
 
-#ifdef MCUBOOT_ENC_IMAGES
-finish_end:
-#endif
     return rc;
 }
 
@@ -532,7 +437,7 @@ static int boot_copy_protected_tlvs(const struct image_header *hdr,
         }
 
         if (type == IMAGE_TLV_DECOMP_SIZE || type == IMAGE_TLV_DECOMP_SHA ||
-            type == IMAGE_TLV_DECOMP_SIGNATURE || type == IMAGE_TLV_COMP_DEC_SIZE) {
+            type == IMAGE_TLV_DECOMP_SIGNATURE) {
             /* Skip these TLVs as they are not needed */
             continue;
         } else {
@@ -641,7 +546,7 @@ static int boot_sha_protected_tlvs(const struct image_header *hdr,
         }
 
         if (type == IMAGE_TLV_DECOMP_SIZE || type == IMAGE_TLV_DECOMP_SHA ||
-            type == IMAGE_TLV_DECOMP_SIGNATURE || type == IMAGE_TLV_COMP_DEC_SIZE) {
+            type == IMAGE_TLV_DECOMP_SIGNATURE) {
             /* Skip these TLVs as they are not needed */
             continue;
         }
@@ -706,7 +611,7 @@ int boot_size_protected_tlvs(const struct image_header *hdr, const struct flash_
         }
 
         if (type == IMAGE_TLV_DECOMP_SIZE || type == IMAGE_TLV_DECOMP_SHA ||
-            type == IMAGE_TLV_DECOMP_SIGNATURE || type == IMAGE_TLV_COMP_DEC_SIZE) {
+            type == IMAGE_TLV_DECOMP_SIGNATURE) {
             /* Exclude these TLVs as they will be copied to the unprotected area */
             tlv_size -= len + sizeof(struct image_tlv);
         }
@@ -758,7 +663,7 @@ int boot_size_unprotected_tlvs(const struct image_header *hdr, const struct flas
              * original ones
              */
             continue;
-        } else if (type == EXPECTED_HASH_TLV || type == EXPECTED_SIG_TLV || type == IMAGE_TLV_COMP_DEC_SIZE) {
+        } else if (type == EXPECTED_HASH_TLV || type == EXPECTED_SIG_TLV) {
             /* Exclude the original unprotected TLVs for signature and hash, the length of the
              * signature of the compressed data might not be the same size as the signaute of the
              * decompressed data, as is the case when using ECDSA-P256
@@ -980,21 +885,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     bool excess_data_buffer_full = false;
 #endif
 
-#ifdef MCUBOOT_ENC_IMAGES
-    uint32_t comp_size = 0;
-#endif
-
     hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
-
-#ifdef MCUBOOT_ENC_IMAGES
-    rc = bootutil_get_img_decrypted_comp_size(hdr, fap_src, &comp_size);
-
-    if (rc) {
-        BOOT_LOG_ERR("Invalid/missing image decrypted compressed size value");
-        rc = BOOT_EBADIMAGE;
-        goto finish;
-    }
-#endif
 
     /* Setup decompression system */
 #if CONFIG_NRF_COMPRESS_LZMA_VERSION_LZMA1
@@ -1075,13 +966,8 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     }
 
     /* Read in, decompress and write out data */
-#ifdef MCUBOOT_ENC_IMAGES
-    while (pos < comp_size) {
-        uint32_t copy_size = comp_size - pos;
-#else
     while (pos < hdr->ih_img_size) {
         uint32_t copy_size = hdr->ih_img_size - pos;
-#endif
         uint32_t tmp_off = 0;
 
         if (copy_size > buf_size) {
@@ -1096,12 +982,6 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
             rc = BOOT_EFLASH;
             goto finish;
         }
-
-#ifdef MCUBOOT_ENC_IMAGES
-        if (IS_ENCRYPTED(hdr)) {
-            boot_enc_decrypt(BOOT_CURR_ENC(state), 1, pos, copy_size, (pos & 0xf), buf);
-        }
-#endif
 
         /* Decompress data in chunks, writing it back with a larger write offset of the primary
          * slot than read size of the secondary slot
@@ -1120,11 +1000,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                 chunk_size = (copy_size - tmp_off);
             }
 
-#ifdef MCUBOOT_ENC_IMAGES
-            if ((pos + tmp_off + chunk_size) >= comp_size) {
-#else
             if ((pos + tmp_off + chunk_size) >= hdr->ih_img_size) {
-#endif
                 last_packet = true;
             }
 
