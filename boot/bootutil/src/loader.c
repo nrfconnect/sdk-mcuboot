@@ -1304,6 +1304,38 @@ out:
 
 #ifdef MCUBOOT_HW_ROLLBACK_PROT
 /**
+ * Checks if the specified image should have a security counter present on it or not
+ *
+ * @param image_index   Index of the image to check.
+ *
+ * @return              true if security counter should be present; false if otherwise
+ */
+fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index)
+{
+#if defined(PM_S1_ADDRESS)
+    if (owner_nsib[image_index]) {
+        /*
+         * Downgrade prevention on S0/S1 image is managed by NSIB, which is a software (not
+         * hardware) check
+         */
+        return FIH_FAILURE;
+    }
+#endif
+
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+    if (image_index == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+        /*
+         * Downgrade prevention on network core image is managed by NSIB which is a software (not
+         * hardware) check
+         */
+        return FIH_FAILURE;
+    }
+#endif
+
+    return FIH_SUCCESS;
+}
+
+/**
  * Updates the stored security counter value with the image's security counter
  * value which resides in the given slot, only if it's greater than the stored
  * value.
@@ -1323,6 +1355,26 @@ boot_update_security_counter(struct boot_loader_state *state, int slot, int hdr_
     const struct flash_area *fap = NULL;
     uint32_t img_security_cnt;
     int rc;
+
+#if defined(PM_S1_ADDRESS)
+    if (owner_nsib[BOOT_CURR_IMG(state)]) {
+        /*
+         * Downgrade prevention on S0/S1 image is managed by NSIB which is a software (not
+         * hardware) check
+         */
+        return 0;
+    }
+#endif
+
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+        /*
+         * Downgrade prevention on network core image is managed by NSIB which is a software (not
+         * hardware) check
+         */
+        return 0;
+    }
+#endif
 
     fap = BOOT_IMG_AREA(state, slot);
     assert(fap != NULL);
@@ -2574,7 +2626,20 @@ check_downgrade_prevention(struct boot_loader_state *state)
 
 #if defined(PM_S1_ADDRESS)
     if (owner_nsib[BOOT_CURR_IMG(state)]) {
-        /* Downgrade prevention on S0/S1 image is managed by NSIB */
+        /*
+         * Downgrade prevention on S0/S1 image is managed by NSIB which is a software (not
+         * hardware) check
+         */
+        return 0;
+    }
+#endif
+
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+        /*
+         * Downgrade prevention on network core image is managed by NSIB which is a software (not
+         * hardware) check
+         */
         return 0;
     }
 #endif
