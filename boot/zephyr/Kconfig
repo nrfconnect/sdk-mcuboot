@@ -410,6 +410,18 @@ config BOOT_SIGNATURE_KMU_SLOTS
 
 endif
 
+config BOOT_KEYS_REVOCATION
+	bool "Auto revoke previous gen key"
+	help
+	  Automatically revoke previous generation key upon new valid key usage.
+
+config BOOT_KMU_KEYS_REVOCATION
+	bool
+	depends on BOOT_KEYS_REVOCATION
+	default y if BOOT_SIGNATURE_USING_KMU
+	help
+	  Enabling KMU key revocation backend.
+
 if !BOOT_SIGNATURE_USING_KMU
 
 config BOOT_SIGNATURE_KEY_FILE
