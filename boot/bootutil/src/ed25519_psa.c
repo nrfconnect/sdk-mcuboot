@@ -41,6 +41,11 @@ static psa_key_id_t kmu_key_ids[3] =  {
     MAKE_PSA_KMU_KEY_ID(PSA_KEY_STARTING_ID + (2 * PSA_KEY_INDEX_SIZE))
 };
 
+#if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
+#include <bootutil/key_revocation.h>
+static psa_key_id_t *validated_with = NULL;
+#endif
+
 BUILD_ASSERT(CONFIG_BOOT_SIGNATURE_KMU_SLOTS <= ARRAY_SIZE(kmu_key_ids),
 	     "Invalid number of KMU slots, up to 3 are supported on nRF54L15");
 #endif
@@ -125,6 +130,9 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
                                     EDDSA_SIGNAGURE_LENGTH);
         if (status == PSA_SUCCESS) {
             ret = 1;
+#if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
+            validated_with = kmu_key_ids + i;
+#endif
             break;
         }
 
@@ -133,4 +141,37 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
 
     return ret;
 }
+#if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
+int exec_revoke(void)
+{
+    int ret = BOOT_KEY_REVOKE_OK;
+    psa_status_t status = psa_crypto_init();
+
+    if (!validated_with) {
+        ret = BOOT_KEY_REVOKE_INVALID;
+        goto out;
+    }
+
+    if (status != PSA_SUCCESS) {
+            BOOT_LOG_ERR("PSA crypto init failed with error %d", status);
+            ret = BOOT_KEY_REVOKE_FAILED;
+            goto out;
+    }
+    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; i++) {
+        if ((kmu_key_ids + i) == validated_with) {
+            break;
+        }
+        BOOT_LOG_DBG("Invalidating key ID %d", i);
+
+        status = psa_destroy_key(kmu_key_ids[i]);
+        if (status == PSA_SUCCESS) {
+            BOOT_LOG_DBG("Success on key ID %d", i);
+        } else {
+            BOOT_LOG_ERR("Key invalidation failed with: %d", status);
+        }
+    }
+out:
+    return ret;
+}
+#endif /* CONFIG_BOOT_KMU_KEYS_REVOCATION */
 #endif
