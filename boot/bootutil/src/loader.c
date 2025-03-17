@@ -80,6 +80,10 @@ int pcd_version_cmp_net(const struct flash_area *fap, struct image_header *hdr);
 
 #include "mcuboot_config/mcuboot_config.h"
 
+#if defined(CONFIG_BOOT_KEYS_REVOCATION)
+#include "bootutil/key_revocation.h"
+#endif
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
@@ -2313,6 +2317,11 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
     }
 
+#if defined(CONFIG_BOOT_KEYS_REVOCATION)
+    if (BOOT_SWAP_TYPE(state) == BOOT_SWAP_TYPE_NONE) {
+        allow_revoke();
+    }
+#endif
     /* Iterate over all the images. At this point all required update operations
      * have finished. By the end of the loop each image in the primary slot will
      * have been re-validated.
@@ -2421,6 +2430,13 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     fill_rsp(state, rsp);
 
     fih_rc = FIH_SUCCESS;
+#if defined(CONFIG_BOOT_KEYS_REVOCATION)
+    rc = revoke();
+    if (rc != BOOT_KEY_REVOKE_OK &&
+        rc != BOOT_KEY_REVOKE_NOT_READY) {
+        FIH_SET(fih_rc, FIH_FAILURE);
+    }
+#endif /* CONFIG_BOOT_KEYS_REVOCATION */
 out:
     /*
      * Since the boot_status struct stores plaintext encryption keys, reset
