@@ -60,7 +60,7 @@ jobs:
           echo "MCUBOOT_VERSION=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
 
       - name: Checkout Zephyr
-        uses: actions/checkout@v2
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
         with:
           repository: 'zephyrproject-rtos/zephyr'
           ref: ${{ env.ZEPHYR_VERSION }}
@@ -74,7 +74,7 @@ jobs:
           west update
 
       - name: Checkout MCUBoot
-        uses: actions/checkout@v2
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
         with:
           repository: 'mcu-tools/mcuboot'
           ref: ${{ env.MCUBOOT_VERSION }}
@@ -95,7 +95,7 @@ jobs:
           ./scripts/twister --inline-logs -v -N -M --integration --overflow-as-errors --retry-failed 2 ${test_paths}
 
       - name: Upload Tests Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
         if: always()
         with:
           name: Tests Results
