@@ -804,9 +804,8 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
     (void)bs;
     (void)rc;
 
-    /* In the case of ram loading the image has already been decrypted as it is
-     * decrypted when copied in ram
-     */
+/* In the case of ram loading the image has already been decrypted as it is
+ * decrypted when copied in ram */
 #if defined(MCUBOOT_ENC_IMAGES) && !defined(MCUBOOT_RAM_LOAD)
     if (MUST_DECRYPT(fap, BOOT_CURR_IMG(state), hdr)) {
         rc = boot_enc_load(BOOT_CURR_ENC(state), 1, hdr, fap, bs);
@@ -1646,7 +1645,7 @@ boot_copy_region(struct boot_loader_state *state,
 
 #ifdef MCUBOOT_ENC_IMAGES
         /* If only copy, then does not matter if header indicates need for
-         * encryption/decryption, we just copy data. */
+         * encryptio/decryptio, we just copy data. */
         if (!only_copy && IS_ENCRYPTED(hdr)) {
             uint32_t abs_off = off + bytes_copied;
             if (abs_off < hdr->ih_hdr_size) {
