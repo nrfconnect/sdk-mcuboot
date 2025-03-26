@@ -345,18 +345,6 @@ config BOOT_SIGNATURE_USING_KMU
 	  MCUboot will use keys provisioned to the device key management unit for signature
 	  verification instead of compiling in key data from a file.
 
-if BOOT_SIGNATURE_USING_KMU
-
-config BOOT_SIGNATURE_KMU_SLOTS
-	int "KMU key slots"
-	range 1 3
-	default 1
-	help
-	  Selects the number of KMU key slots (also known as generations) to use when verifying
-	  an image.
-
-endif
-
 if !BOOT_SIGNATURE_USING_KMU
 
 config BOOT_SIGNATURE_KEY_FILE
