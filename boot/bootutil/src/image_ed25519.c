@@ -3,7 +3,6 @@
  *
  * Copyright (c) 2019 JUUL Labs
  * Copyright (c) 2021-2023 Arm Limited
- * Copyright (c) 2025 Nordic Semiconductor ASA
  */
 
 #include <string.h>
@@ -86,7 +85,7 @@ bootutil_verify(uint8_t *buf, uint32_t blen,
     uint8_t *pubkey;
     uint8_t *end;
 
-    if (blen != IMAGE_HASH_SIZE || slen != EDDSA_SIGNATURE_LENGTH) {
+    if (slen != EDDSA_SIGNATURE_LENGTH) {
         FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
