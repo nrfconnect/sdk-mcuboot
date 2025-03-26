@@ -90,3 +90,15 @@ tests:
     platform_allow: mimxrt1020_evk
     integration_platforms:
       - mimxrt1020_evk
+  sample.bootloader.mcuboot.swap_offset:
+    extra_args: EXTRA_CONF_FILE=./swap_offset.conf
+    platform_allow:  nrf52840dk/nrf52840
+    integration_platforms:
+      - nrf52840dk/nrf52840
+    tags: bootloader_mcuboot
+  sample.bootloader.mcuboot.runtime_source.hooks:
+    extra_args: EXTRA_CONF_FILE=../../samples/runtime-source/zephyr/sample.conf
+      TEST_RUNTIME_SOURCE_HOOKS=y
+    tags: bootloader_mcuboot runtime_source
+    platform_allow: frdm_k64f
+    build_only: true

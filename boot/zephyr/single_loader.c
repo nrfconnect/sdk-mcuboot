@@ -21,6 +21,12 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 /* Variables passed outside of unit via poiters. */
 static const struct flash_area *_fa_p;
 static struct image_header _hdr = { 0 };
+static struct boot_loader_state boot_data;
+
+struct boot_loader_state *boot_get_loader_state(void)
+{
+    return &boot_data;
+}
 
 #if defined(MCUBOOT_VALIDATE_PRIMARY_SLOT) || defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
 /**
@@ -53,7 +59,7 @@ boot_image_validate(const struct flash_area *fa_p,
          */
         hdr->ih_flags &= ~(ENCRYPTIONFLAGS);
     }
-    FIH_CALL(bootutil_img_validate, fih_rc, NULL, 0, hdr, fa_p, tmpbuf,
+    FIH_CALL(bootutil_img_validate, fih_rc, NULL, hdr, fa_p, tmpbuf,
              BOOT_TMPBUF_SZ, NULL, 0, NULL);
 
     FIH_RET(fih_rc);

@@ -34,6 +34,10 @@
 #     error "One crypto library implementation allowed at a time."
 #endif
 
+#if defined(CONFIG_BOOT_KEY_IMPORT_BYPASS_ASN)
+#define MCUBOOT_KEY_IMPORT_BYPASS_ASN
+#endif
+
 #ifdef CONFIG_BOOT_USE_MBEDTLS
 #define MCUBOOT_USE_MBED_TLS
 #elif defined(CONFIG_BOOT_USE_TINYCRYPT)
@@ -82,6 +86,10 @@
 
 #ifdef CONFIG_BOOT_SWAP_USING_MOVE
 #define MCUBOOT_SWAP_USING_MOVE 1
+#endif
+
+#ifdef CONFIG_BOOT_SWAP_USING_OFFSET
+#define MCUBOOT_SWAP_USING_OFFSET 1
 #endif
 
 #ifdef CONFIG_BOOT_DIRECT_XIP
@@ -147,6 +155,17 @@
 
 #ifdef CONFIG_BOOT_DECOMPRESSION
 #define MCUBOOT_DECOMPRESS_IMAGES
+#endif
+
+/* Invoke hashing functions directly on storage device. This requires the device
+ * be able to map storage to address space or RAM.
+ */
+#ifdef CONFIG_BOOT_IMG_HASH_DIRECTLY_ON_STORAGE
+#define MCUBOOT_HASH_STORAGE_DIRECTLY
+#endif
+
+#ifdef CONFIG_BOOT_SIGNATURE_TYPE_PURE
+#define MCUBOOT_SIGN_PURE
 #endif
 
 #ifdef CONFIG_BOOT_BOOTSTRAP
@@ -225,6 +244,14 @@
 
 #ifdef CONFIG_BOOT_IMAGE_ACCESS_HOOKS
 #define MCUBOOT_IMAGE_ACCESS_HOOKS
+#endif
+
+#ifdef CONFIG_BOOT_GO_HOOKS
+#define MCUBOOT_BOOT_GO_HOOKS
+#endif
+
+#ifdef CONFIG_BOOT_FLASH_AREA_HOOKS
+#define MCUBOOT_FLASH_AREA_HOOKS
 #endif
 
 #ifdef CONFIG_MCUBOOT_VERIFY_IMG_ADDRESS
@@ -323,6 +350,7 @@
 #define MCUBOOT_VERSION_MAJOR APP_VERSION_MAJOR
 #define MCUBOOT_VERSION_MINOR APP_VERSION_MINOR
 #define MCUBOOT_VERSION_PATCHLEVEL APP_PATCHLEVEL
+#define MCUBOOT_VERSION_TWEAK APP_TWEAK
 #endif
 
 /* Support 32-byte aligned flash sizes */
