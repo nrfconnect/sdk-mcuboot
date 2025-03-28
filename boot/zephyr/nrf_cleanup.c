@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#if !defined(CONFIG_SOC_SERIES_NRF54HX)
 #include <hal/nrf_clock.h>
+#endif
 #include <hal/nrf_uarte.h>
 #include <haly/nrfy_uarte.h>
 #if defined(NRF_RTC0) || defined(NRF_RTC1) || defined(NRF_RTC2)
@@ -62,10 +64,12 @@ static NRF_UARTE_Type *nrf_uarte_to_clean[] = {
 };
 #endif
 
+#if !defined(CONFIG_SOC_SERIES_NRF54HX)
 static void nrf_cleanup_clock(void)
 {
     nrf_clock_int_disable(NRF_CLOCK, 0xFFFFFFFF);
 }
+#endif
 
 void nrf_cleanup_peripheral(void)
 {
@@ -109,7 +113,10 @@ void nrf_cleanup_peripheral(void)
 #if defined(NRF_DPPIC)
     nrf_dppi_channels_disable_all(NRF_DPPIC);
 #endif
+
+#if !defined(CONFIG_SOC_SERIES_NRF54HX)
     nrf_cleanup_clock();
+#endif
 }
 
 #if USE_PARTITION_MANAGER \
