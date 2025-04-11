@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'mcu-tools/mcuboot'
     steps:
-      - uses: fojia/action-move-issues-to-column@master
+      - uses: fojia/action-move-issues-to-column@e56b9b3dc1a153cf4c9fd6f20064a431dd3e0b62 # master
         with:
           project: 'MCUboot releases'
           column: 'Done'

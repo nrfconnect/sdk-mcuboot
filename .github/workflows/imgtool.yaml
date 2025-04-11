@@ -18,9 +18,9 @@ jobs:
       matrix:
         python-version: ["3.x", "pypy3.9"]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@65d7f2d534ac1bc67fcd62888c5f4f3d2cb2b236 # v4
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pipenv'
@@ -35,7 +35,7 @@ jobs:
         pipenv run pip install pytest -e .
         pipenv run pytest --junitxml=../junit/pytest-results-${{ matrix.python-version }}.xml
     - name: Upload test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
       if: always()
       with:
         name: pytest-results-${{ matrix.python-version }}
@@ -47,11 +47,11 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
       with:
         fetch-depth: 0
     - name: Cache pip
-      uses: actions/cache@v4
+      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip
