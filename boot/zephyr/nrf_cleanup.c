@@ -97,6 +97,12 @@ void nrf_cleanup_peripheral(void)
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXTO);
         nrfy_uarte_disable(current);
 
+#ifndef CONFIG_SOC_SERIES_NRF54LX
+        /* Disconnect pins UARTE pins
+         * causes issues on nRF54l SoCs,
+         * could be enabled once fix to NCSDK-33039 will be implemented.
+         */
+
         uint32_t pin[4];
 
         pin[0] = nrfy_uarte_tx_pin_get(current);
@@ -111,6 +117,7 @@ void nrf_cleanup_peripheral(void)
                 nrfy_gpio_cfg_default(pin[j]);
             }
         }
+#endif
 
 #if defined(NRF_DPPIC)
         /* Clear all SUBSCRIBE configurations. */
