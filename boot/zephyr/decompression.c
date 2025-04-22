@@ -37,6 +37,9 @@
 #endif
 #define DECOMP_BUF_ALLOC_SIZE (DECOMP_BUF_SIZE + DECOMP_BUF_EXTRA_SIZE)
 
+#define DECRYPTION_BLOCK_SIZE_AES128 16
+#define DECRYPTION_BLOCK_SIZE_AES256 32
+
 /* Number of times that consumed data by decompression system can be 0 in a row before aborting */
 #define OFFSET_ZERO_CHECK_TIMES 3
 
@@ -187,6 +190,7 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
     struct enc_key_data *enc_state;
     int image_index;
     uint32_t comp_size = 0;
+    uint8_t decryption_block_size = 0;
 
     rc = bootutil_get_img_decrypted_comp_size(hdr, fap, &comp_size);
 
@@ -208,6 +212,18 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
     if (MUST_DECRYPT(fap, image_index, hdr) &&
             !boot_enc_valid(enc_state, 1)) {
         return -1;
+    }
+
+    if (MUST_DECRYPT(fap, image_index, hdr)) {
+        if (hdr->ih_flags & IMAGE_F_ENCRYPTED_AES128) {
+            decryption_block_size = DECRYPTION_BLOCK_SIZE_AES128;
+        } else if (hdr->ih_flags & IMAGE_F_ENCRYPTED_AES256) {
+            decryption_block_size = DECRYPTION_BLOCK_SIZE_AES256;
+        } else {
+            LOG_ERR("Unknown decryption block size");
+            rc = BOOT_EBADIMAGE;
+            goto finish_end;
+        }
     }
 #endif
 
@@ -319,11 +335,17 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
         }
 
 #ifdef MCUBOOT_ENC_IMAGES
-                if (MUST_DECRYPT(fap, image_index, hdr)) {
-                    boot_enc_decrypt(enc_state, 1, read_pos,
-                                     copy_size, (read_pos & 0xf),
-                                     tmp_buf);
-                }
+        if (MUST_DECRYPT(fap, image_index, hdr)) {
+            uint8_t dummy_bytes = 0;
+
+            if ((copy_size % decryption_block_size)) {
+                dummy_bytes = decryption_block_size - (copy_size % decryption_block_size);
+                memset(&tmp_buf[copy_size], 0x00, dummy_bytes);
+            }
+
+            boot_enc_decrypt(enc_state, 1, read_pos, (copy_size + dummy_bytes), (read_pos & 0xf),
+                             tmp_buf);
+        }
 #endif
 
         /* Decompress data in chunks, writing it back with a larger write offset of the primary
@@ -990,6 +1012,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
 #ifdef MCUBOOT_ENC_IMAGES
     uint32_t comp_size = 0;
+    uint8_t decryption_block_size = 0;
 #endif
 
     hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
@@ -1001,6 +1024,14 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
         BOOT_LOG_ERR("Invalid/missing image decrypted compressed size value");
         rc = BOOT_EBADIMAGE;
         goto finish;
+    }
+
+    if (IS_ENCRYPTED(hdr)) {
+        if (hdr->ih_flags & IMAGE_F_ENCRYPTED_AES128) {
+            decryption_block_size = DECRYPTION_BLOCK_SIZE_AES128;
+        } else if (hdr->ih_flags & IMAGE_F_ENCRYPTED_AES256) {
+            decryption_block_size = DECRYPTION_BLOCK_SIZE_AES256;
+        }
     }
 #endif
 
@@ -1107,7 +1138,14 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
 
 #ifdef MCUBOOT_ENC_IMAGES
         if (IS_ENCRYPTED(hdr)) {
-            boot_enc_decrypt(BOOT_CURR_ENC(state), 1, pos, copy_size, (pos & 0xf), buf);
+            uint8_t dummy_bytes = 0;
+
+            if ((copy_size % decryption_block_size)) {
+                dummy_bytes = decryption_block_size - (copy_size % decryption_block_size);
+                memset(&buf[copy_size], 0x00, dummy_bytes);
+            }
+
+            boot_enc_decrypt(BOOT_CURR_ENC(state), 1, pos, (copy_size + dummy_bytes), (pos & 0xf), buf);
         }
 #endif
 
