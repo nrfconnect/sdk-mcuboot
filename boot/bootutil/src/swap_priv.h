@@ -20,6 +20,7 @@
 #define H_SWAP_PRIV_
 
 #include "mcuboot_config/mcuboot_config.h"
+#include <bootutil/nrf_partitions.h>
 
 #if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET)
 
@@ -130,7 +131,7 @@ bool swap_write_block_size_check(struct boot_loader_state *state);
  */
 int app_max_size(struct boot_loader_state *state);
 
-#if defined(PM_S1_ADDRESS) && !defined(MCUBOOT_OVERWRITE_ONLY) && \
+#if defined(NSIB_S1_ADDRESS) && !defined(MCUBOOT_OVERWRITE_ONLY) && \
 CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
 /**
  * Performs an NSIB update

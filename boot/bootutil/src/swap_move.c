@@ -253,7 +253,7 @@ static int app_max_sectors(struct boot_loader_state *state)
 int
 boot_slots_compatible(struct boot_loader_state *state)
 {
-#ifdef PM_S1_ADDRESS
+#ifdef NSIB_S1_ADDRESS
     /* Patch needed for NCS. In this case, image 1 primary points to the other
      * B1 slot (ie S0 or S1), and image 0 primary points to the app.
      * With this configuration, image 0 and image 1 share the secondary slot.
@@ -333,7 +333,7 @@ boot_slots_compatible(struct boot_loader_state *state)
     }
 
     return 1;
-#endif /* PM_S1_ADDRESS */
+#endif /* NSIB_S1_ADDRESS */
 }
 
 #define BOOT_LOG_SWAP_STATE(area, state)                            \

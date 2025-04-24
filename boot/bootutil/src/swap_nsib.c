@@ -27,6 +27,7 @@
 #include "bootutil/bootutil_log.h"
 
 #include "mcuboot_config/mcuboot_config.h"
+#include <bootutil/nrf_partitions.h>
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
@@ -43,9 +44,9 @@ void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs)
     sector_sz = boot_img_sector_size(state, BOOT_SECONDARY_SLOT, 0);
 
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
-    rc = flash_area_open(PM_S0_ID, &fap_pri);
+    rc = flash_area_open(NSIB_S0_ID, &fap_pri);
 #else
-    rc = flash_area_open(PM_S1_ID, &fap_pri);
+    rc = flash_area_open(NSIB_S1_ID, &fap_pri);
 #endif
     assert (rc == 0);
     image_index = BOOT_CURR_IMG(state);

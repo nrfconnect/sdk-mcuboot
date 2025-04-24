@@ -138,10 +138,12 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
         * !defined(ZEPHYR_LOG_MODE_MINIMAL)
 	*/
 
-#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
+
+#if CONFIG_FPROTECT
 #include <fprotect.h>
-#include <pm_config.h>
+#include <bootutil/nrf_partitions.h>
 #endif
+
 
 #if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL || CONFIG_MCUBOOT_NRF_CLEANUP_NONSECURE_RAM
 #include <nrf_cleanup.h>
@@ -210,7 +212,7 @@ static void do_boot(struct boot_rsp *rsp)
     const struct fw_info *firmware_info = fw_info_find(fw_start_addr);
     bool provided = fw_info_ext_api_provide(firmware_info, true);
 
-#ifdef PM_S0_ADDRESS
+#ifdef NSIB_S0_ADDRESS
     /* Only fail if the immutable bootloader is present. */
     if (!provided) {
 	if (firmware_info == NULL) {
@@ -634,16 +636,16 @@ int main(void)
 
     mcuboot_status_change(MCUBOOT_STATUS_BOOTABLE_IMAGE_FOUND);
 
-#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
+#if CONFIG_FPROTECT
 
-#ifdef PM_S1_ADDRESS
+#ifdef NSIB_S1_ADDRESS
 /* MCUBoot is stored in either S0 or S1, protect both */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_S0_ADDRESS)
-#define PROTECT_ADDR PM_S0_ADDRESS
+#define PROTECT_SIZE (MCUBOOT_PRIMARY_ADDRESS - NSIB_S0_ADDRESS)
+#define PROTECT_ADDR NSIB_S0_ADDRESS
 #else
 /* There is only one instance of MCUBoot */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_MCUBOOT_ADDRESS)
-#define PROTECT_ADDR PM_MCUBOOT_ADDRESS
+#define PROTECT_SIZE (MCUBOOT_PRIMARY_ADDRESS - MCUBOOT_ADDRESS)
+#define PROTECT_ADDR MCUBOOT_ADDRESS
 #endif
 
     rc = fprotect_area(PROTECT_ADDR, PROTECT_SIZE);
@@ -661,7 +663,7 @@ int main(void)
     pcd_lock_ram(true);
 #endif
 #endif
-#endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
+#endif /* CONFIG_FPROTECT */
 
     ZEPHYR_BOOT_LOG_STOP();
 

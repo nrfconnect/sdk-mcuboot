@@ -84,7 +84,7 @@ int pcd_version_cmp_net(const struct flash_area *fap, struct image_header *hdr);
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
-#ifdef PM_S1_ADDRESS
+#ifdef NSIB_S1_ADDRESS
 static bool owner_nsib[BOOT_IMAGE_NUMBER] = {false};
 #endif
 
@@ -1253,11 +1253,11 @@ check_validity:
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
-            min_addr = PM_S0_ADDRESS;
-            max_addr = (PM_S0_ADDRESS + PM_S0_SIZE);
+            min_addr = NSIB_S0_ADDRESS;
+            max_addr = (NSIB_S0_ADDRESS + NSIB_S0_SIZE);
 #else
-            min_addr = PM_S1_ADDRESS;
-            max_addr = (PM_S1_ADDRESS + PM_S1_SIZE);
+            min_addr = NSIB_S1_ADDRESS;
+            max_addr = (NSIB_S1_ADDRESS + NSIB_S1_SIZE);
 #endif
             check_addresses = true;
         } else
@@ -1265,11 +1265,11 @@ check_validity:
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
-            min_addr = MIN(pri_fa->fa_off, PM_S0_ADDRESS);
-            max_addr = MAX((pri_fa->fa_off + pri_fa->fa_size), (PM_S0_ADDRESS + PM_S0_SIZE));
+            min_addr = MIN(pri_fa->fa_off, NSIB_S0_ADDRESS);
+            max_addr = MAX((pri_fa->fa_off + pri_fa->fa_size), (NSIB_S0_ADDRESS + NSIB_S0_SIZE));
 #else
-            min_addr = MIN(pri_fa->fa_off, PM_S1_ADDRESS);
-            max_addr = MAX((pri_fa->fa_off + pri_fa->fa_size), (PM_S1_ADDRESS + PM_S1_SIZE));
+            min_addr = MIN(pri_fa->fa_off, NSIB_S1_ADDRESS);
+            max_addr = MAX((pri_fa->fa_off + pri_fa->fa_size), (NSIB_S1_ADDRESS + NSIB_S1_SIZE));
 #endif
 #else
             min_addr = pri_fa->fa_off;
@@ -1309,7 +1309,7 @@ out:
  */
 fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index)
 {
-#if defined(PM_S1_ADDRESS)
+#if defined(NSIB_S1_ADDRESS)
     if (owner_nsib[image_index]) {
         /*
          * Downgrade prevention on S0/S1 image is managed by NSIB, which is a software (not
@@ -1353,7 +1353,7 @@ boot_update_security_counter(struct boot_loader_state *state, int slot, int hdr_
     uint32_t img_security_cnt;
     int rc;
 
-#if defined(PM_S1_ADDRESS)
+#if defined(NSIB_S1_ADDRESS)
     if (owner_nsib[BOOT_CURR_IMG(state)]) {
         /*
          * Downgrade prevention on S0/S1 image is managed by NSIB which is a software (not
@@ -1394,7 +1394,7 @@ done:
 #if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
 
 #if defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
-(defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP))
+(defined(NSIB_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP))
 
 #define SEC_SLOT_VIRGIN 0
 #define SEC_SLOT_TOUCHED 1
@@ -1493,7 +1493,7 @@ static inline void sec_slot_cleanup_if_unusable(void)
 {
 }
 #endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
-          defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
+          defined(NSIB_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
 
 /**
  * Determines which swap operation to perform, if any.  If it is determined
@@ -1510,11 +1510,13 @@ boot_validated_swap_type(struct boot_loader_state *state,
     int swap_type;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     bool upgrade_valid = false;
-#if defined(PM_S1_ADDRESS)
+#if defined(NSIB_S1_ADDRESS)
     owner_nsib[BOOT_CURR_IMG(state)] = false;
+    uint8_t primary_fa_dev_id = 0;
+    uintptr_t primary_fa_flash_dev_base = 0;
 #endif
 
-#if defined(PM_S1_ADDRESS) || defined(PM_CPUNET_B0N_ADDRESS)
+#if defined(NSIB_S1_ADDRESS) || defined(PM_CPUNET_B0N_ADDRESS)
     const struct flash_area *secondary_fa =
         BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
@@ -1538,7 +1540,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
         sec_slot_touch(state);
 
-#ifdef PM_S1_ADDRESS
+#ifdef NSIB_S1_ADDRESS
 #ifdef PM_CPUNET_B0N_ADDRESS
         if(!(reset_addr >= PM_CPUNET_APP_ADDRESS && reset_addr < PM_CPUNET_APP_END_ADDRESS))
 #endif
@@ -1551,11 +1553,17 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 return BOOT_SWAP_TYPE_FAIL;
             }
 
+            primary_fa_dev_id = flash_area_get_device_id(primary_fa);
+            rc = flash_device_base(primary_fa_dev_id, &primary_fa_flash_dev_base);
+            if (rc != 0) {
+                return BOOT_SWAP_TYPE_FAIL;
+            }
+
             /* Check start and end of primary slot for current image */
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
-            if (reset_addr >= PM_S0_ADDRESS && reset_addr <= (PM_S0_ADDRESS + PM_S0_SIZE)) {
+            if (reset_addr >= NSIB_S0_ADDRESS && reset_addr <= (NSIB_S0_ADDRESS + NSIB_S0_SIZE)) {
 #else
-            if (reset_addr >= PM_S1_ADDRESS && reset_addr <= (PM_S1_ADDRESS + PM_S1_SIZE)) {
+            if (reset_addr >= NSIB_S1_ADDRESS && reset_addr <= (NSIB_S1_ADDRESS + NSIB_S1_SIZE)) {
 #endif
                 if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
                     /* This is not the s0/s1 upgrade image but the application image, pretend
@@ -1566,9 +1574,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
                 owner_nsib[BOOT_CURR_IMG(state)] = true;
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
-            } else if (reset_addr >= PM_S1_ADDRESS && reset_addr <= (PM_S1_ADDRESS + PM_S1_SIZE)) {
+            } else if (reset_addr >= NSIB_S1_ADDRESS && reset_addr <= (NSIB_S1_ADDRESS + NSIB_S1_SIZE)) {
 #else
-            } else if (reset_addr >= PM_S0_ADDRESS && reset_addr <= (PM_S0_ADDRESS + PM_S0_SIZE)) {
+            } else if (reset_addr >= NSIB_S0_ADDRESS && reset_addr <= (NSIB_S0_ADDRESS + NSIB_S0_SIZE)) {
 #endif
                 /* NSIB upgrade but for the wrong slot, must be erased */
                 BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
@@ -1576,20 +1584,22 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 sec_slot_untouch(state);
                 BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
                 return BOOT_SWAP_TYPE_FAIL;
-            } else if (reset_addr < primary_fa->fa_off || reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
+            } else if (reset_addr < (primary_fa_flash_dev_base + primary_fa->fa_off) ||
+                       reset_addr > (primary_fa_flash_dev_base + primary_fa->fa_off + primary_fa->fa_size)) {
                 /* The image in the secondary slot is not intended for any */
                 return BOOT_SWAP_TYPE_NONE;
             }
 
-            if ((primary_fa->fa_off == PM_S0_ADDRESS) || (primary_fa->fa_off == PM_S1_ADDRESS)) {
+            if ((primary_fa_flash_dev_base + primary_fa->fa_off == NSIB_S0_ADDRESS)
+                 || (primary_fa_flash_dev_base + primary_fa->fa_off == NSIB_S1_ADDRESS)) {
                 owner_nsib[BOOT_CURR_IMG(state)] = true;
             }
         }
-#endif /* PM_S1_ADDRESS */
+#endif /* NSIB_S1_ADDRESS */
         sec_slot_mark_assigned(state);
     }
 
-#endif /* PM_S1_ADDRESS || PM_CPUNET_B0N_ADDRESS */
+#endif /* NSIB_S1_ADDRESS || PM_CPUNET_B0N_ADDRESS */
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -2268,7 +2278,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         flash_area_close(fap);
     }
 
-#if defined(PM_S1_ADDRESS) && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+#if defined(NSIB_S1_ADDRESS) && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
     if (owner_nsib[BOOT_CURR_IMG(state)]) {
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
             /* For NSIB, move the image instead of swapping it */
@@ -2737,7 +2747,7 @@ check_downgrade_prevention(struct boot_loader_state *state)
     uint32_t security_counter[2];
     int rc;
 
-#if defined(PM_S1_ADDRESS)
+#if defined(NSIB_S1_ADDRESS)
     if (owner_nsib[BOOT_CURR_IMG(state)]) {
         /*
          * Downgrade prevention on S0/S1 image is managed by NSIB which is a software (not
@@ -3040,7 +3050,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
-#ifdef PM_S1_ADDRESS
+#ifdef NSIB_S1_ADDRESS
         /* Patch needed for NCS. Image 1 primary is the currently
          * executing MCUBoot image, and is therefore already validated by NSIB and
          * does not need to also be validated by MCUBoot.
@@ -3076,7 +3086,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 #endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
 
-#ifdef PM_S1_ADDRESS
+#ifdef NSIB_S1_ADDRESS
         if (!image_validated_by_nsib)
 #endif
         {
