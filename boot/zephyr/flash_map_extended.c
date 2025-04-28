@@ -66,8 +66,7 @@ int flash_device_base(uint8_t fd_id, uintptr_t *ret)
  */
 int flash_area_id_from_multi_image_slot(int image_index, int slot)
 {
-    int rc;
-    int id = -1;
+    int rc, id;
 
     rc = BOOT_HOOK_FLASH_AREA_CALL(flash_area_id_from_multi_image_slot_hook,
                                    BOOT_HOOK_REGULAR, image_index, slot, &id);
