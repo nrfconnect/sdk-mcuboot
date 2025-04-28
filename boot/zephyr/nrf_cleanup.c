@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#if !defined(CONFIG_SOC_SERIES_NRF54HX)
+#if defined(CONFIG_NRFX_CLOCK)
 #include <hal/nrf_clock.h>
 #endif
 #include <hal/nrf_uarte.h>
@@ -12,6 +12,9 @@
 #include <haly/nrfy_gpio.h>
 #if defined(NRF_RTC0) || defined(NRF_RTC1) || defined(NRF_RTC2)
     #include <hal/nrf_rtc.h>
+#endif
+#if defined(CONFIG_NRF_GRTC_TIMER)
+    #include <nrfx_grtc.h>
 #endif
 #if defined(NRF_PPI)
     #include <hal/nrf_ppi.h>
@@ -48,6 +51,13 @@ static inline void nrf_cleanup_rtc(NRF_RTC_Type * rtc_reg)
 }
 #endif
 
+#if defined(CONFIG_NRF_GRTC_TIMER)
+static inline void nrf_cleanup_grtc(void)
+{
+    nrfx_grtc_uninit();
+}
+#endif
+
 #if defined(NRF_UARTE_CLEANUP)
 static NRF_UARTE_Type *nrf_uarte_to_clean[] = {
 #if defined(NRF_UARTE0)
@@ -62,10 +72,13 @@ static NRF_UARTE_Type *nrf_uarte_to_clean[] = {
 #if defined(NRF_UARTE30)
     NRF_UARTE30,
 #endif
+#if defined(NRF_UARTE136)
+    NRF_UARTE136,
+#endif
 };
 #endif
 
-#if !defined(CONFIG_SOC_SERIES_NRF54HX)
+#if defined(CONFIG_NRFX_CLOCK)
 static void nrf_cleanup_clock(void)
 {
     nrf_clock_int_disable(NRF_CLOCK, 0xFFFFFFFF);
@@ -82,6 +95,10 @@ void nrf_cleanup_peripheral(void)
 #endif
 #if defined(NRF_RTC2)
     nrf_cleanup_rtc(NRF_RTC2);
+#endif
+
+#if defined(CONFIG_NRF_GRTC_TIMER)
+    nrf_cleanup_grtc();
 #endif
 
 #if defined(NRF_UARTE_CLEANUP)
@@ -137,7 +154,7 @@ void nrf_cleanup_peripheral(void)
     nrf_dppi_channels_disable_all(NRF_DPPIC);
 #endif
 
-#if !defined(CONFIG_SOC_SERIES_NRF54HX)
+#if defined(CONFIG_NRFX_CLOCK)
     nrf_cleanup_clock();
 #endif
 }
