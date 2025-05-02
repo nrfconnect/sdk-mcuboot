@@ -3000,8 +3000,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     fih_rc = FIH_SUCCESS;
 #if defined(CONFIG_BOOT_KEYS_REVOCATION)
     rc = revoke();
-    if (rc != BOOT_KEY_REVOKE_OK &&
-        rc != BOOT_KEY_REVOKE_NOT_READY) {
+    if (rc != BOOT_KEY_REVOKE_OK) {
         FIH_SET(fih_rc, FIH_FAILURE);
     }
 #endif /* CONFIG_BOOT_KEYS_REVOCATION */
