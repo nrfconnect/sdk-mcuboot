@@ -236,7 +236,8 @@ static int app_max_sectors(struct boot_loader_state *state)
 
     sector_sz = boot_img_sector_size(state, BOOT_PRIMARY_SLOT, 0);
     trailer_sz = boot_trailer_sz(BOOT_WRITE_SZ(state));
-    first_trailer_idx = boot_img_num_sectors(state, BOOT_PRIMARY_SLOT) - 1;
+    /* subtract 1 for swap and at least 1 for trailer */
+    first_trailer_idx = boot_img_num_sectors(state, BOOT_PRIMARY_SLOT) - 2;
 
     while (1) {
         sz += sector_sz;
@@ -276,9 +277,10 @@ boot_slots_compatible(struct boot_loader_state *state)
         return 0;
     }
 
-    if (num_usable_sectors_pri != (num_sectors_sec + 1)) {
+    /* Optimal says primary has one more than secondary. Always. Both have trailers. */
+    if (num_sectors_pri != (num_sectors_sec + 1)) {
         BOOT_LOG_DBG("Non-optimal sector distribution, slot0 has %d usable sectors (%d assigned) "
-                     "but slot1 has %d assigned", (int)(num_usable_sectors_pri - 1),
+                     "but slot1 has %d assigned", (int)num_usable_sectors_pri,
                      (int)num_sectors_pri, (int)num_sectors_sec);
     }
 
@@ -396,18 +398,22 @@ boot_move_sector_up(int idx, uint32_t sz, struct boot_loader_state *state,
 
     if (bs->idx == BOOT_STATUS_IDX_0) {
         if (bs->source != BOOT_STATUS_SOURCE_PRIMARY_SLOT) {
-            rc = swap_erase_trailer_sectors(state, fap_pri);
+            /* Remove data and prepare for write on devices requiring erase */
+            rc = swap_scramble_trailer_sectors(state, fap_pri);
             assert(rc == 0);
 
             rc = swap_status_init(state, fap_pri, bs);
             assert(rc == 0);
         }
 
-        rc = swap_erase_trailer_sectors(state, fap_sec);
+        /* Remove status from secondary slot trailer, in case of device with
+	 * erase requirement this will also prepare traier for write.
+	 */
+        rc = swap_scramble_trailer_sectors(state, fap_sec);
         assert(rc == 0);
     }
 
-    rc = boot_erase_region(fap_pri, new_off, sz);
+    rc = boot_erase_region(fap_pri, new_off, sz, false);
     assert(rc == 0);
 
     rc = boot_copy_region(state, fap_pri, fap_pri, old_off, new_off, sz);
@@ -434,7 +440,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
     sec_off = boot_img_sector_off(state, BOOT_SECONDARY_SLOT, idx - 1);
 
     if (bs->state == BOOT_STATUS_STATE_0) {
-        rc = boot_erase_region(fap_pri, pri_off, sz);
+        rc = boot_erase_region(fap_pri, pri_off, sz, false);
         assert(rc == 0);
 
         rc = boot_copy_region(state, fap_sec, fap_pri, sec_off, pri_off, sz);
@@ -446,7 +452,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
     }
 
     if (bs->state == BOOT_STATUS_STATE_1) {
-        rc = boot_erase_region(fap_sec, sec_off, sz);
+        rc = boot_erase_region(fap_sec, sec_off, sz, false);
         assert(rc == 0);
 
         rc = boot_copy_region(state, fap_pri, fap_sec, pri_up_off, sec_off, sz);
@@ -493,7 +499,8 @@ fixup_revert(const struct boot_loader_state *state, struct boot_status *bs,
     BOOT_LOG_SWAP_STATE("Secondary image", &swap_state);
 
     if (swap_state.magic == BOOT_MAGIC_UNSET) {
-        rc = swap_erase_trailer_sectors(state, fap_sec);
+        /* Remove trailer and prepare area for write on devices requiring erase */
+        rc = swap_scramble_trailer_sectors(state, fap_sec);
         assert(rc == 0);
 
         rc = boot_write_image_ok(fap_sec);
@@ -517,10 +524,8 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
     uint32_t trailer_sz;
     uint32_t first_trailer_idx;
     uint32_t last_idx;
-    uint8_t image_index;
     const struct flash_area *fap_pri;
     const struct flash_area *fap_sec;
-    int rc;
 
     BOOT_LOG_INF("Starting swap using move algorithm.");
 
@@ -553,13 +558,11 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
         }
     }
 
-    image_index = BOOT_CURR_IMG(state);
+    fap_pri = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
+    assert(fap_pri != NULL);
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap_pri);
-    assert (rc == 0);
-
-    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap_sec);
-    assert (rc == 0);
+    fap_sec = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
+    assert(fap_sec != NULL);
 
     fixup_revert(state, bs, fap_sec);
 
@@ -583,26 +586,15 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
         }
         idx++;
     }
-
-    flash_area_close(fap_pri);
-    flash_area_close(fap_sec);
 }
 
 int app_max_size(struct boot_loader_state *state)
 {
     uint32_t sector_sz_primary;
-    uint32_t sector_sz_secondary;
-    uint32_t sz_primary;
-    uint32_t sz_secondary;
 
     sector_sz_primary = boot_img_sector_size(state, BOOT_PRIMARY_SLOT, 0);
-    sector_sz_secondary = boot_img_sector_size(state, BOOT_SECONDARY_SLOT, 0);
 
-    /* Account for image flags and move sector */
-    sz_primary = app_max_sectors(state) * sector_sz_primary - sector_sz_primary;
-    sz_secondary = boot_img_num_sectors(state, BOOT_SECONDARY_SLOT) * sector_sz_secondary;
-
-    return (sz_primary <= sz_secondary ? sz_primary : sz_secondary);
+    return app_max_sectors(state) * sector_sz_primary;
 }
 
 #endif

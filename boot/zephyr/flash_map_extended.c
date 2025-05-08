@@ -36,6 +36,12 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define FLASH_DEVICE_BASE 0
 #define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash_controller)
 
+#elif (defined(CONFIG_SOC_SERIES_NRF54HX) && DT_HAS_CHOSEN(zephyr_flash))
+
+#define FLASH_DEVICE_ID SPI_FLASH_0_ID
+#define FLASH_DEVICE_BASE CONFIG_FLASH_BASE_ADDRESS
+#define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash)
+
 #else
 #error "FLASH_DEVICE_ID could not be determined"
 #endif
@@ -60,7 +66,8 @@ int flash_device_base(uint8_t fd_id, uintptr_t *ret)
  */
 int flash_area_id_from_multi_image_slot(int image_index, int slot)
 {
-    int rc, id;
+    int rc;
+    int id = -1;
 
     rc = BOOT_HOOK_FLASH_AREA_CALL(flash_area_id_from_multi_image_slot_hook,
                                    BOOT_HOOK_REGULAR, image_index, slot, &id);
@@ -148,21 +155,8 @@ int flash_area_sector_from_off(off_t off, struct flash_sector *sector)
 
 uint8_t flash_area_get_device_id(const struct flash_area *fa)
 {
-    uint8_t device_id;
-    int rc;
-
-    rc = BOOT_HOOK_FLASH_AREA_CALL(flash_area_get_device_id_hook,
-                                   BOOT_HOOK_REGULAR, fa, &device_id);
-    if (rc != BOOT_HOOK_REGULAR) {
-        return device_id;
-    }
-
-#if defined(CONFIG_ARM)
-    return fa->fa_id;
-#else
     (void)fa;
     return FLASH_DEVICE_ID;
-#endif
 }
 
 #define ERASED_VAL 0xff
@@ -178,7 +172,7 @@ int flash_area_get_sector(const struct flash_area *fap, off_t off,
     struct flash_pages_info fpi;
     int rc;
 
-    if (off >= fap->fa_size) {
+    if (off < 0 || (size_t) off >= fap->fa_size) {
         return -ERANGE;
     }
 

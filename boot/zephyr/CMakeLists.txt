@@ -31,7 +31,7 @@ assert_exists(TINYCRYPT_SHA512_DIR)
 set(FIAT_DIR "${MCUBOOT_DIR}/ext/fiat")
 assert_exists(FIAT_DIR)
 # Path to mbed-tls' asn1 parser library.
-if(NOT CONFIG_MBEDTLS_BUILTIN)
+if(NOT CONFIG_MBEDTLS_BUILTIN AND NOT CONFIG_BOOT_KEY_IMPORT_BYPASS_ASN)
   set(MBEDTLS_ASN1_DIR "${MCUBOOT_DIR}/ext/mbedtls-asn1")
   assert_exists(MBEDTLS_ASN1_DIR)
 endif()
@@ -197,18 +197,18 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
     )
   endif()
   if(CONFIG_BOOT_USE_TINYCRYPT)
-  # When using ECDSA signatures, pull in our copy of the tinycrypt library.
-  zephyr_library_include_directories(
-    ${BOOT_DIR}/zephyr/include
-    ${TINYCRYPT_DIR}/include
+    # When using ECDSA signatures, pull in our copy of the tinycrypt library.
+    zephyr_library_include_directories(
+      ${BOOT_DIR}/zephyr/include
+      ${TINYCRYPT_DIR}/include
     )
-  zephyr_include_directories(${TINYCRYPT_DIR}/include)
+    zephyr_include_directories(${TINYCRYPT_DIR}/include)
 
-  zephyr_library_sources(
-    ${TINYCRYPT_DIR}/source/ecc.c
-    ${TINYCRYPT_DIR}/source/ecc_dsa.c
-    ${TINYCRYPT_DIR}/source/sha256.c
-    ${TINYCRYPT_DIR}/source/utils.c
+    zephyr_library_sources(
+      ${TINYCRYPT_DIR}/source/ecc.c
+      ${TINYCRYPT_DIR}/source/ecc_dsa.c
+      ${TINYCRYPT_DIR}/source/sha256.c
+      ${TINYCRYPT_DIR}/source/utils.c
     )
   elseif(CONFIG_BOOT_USE_NRF_CC310_BL)
     zephyr_library_sources(${NRF_DIR}/cc310_glue.c)
@@ -216,12 +216,14 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
     zephyr_link_libraries(nrfxlib_crypto)
   endif()
 
-  # Since here we are not using Zephyr's mbedTLS but rather our own, we need
-  # to set MBEDTLS_CONFIG_FILE ourselves. When using Zephyr's copy, this
-  # variable is set by its Kconfig in the Zephyr codebase.
-  zephyr_library_compile_definitions(
-    MBEDTLS_CONFIG_FILE="${CONFIG_MBEDTLS_CFG_FILE}"
+  if(CONFIG_MBEDTLS_CFG_FILE)
+    # Since here we are not using Zephyr's mbedTLS but rather our own, we need
+    # to set MBEDTLS_CONFIG_FILE ourselves. When using Zephyr's copy, this
+    # variable is set by its Kconfig in the Zephyr codebase.
+    zephyr_library_compile_definitions(
+      MBEDTLS_CONFIG_FILE="${CONFIG_MBEDTLS_CFG_FILE}"
     )
+  endif()
 elseif(CONFIG_BOOT_SIGNATURE_TYPE_NONE)
   zephyr_library_include_directories(
     ${BOOT_DIR}/zephyr/include
@@ -675,14 +677,22 @@ if(SYSBUILD)
       set(boot_status_data_size 0)
     endif()
 
-    math(EXPR required_size "${key_size} + ${boot_magic_size} + ${boot_swap_data_size} + ${boot_status_data_size} + ${boot_tlv_estimate}")
-    align_up(${required_size} ${erase_size} required_size)
+    math(EXPR trailer_size "${key_size} + ${boot_magic_size} + ${boot_swap_data_size} + ${boot_status_data_size}")
+
+    if(CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET)
+      align_up(${trailer_size} ${erase_size} trailer_size)
+    endif()
+
+    math(EXPR required_size "${trailer_size} + ${boot_tlv_estimate}")
 
     if(CONFIG_SINGLE_APPLICATION_SLOT OR CONFIG_BOOT_FIRMWARE_LOADER)
       set(required_upgrade_size "0")
     else()
       math(EXPR required_upgrade_size "${boot_magic_size} + ${boot_swap_data_size} + ${boot_status_data_size}")
-      align_up(${required_upgrade_size} ${erase_size} required_upgrade_size)
+
+      if(CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET)
+        align_up(${required_upgrade_size} ${erase_size} required_upgrade_size)
+      endif()
     endif()
 
     if(CONFIG_BOOT_SWAP_USING_MOVE)

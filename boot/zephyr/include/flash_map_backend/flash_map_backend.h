@@ -9,6 +9,7 @@
 #define __FLASH_MAP_BACKEND_H__
 
 #include <zephyr/storage/flash_map.h> // the zephyr flash_map
+#include <zephyr/drivers/flash.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -105,6 +106,25 @@ static inline uint32_t flash_sector_get_size(const struct flash_sector *fs)
  */
 int flash_area_get_sector(const struct flash_area *fa, off_t off,
                           struct flash_sector *fs);
+
+
+#if defined(CONFIG_MCUBOOT)
+static inline bool flash_area_erase_required(const struct flash_area *fa)
+{
+#if defined(CONFIG_FLASH_HAS_EXPLICIT_ERASE) && defined(CONFIG_FLASH_HAS_NO_EXPLICIT_ERASE)
+    return flash_params_get_erase_cap(flash_get_parameters(flash_area_get_device(fa))) &
+            FLASH_ERASE_C_EXPLICIT;
+#elif defined(CONFIG_FLASH_HAS_EXPLICIT_ERASE)
+    (void)fa;
+
+    return true;
+#else
+    (void)fa;
+
+    return false;
+#endif
+}
+#endif
 
 #ifdef __cplusplus
 }

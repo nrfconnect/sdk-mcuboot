@@ -47,7 +47,7 @@
 #ifdef CONFIG_BOOT_USE_NRF_CC310_BL
 #define MCUBOOT_USE_NRF_CC310_BL
 #endif
-#elif defined(CONFIG_MBEDTLS_PSA_CRYPTO_CLIENT)
+#elif defined(CONFIG_BOOT_USE_PSA_CRYPTO)
 #define MCUBOOT_USE_PSA_CRYPTO
 #endif
 
@@ -308,6 +308,29 @@
 #endif
 
 /*
+ * Devices that do not require erase prior to write or do not support
+ * erase should avoid emulation of erase by additional write.
+ * The emulation is also taking time which doubles required write time
+ * for such devices.
+ */
+#ifdef CONFIG_MCUBOOT_STORAGE_WITHOUT_ERASE
+#define MCUBOOT_SUPPORT_DEV_WITHOUT_ERASE
+#endif
+
+#ifdef CONFIG_MCUBOOT_STORAGE_WITH_ERASE
+#define MCUBOOT_SUPPORT_DEV_WITH_ERASE
+#endif
+
+/*
+ * MCUboot often calls erase on device just to remove data or make application
+ * image not recognizable. In such instances it may be faster to just remove
+ * portion of data to make image unrecognizable.
+ */
+#ifdef CONFIG_MCUBOOT_STORAGE_MINIMAL_SCRAMBLE
+#define MCUBOOT_MINIMAL_SCRAMBLE
+#endif
+
+/*
  * Enabling this option uses newer flash map APIs. This saves RAM and
  * avoids deprecated API usage.
  *
@@ -399,6 +422,9 @@
 #elif defined(CONFIG_NRFX_WDT31)
 #define MCUBOOT_WATCHDOG_FEED() \
     FEED_WDT_INST(31);
+#elif defined(CONFIG_NRFX_WDT010)
+#define MCUBOOT_WATCHDOG_FEED() \
+    FEED_WDT_INST(010);
 #else
 #error "No NRFX WDT instances enabled"
 #endif

@@ -564,14 +564,14 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
     image_index = BOOT_CURR_IMG(state);
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap_primary_slot);
-    assert (rc == 0);
+    fap_primary_slot = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
+    assert(fap_primary_slot != NULL);
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap_secondary_slot);
-    assert (rc == 0);
+    fap_secondary_slot = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
+    assert(fap_secondary_slot != NULL);
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_SCRATCH, &fap_scratch);
-    assert (rc == 0);
+    fap_scratch = state->scratch.area;
+    assert(fap_scratch != NULL);
 
     /* Calculate offset from start of image area. */
     img_off = boot_img_sector_off(state, BOOT_PRIMARY_SLOT, idx);
@@ -617,7 +617,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
     if (bs->state == BOOT_STATUS_STATE_0) {
         BOOT_LOG_DBG("erasing scratch area");
-        rc = boot_erase_region(fap_scratch, 0, flash_area_get_size(fap_scratch));
+        rc = boot_erase_region(fap_scratch, 0, flash_area_get_size(fap_scratch), false);
         assert(rc == 0);
 
         if (bs->idx == BOOT_STATUS_IDX_0) {
@@ -633,7 +633,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
                  * last sector is not being used by the image data so it's safe
                  * to erase.
                  */
-                rc = swap_erase_trailer_sectors(state, fap_primary_slot);
+                rc = swap_scramble_trailer_sectors(state, fap_primary_slot);
                 assert(rc == 0);
 
                 rc = swap_status_init(state, fap_primary_slot, bs);
@@ -641,7 +641,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
                 /* Erase the temporary trailer from the scratch area. */
                 rc = boot_erase_region(fap_scratch, 0,
-                        flash_area_get_size(fap_scratch));
+                        flash_area_get_size(fap_scratch), false);
                 assert(rc == 0);
             }
         }
@@ -665,7 +665,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
              * trailer since in case the trailer spreads over multiple sector erasing the [img_off,
              * img_off + sz) might not erase the entire trailer.
               */
-            rc = swap_erase_trailer_sectors(state, fap_secondary_slot);
+            rc = swap_scramble_trailer_sectors(state, fap_secondary_slot);
             assert(rc == 0);
 
             if (bs->use_scratch) {
@@ -683,7 +683,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
         }
 
         if (erase_sz > 0) {
-            rc = boot_erase_region(fap_secondary_slot, img_off, erase_sz);
+            rc = boot_erase_region(fap_secondary_slot, img_off, erase_sz, false);
             assert(rc == 0);
         }
 
@@ -705,7 +705,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
              * able to write the new trailer. This is not always equivalent to erasing the [img_off,
              * img_off + sz) range when the trailer spreads across multiple sectors.
              */
-            rc = swap_erase_trailer_sectors(state, fap_primary_slot);
+            rc = swap_scramble_trailer_sectors(state, fap_primary_slot);
             assert(rc == 0);
 
             /* Ensure the sector(s) containing the beginning of the trailer won't be erased twice */
@@ -716,7 +716,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
         }
 
         if (erase_sz > 0) {
-            rc = boot_erase_region(fap_primary_slot, img_off, erase_sz);
+            rc = boot_erase_region(fap_primary_slot, img_off, erase_sz, false);
             assert(rc == 0);
         }
 
@@ -778,14 +778,15 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
         BOOT_STATUS_ASSERT(rc == 0);
 
         if (erase_scratch) {
-            rc = boot_erase_region(fap_scratch, 0, flash_area_get_size(fap_scratch));
+           /* Scratch trailers MUST be erased backwards, this is to avoid an issue whereby a
+            * device reboots in the process of erasing the scratch if it erased forwards, if that
+            * happens then the scratch which is partially erased would be wrote back to the
+            * primary slot, causing a corrupt unbootable image
+            */
+            rc = boot_erase_region(fap_scratch, 0, flash_area_get_size(fap_scratch), true);
             assert(rc == 0);
         }
     }
-
-    flash_area_close(fap_primary_slot);
-    flash_area_close(fap_secondary_slot);
-    flash_area_close(fap_scratch);
 }
 
 void

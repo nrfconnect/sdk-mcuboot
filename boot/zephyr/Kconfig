@@ -20,7 +20,6 @@ config MCUBOOT
 config BOOT_USE_MBEDTLS
 	bool
 	# Hidden option
-	default n
 	help
 	  Use mbedTLS for crypto primitives.
 
@@ -33,7 +32,6 @@ config BOOT_USE_PSA_CRYPTO
 config BOOT_USE_TINYCRYPT
 	bool
 	# Hidden option
-	default n
 	# When building for ECDSA, we use our own copy of mbedTLS, so the
 	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
 	# will collide.
@@ -44,7 +42,6 @@ config BOOT_USE_TINYCRYPT
 config BOOT_USE_CC310
 	bool
 	# Hidden option
-	default n
 	# When building for ECDSA, we use our own copy of mbedTLS, so the
 	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
 	# will collide.
@@ -53,15 +50,12 @@ config BOOT_USE_CC310
 
 config BOOT_USE_NRF_CC310_BL
 	bool
-	default n
 
 config NRFXLIB_CRYPTO
 	bool
-	default n
 
 config NRF_CC310_BL
 	bool
-	default n
 
 if BOOT_USE_MBEDTLS && MBEDTLS_BUILTIN
 
@@ -130,7 +124,6 @@ menu "MCUBoot settings"
 
 config SINGLE_APPLICATION_SLOT
 	bool "Single slot bootloader"
-	default n
 	help
 	  Single image area is used for application which means that
 	  uploading a new application overwrites the one that previously
@@ -220,6 +213,10 @@ config BOOT_SIGNATURE_TYPE_RSA
 	select BOOT_USE_MBEDTLS
 	select MBEDTLS
 	select MBEDTLS_ASN1_PARSE_C if MBEDTLS_BUILTIN
+	select MBEDTLS_MD if MBEDTLS_BUILTIN
+	select MBEDTLS_RSA_C if MBEDTLS_BUILTIN
+	select MBEDTLS_PKCS1_V15 if MBEDTLS_BUILTIN
+	select MBEDTLS_PKCS1_V21 if MBEDTLS_BUILTIN
 	select MBEDTLS_KEY_EXCHANGE_RSA_ENABLED if MBEDTLS_BUILTIN
 	select BOOT_ENCRYPTION_SUPPORT
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
@@ -287,23 +284,30 @@ choice BOOT_ED25519_IMPLEMENTATION
 config BOOT_ED25519_TINYCRYPT
 	bool "Use tinycrypt"
 	select BOOT_USE_TINYCRYPT
+	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
 
 config BOOT_ED25519_MBEDTLS
 	bool "Use mbedTLS"
 	select BOOT_USE_MBEDTLS
+	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
+	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
 	select MBEDTLS
-	select MBEDTLS_ASN1_PARSE_C if MBEDTLS_BUILTIN
+	select MBEDTLS_SHA512
+	select MBEDTLS_ASN1_PARSE_C if MBEDTLS_BUILTIN && !BOOT_KEY_IMPORT_BYPASS_ASN
 	select BOOT_AES_MBEDTLS_DEPENDENCIES if MBEDTLS_BUILTIN && BOOT_ENCRYPT_IMAGE
 
 config BOOT_ED25519_PSA
 	bool "Use PSA crypto"
 	select MBEDTLS
 	select BOOT_USE_PSA_CRYPTO
-	select MBEDTLS_PSA_CRYPTO_C
-	select MBEDTLS_ASN1_PARSE_C if MBEDTLS_BUILTIN
 	select PSA_CRYPTO_CLIENT
 	select PSA_CRYPTO_C
+	select MBEDTLS_PSA_CRYPTO_C
+	select MBEDTLS_ASN1_PARSE_C if MBEDTLS_BUILTIN
+	select MBEDTLS_ENABLE_HEAP
+	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
+	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
 	select BOOT_ED25519_PSA_DEPENDENCIES
 	select BOOT_X25519_PSA_DEPENDENCIES if BOOT_ENCRYPT_IMAGE
 
@@ -369,7 +373,6 @@ config MBEDTLS_CFG_FILE
 
 config BOOT_HW_KEY
 	bool "Use HW key for image verification"
-	default n
 	help
 	  Use HW key for image verification, otherwise the public key is embedded
 	  in MCUBoot. If enabled the public key is appended to the signed image
@@ -388,7 +391,6 @@ config BOOT_VALIDATE_SLOT0
 config BOOT_VALIDATE_SLOT0_ONCE
 	bool "Validate image in the primary slot just once after after upgrade"
 	depends on !BOOT_VALIDATE_SLOT0 && SINGLE_APPLICATION_SLOT
-	default n
 	help
 	  If y, the bootloader attempts to validate the signature of the
 	  primary slot only once after an upgrade of the main slot.
@@ -448,7 +450,7 @@ config BOOT_SWAP_USING_OFFSET
 	  the second sector in the second slot instead of the first.
 
 config BOOT_SWAP_USING_MOVE
-	bool "Swap using mode mode without scratch partition"
+	bool "Swap using move mode without scratch partition"
 	help
 	  If y, the swap upgrade is done in two steps, where first every
 	  sector of the primary slot is moved up one sector, then for
@@ -494,7 +496,6 @@ endchoice
 config BOOT_DIRECT_XIP_REVERT
 	bool "Enable the revert mechanism in direct-xip mode"
 	depends on BOOT_DIRECT_XIP
-	default n
 	help
 	  If y, enables the revert mechanism in direct-xip similar to the one in
 	  swap mode. It requires the trailer magic to be added to the signed image.
@@ -505,7 +506,6 @@ config BOOT_DIRECT_XIP_REVERT
 
 config BOOT_BOOTSTRAP
 	bool "Bootstrap erased the primary slot from the secondary slot"
-	default n
 	help
 	  If y, enables bootstraping support. Bootstrapping allows an erased
 	  primary slot to be initialized from a valid image in the secondary slot.
@@ -513,7 +513,6 @@ config BOOT_BOOTSTRAP
 
 config BOOT_SWAP_SAVE_ENCTLV
 	bool "Save encrypted key TLVs instead of plaintext keys in swap metadata"
-	default n
 	depends on BOOT_ENCRYPT_IMAGE
 	help
 	  If y, instead of saving the encrypted image keys in plaintext in the
@@ -642,7 +641,6 @@ config BOOT_MAX_IMG_SECTORS
 
 config BOOT_SHARE_BACKEND_AVAILABLE
 	bool
-	default n
 	help
 	  Hidden open which indicates if there is a sharing backend available.
 
@@ -651,7 +649,6 @@ DT_CHOSEN_BOOTLOADER_INFO := zephyr,bootloader-info
 
 config BOOT_SHARE_BACKEND_AVAILABLE
 	bool
-	default n
 	help
 	  Hidden open which indicates if there is a sharing backend available.
 
@@ -686,7 +683,6 @@ endchoice
 
 menuconfig BOOT_SHARE_DATA
 	bool "Save application specific data"
-	default n
 	depends on BOOT_SHARE_BACKEND_AVAILABLE
 	help
 	  This will allow data to be shared between MCUboot and an application,
@@ -698,7 +694,6 @@ menuconfig BOOT_SHARE_DATA
 
 config BOOT_SHARE_DATA_BOOTINFO
 	bool "Save boot information data"
-	default n
 	depends on BOOT_SHARE_DATA
 	help
 	  This will place information about the MCUboot configuration and
@@ -706,7 +701,6 @@ config BOOT_SHARE_DATA_BOOTINFO
 
 menuconfig MEASURED_BOOT
 	bool "Store the boot state/measurements in shared memory area"
-	default n
 	depends on BOOT_SHARE_BACKEND_AVAILABLE
 	help
 	  If enabled, the bootloader will store certain boot measurements such as
@@ -765,6 +759,32 @@ config BOOT_FIH_PROFILE_HIGH
 
 endchoice
 
+config BOOT_USE_BENCH
+        bool "Enable benchmark code"
+        help
+          If y, adds support for simple benchmarking that can record
+          time intervals between two calls.  The time printed depends
+          on the particular Zephyr target, and is generally ticks of a
+          specific board-specific timer.
+
+module = MCUBOOT
+module-str = MCUBoot bootloader
+source "subsys/logging/Kconfig.template.log_config"
+
+config MCUBOOT_LOG_THREAD_STACK_SIZE
+	int "Stack size for the MCUBoot log processing thread"
+	depends on LOG && !LOG_IMMEDIATE
+	default 2048 if COVERAGE_GCOV
+	default 1024 if NO_OPTIMIZATIONS
+	default 1024 if XTENSA
+	default 4096 if (X86 && X86_64)
+	default 4096 if ARM64
+	default 768
+	help
+	  Set the internal stack size for MCUBoot log processing thread.
+
+menu "USB DFU"
+
 choice BOOT_USB_DFU
 	prompt "USB DFU"
 	default BOOT_USB_DFU_NO
@@ -817,50 +837,28 @@ endif # BOOT_USB_DFU_GPIO
 
 config BOOT_USB_DFU_NO_APPLICATION
 	bool "Stay in bootloader if no application"
+	depends on !BOOT_USB_DFU_NO
 	help
 	  Allows for entering USB DFU recovery mode if there is no bootable
 	  application that the bootloader can jump to.
 
-config BOOT_USE_BENCH
-        bool "Enable benchmark code"
-        default n
-        help
-          If y, adds support for simple benchmarking that can record
-          time intervals between two calls.  The time printed depends
-          on the particular Zephyr target, and is generally ticks of a
-          specific board-specific timer.
+endmenu
 
-module = MCUBOOT
-module-str = MCUBoot bootloader
-source "subsys/logging/Kconfig.template.log_config"
-
-config MCUBOOT_LOG_THREAD_STACK_SIZE
-	int "Stack size for the MCUBoot log processing thread"
-	depends on LOG && !LOG_IMMEDIATE
-	default 2048 if COVERAGE_GCOV
-	default 1024 if NO_OPTIMIZATIONS
-	default 1024 if XTENSA
-	default 4096 if (X86 && X86_64)
-	default 4096 if ARM64
-	default 768
-	help
-	  Set the internal stack size for MCUBoot log processing thread.
+rsource "Kconfig.serial_recovery"
 
 config MCUBOOT_INDICATION_LED
 	bool "Turns on LED indication when device is in DFU"
 	select GPIO
+	depends on MCUBOOT_SERIAL || !BOOT_USB_DFU_NO
 	help
 	  Device device activates the LED while in bootloader mode.
 	  mcuboot-led0 alias must be set in the device's .dts
 	  definitions for this to work.
 
-rsource "Kconfig.serial_recovery"
-
 rsource "Kconfig.firmware_loader"
 
 config BOOT_INTR_VEC_RELOC
 	bool "Relocate the interrupt vector to the application"
-	default n
 	depends on SW_VECTOR_RELAY || CPU_CORTEX_M_HAS_VTOR
 	help
 	  Relocate the interrupt vector to the application before it is started.
@@ -936,6 +934,7 @@ config BOOT_WATCHDOG_FEED_NRFX_WDT
 	imply NRFX_WDT1
 	imply NRFX_WDT30
 	imply NRFX_WDT31
+	imply NRFX_WDT010
 
 config BOOT_IMAGE_ACCESS_HOOKS
 	bool "Enable hooks for overriding MCUboot's native routines"
@@ -1023,6 +1022,45 @@ endif # BOOT_DECOMPRESSION
 
 endif # BOOT_DECOMPRESSION_SUPPORT
 
+config MCUBOOT_STORAGE_WITHOUT_ERASE
+	bool "Support for devices without erase"
+	depends on FLASH_HAS_NO_EXPLICIT_ERASE
+	default y
+	help
+	  Not all devices require erase before write and, depending on driver,
+	  may emulate erase by write, as a way to scramble data rather then
+	  by hardware requirement. This unfortunately means that code that
+	  does erase before write, when not needed, will write device twice
+	  which not only reduces device life time but also doubles time
+	  of any write operation (one write for erase and one write for actual
+	  write).
+	  When this option is enabled, MCUboot will check for type of device
+	  and will avoid erase where not needed.
+
+config MCUBOOT_STORAGE_WITH_ERASE
+	bool "Support for devices with erase"
+	depends on FLASH_HAS_EXPLICIT_ERASE
+	default y
+	help
+	  Support for devices with erase
+
+config MCUBOOT_STORAGE_MINIMAL_SCRAMBLE
+	bool "Do minimal required work to remove data [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	help
+	  In some cases MCUboot has to remove data, which usually means make
+	  it non-viable for MCUboot rather then completely destroyed.
+	  For example when MCUboot does not want to bother with broken image,
+	  in some slot, it will remove it.
+	  The same can be achieved with just removal of header and footer,
+	  leaving the rest of image untouched, as without header MCUboot will
+	  not be able to recognize image in slot as bootable.
+	  When this option is enabled, MCUboot will not attempt to erase
+	  entire slot or image, instead it will just remove enough of
+	  data from slot to not recognize it as image anymore.
+	  Depending on type of device this may be done by erase of minimal
+	  number of pages or overwrite of part of image.
+
 menu "Defaults"
 	# Items in this menu should not be manually set. These options are for modules/sysbuild to
 	# set as defaults to allow MCUboot's default configuration to be set, but still allow it
@@ -1036,8 +1074,6 @@ config BOOT_FIH_PROFILE_DEFAULT_MEDIUM
 
 config BOOT_FIH_PROFILE_DEFAULT_HIGH
 	bool "Default to high fault inject hardening level"
-
-endmenu
 
 endmenu
 
@@ -1055,8 +1091,9 @@ config MCUBOOT_DEVICE_SETTINGS
 config MCUBOOT_DEVICE_CPU_CORTEX_M0
 	# Hidden selector for Cortex-M0 settings
 	bool
-	default n
 	select SW_VECTOR_RELAY if !CPU_CORTEX_M0_HAS_VECTOR_TABLE_REMAP
+
+endmenu
 
 comment "Zephyr configuration options"
 
@@ -1084,7 +1121,6 @@ config USB_DEVICE_PRODUCT
 # use MCUboot's own log configuration
 config MCUBOOT_BOOTUTIL_LIB_OWN_LOG
 	bool
-	default n
 
 config MCUBOOT_VERIFY_IMG_ADDRESS
 	bool "Verify reset address of image in secondary slot"
