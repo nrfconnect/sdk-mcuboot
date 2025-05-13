@@ -254,15 +254,6 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
         goto finish_without_clean;
     }
 
-    rc = compression_lzma->init(NULL);
-    rc = compression_arm_thumb->init(NULL);
-
-    if (rc) {
-        BOOT_LOG_ERR("Decompression library fatal error");
-        rc = BOOT_EBADSTATUS;
-        goto finish_without_clean;
-    }
-
     /* We need a modified header which has the updated sizes, start with the original header */
     memcpy(&modified_hdr, hdr, sizeof(modified_hdr));
 
@@ -274,11 +265,27 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
     if (rc) {
         BOOT_LOG_ERR("Unable to determine decompressed size of compressed image");
         rc = BOOT_EBADIMAGE;
-        goto finish;
+        goto finish_without_clean;
     }
 
     modified_hdr.ih_flags &= ~COMPRESSIONFLAGS;
     modified_hdr.ih_img_size = decompressed_image_size;
+
+    rc = compression_lzma->init(NULL, decompressed_image_size);
+
+    if (rc) {
+        BOOT_LOG_ERR("Decompression library fatal error");
+        rc = BOOT_EBADSTATUS;
+        goto finish_without_clean;
+    }
+
+    rc = compression_arm_thumb->init(NULL, decompressed_image_size);
+
+    if (rc) {
+        BOOT_LOG_ERR("Decompression library fatal error");
+        rc = BOOT_EBADSTATUS;
+        goto finish;
+    }
 
     /* Calculate the protected TLV size, these will not include the decompressed
      * sha/size/signature entries
@@ -1023,7 +1030,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     if (rc) {
         BOOT_LOG_ERR("Invalid/missing image decrypted compressed size value");
         rc = BOOT_EBADIMAGE;
-        goto finish;
+        goto finish_without_clean;
     }
 
     if (IS_ENCRYPTED(hdr)) {
@@ -1046,7 +1053,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
          */
         BOOT_LOG_ERR("Invalid image compression flags: no supported compression found");
         rc = BOOT_EBADIMAGE;
-        goto finish;
+        goto finish_without_clean;
     }
 
     compression_lzma = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_LZMA);
@@ -1057,16 +1064,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
         /* Compression library missing or missing required function pointer */
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
-        goto finish;
-    }
-
-    rc = compression_lzma->init(NULL);
-    rc = compression_arm_thumb->init(NULL);
-
-    if (rc) {
-        BOOT_LOG_ERR("Decompression library fatal error");
-        rc = BOOT_EBADSTATUS;
-        goto finish;
+        goto finish_without_clean;
     }
 
     write_alignment = flash_area_align(fap_dst);
@@ -1078,11 +1076,27 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     if (rc) {
         BOOT_LOG_ERR("Unable to determine decompressed size of compressed image");
         rc = BOOT_EBADIMAGE;
-        goto finish;
+        goto finish_without_clean;
     }
 
     modified_hdr.ih_flags &= ~COMPRESSIONFLAGS;
     modified_hdr.ih_img_size = decompressed_image_size;
+
+    rc = compression_lzma->init(NULL, decompressed_image_size);
+
+    if (rc) {
+        BOOT_LOG_ERR("Decompression library fatal error");
+        rc = BOOT_EBADSTATUS;
+        goto finish_without_clean;
+    }
+
+    rc = compression_arm_thumb->init(NULL, decompressed_image_size);
+
+    if (rc) {
+        BOOT_LOG_ERR("Decompression library fatal error");
+        rc = BOOT_EBADSTATUS;
+        goto finish;
+    }
 
     /* Calculate protected TLV size for target image once items are removed */
     rc = boot_size_protected_tlvs(hdr, fap_src, &protected_tlv_size);
@@ -1400,6 +1414,11 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     }
 
 finish:
+    /* Clean up decompression system */
+    (void)compression_lzma->deinit(NULL);
+    (void)compression_arm_thumb->deinit(NULL);
+
+finish_without_clean:
     memset(decomp_buf, 0, sizeof(decomp_buf));
 
     return rc;
