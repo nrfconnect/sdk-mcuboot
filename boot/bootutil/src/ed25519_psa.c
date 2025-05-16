@@ -126,6 +126,9 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
         }
 
         BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
+        if(status == PSA_ERROR_INVALID_HANDLE) {
+            BOOT_LOG_ERR("This error(-136) could mean that the KMU slot is not provisioned.");
+        }
     }
 
     return ret;
