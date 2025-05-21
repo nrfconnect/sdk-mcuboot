@@ -60,10 +60,16 @@
 _Static_assert(EC_CIPHERKEY_INDEX + BOOT_ENC_KEY_SIZE == EXPECTED_ENC_LEN,
         "Please fix ECIES-P256 component indexes");
 #elif defined(MCUBOOT_ENCRYPT_X25519)
+#if !defined(MCUBOOT_HMAC_SHA512)
 #    define EXPECTED_ENC_TLV    IMAGE_TLV_ENC_X25519
+#elif !defined(MCUBOOT_USE_PSA_CRYPTO)
+#error "Non-PSA code does not support ECIES-X25519 with HMAC-SHA512 at this moment"
+#else
+#    define EXPECTED_ENC_TLV    IMAGE_TLV_ENC_X25519_SHA512
+#endif /* !defined(MCUBOOT_HMAC_SHA512) */
 #    define EC_PUBK_INDEX       (0)
 #    define EC_TAG_INDEX        (32)
-#    define EC_CIPHERKEY_INDEX  (32 + 32)
+#    define EC_CIPHERKEY_INDEX  (EC_TAG_INDEX + BOOT_HMAC_SIZE)
 _Static_assert(EC_CIPHERKEY_INDEX + BOOT_ENC_KEY_SIZE == EXPECTED_ENC_LEN,
         "Please fix ECIES-X25519 component indexes");
 #endif
@@ -422,11 +428,11 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
     bootutil_aes_ctr_context aes_ctr;
     uint8_t tag[BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE];
     uint8_t shared[SHARED_KEY_LEN];
-    uint8_t derived_key[BOOTUTIL_CRYPTO_AES_CTR_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE];
+    uint8_t derived_key[BOOT_ENC_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE];
     uint8_t *cp;
     uint8_t *cpend;
     uint8_t private_key[PRIV_KEY_LEN];
-    uint8_t counter[BOOTUTIL_CRYPTO_AES_CTR_BLOCK_SIZE];
+    uint8_t counter[BOOT_ENC_BLOCK_SIZE];
     uint16_t len;
 #endif
     struct bootutil_key *bootutil_enc_key = NULL;
@@ -530,10 +536,10 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
      * Expand shared secret to create keys for AES-128-CTR + HMAC-SHA256
      */
 
-    len = BOOTUTIL_CRYPTO_AES_CTR_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE;
+    len = BOOT_ENC_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE;
     rc = hkdf(shared, SHARED_KEY_LEN, (uint8_t *)"MCUBoot_ECIES_v1", 16,
             derived_key, &len);
-    if (rc != 0 || len != (BOOTUTIL_CRYPTO_AES_CTR_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE)) {
+    if (rc != 0 || len != (BOOT_ENC_KEY_SIZE + BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE)) {
         return -1;
     }
 
@@ -585,8 +591,8 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
         return -1;
     }
 
-    memset(counter, 0, BOOTUTIL_CRYPTO_AES_CTR_BLOCK_SIZE);
-    rc = bootutil_aes_ctr_decrypt(&aes_ctr, counter, &buf[EC_CIPHERKEY_INDEX], BOOTUTIL_CRYPTO_AES_CTR_KEY_SIZE, 0, enckey);
+    memset(counter, 0, BOOT_ENC_BLOCK_SIZE);
+    rc = bootutil_aes_ctr_decrypt(&aes_ctr, counter, &buf[EC_CIPHERKEY_INDEX], BOOT_ENC_KEY_SIZE, 0, enckey);
     if (rc != 0) {
         bootutil_aes_ctr_drop(&aes_ctr);
         return -1;
