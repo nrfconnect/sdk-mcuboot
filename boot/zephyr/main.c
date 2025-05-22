@@ -638,12 +638,12 @@ int main(void)
 
 #ifdef PM_S1_ADDRESS
 /* MCUBoot is stored in either S0 or S1, protect both */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_S0_ADDRESS)
+#define PROTECT_SIZE (PM_S1_END_ADDRESS - PM_S0_ADDRESS)
 #define PROTECT_ADDR PM_S0_ADDRESS
 #else
 /* There is only one instance of MCUBoot */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_MCUBOOT_ADDRESS)
 #define PROTECT_ADDR PM_MCUBOOT_ADDRESS
+#define PROTECT_SIZE PM_MCUBOOT_SIZE
 #endif
 
     rc = fprotect_area(PROTECT_ADDR, PROTECT_SIZE);
