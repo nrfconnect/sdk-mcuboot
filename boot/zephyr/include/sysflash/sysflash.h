@@ -5,9 +5,9 @@
  */
 
 #if USE_PARTITION_MANAGER
-/* Blocking the rest of the file */
-#define __SYSFLASH_H__
 #include <sysflash/pm_sysflash.h>
+#elif CONFIG_SECURE_BOOT
+#include <sysflash/nsib_sysflash.h>
 #endif
 
 #ifndef __SYSFLASH_H__
