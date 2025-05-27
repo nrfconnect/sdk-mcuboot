@@ -42,6 +42,9 @@
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
+#if defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET)
+#include "swap_priv.h"
+#endif
 
 #if defined(MCUBOOT_DECOMPRESS_IMAGES)
 #include <nrf_compress/implementation.h>
@@ -482,18 +485,8 @@ uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct f
 
     return slot_trailer_off - trailer_padding;
 #elif defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET)
-    (void) state;
-
-    struct flash_sector sector;
-    /* get the last sector offset */
-    int rc = flash_area_get_sector(fap, boot_status_off(fap), &sector);
-    if (rc) {
-        BOOT_LOG_ERR("Unable to determine flash sector of the image trailer");
-        return 0; /* Returning of zero here should cause any check which uses
-                   * this value to fail.
-                   */
-    }
-    return flash_sector_get_off(&sector);
+    (void) fap;
+    return app_max_size(state);
 #elif defined(MCUBOOT_OVERWRITE_ONLY)
     (void) state;
     return boot_swap_info_off(fap);
