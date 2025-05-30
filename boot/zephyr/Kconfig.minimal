@@ -1,0 +1,35 @@
+# Copyright (c) 2025 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+if MCUBOOT
+
+config MCUBOOT_MINIMAL
+  bool "Configuration to achieve minimal size of MCUboot"
+  depends on MCUBOOT
+  default n
+  help
+    Official minimal reference configuration for the most use cases.
+
+if MCUBOOT_MINIMAL
+
+choice MCUBOOT_MINIMAL_VARIANT
+  bool "Variant of MCUboot minimal configuration"
+  default MCUBOOT_MINIMAL_FIRST
+
+config MCUBOOT_MINIMAL_FIRST
+  bool "TODO - first variant"
+  help
+    TODO - first variant
+
+config MCUBOOT_MINIMAL_SECOND
+  bool "TODO - second variant"
+  help
+    TODO - second variant
+
+endchoice
+
+endif
+
+endif
