@@ -21,6 +21,7 @@ use std::{
     env,
     sync::atomic::{AtomicUsize, Ordering},
 };
+use mcuboot_sys::c;
 
 /// A single test, after setting up logging and such.  Within the $body,
 /// $arg will be bound to each device.
@@ -58,8 +59,6 @@ sim_test!(revert_with_fails, make_image(&NO_DEPS, false), run_revert_with_fails(
 sim_test!(perm_with_fails, make_image(&NO_DEPS, true), run_perm_with_fails());
 sim_test!(perm_with_random_fails, make_image(&NO_DEPS, true), run_perm_with_random_fails(5));
 sim_test!(norevert, make_image(&NO_DEPS, true), run_norevert());
-
-#[cfg(not(feature = "max-align-32"))]
 sim_test!(oversized_secondary_slot, make_oversized_secondary_slot_image(), run_oversizefail_upgrade());
 
 sim_test!(status_write_fails_complete, make_image(&NO_DEPS, true), run_with_status_fails_complete());
@@ -92,6 +91,7 @@ test_shell!(dependency_combos, r, {
         let image = r.clone().make_image(&dep, true);
         dump_image(&image, "dependency_combos");
         assert!(!image.run_check_deps(&dep));
+        c::reset_security_counters();
     }
 });
 
