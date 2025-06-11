@@ -104,6 +104,12 @@ out:
 static inline uint32_t
 boot_trailer_info_sz(void)
 {
+#if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) ||      \
+    defined(MCUBOOT_FIRMWARE_LOADER) ||              \
+    defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
+    /* Single image MCUboot modes do not have a trailer */
+    return 0;
+#else
     return (
 #ifdef MCUBOOT_ENC_IMAGES
            /* encryption keys */
@@ -117,6 +123,7 @@ boot_trailer_info_sz(void)
            BOOT_MAX_ALIGN * 4                     +
            BOOT_MAGIC_ALIGN_SIZE
            );
+#endif
 }
 
 /*
@@ -126,7 +133,14 @@ boot_trailer_info_sz(void)
 static inline uint32_t
 boot_status_entry_sz(uint32_t min_write_sz)
 {
+#if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) ||      \
+    defined(MCUBOOT_FIRMWARE_LOADER) ||              \
+    defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
+    /* Single image MCUboot modes do not have a swap status fields */
+    return 0;
+#else
     return BOOT_STATUS_STATE_COUNT * min_write_sz;
+#endif
 }
 
 uint32_t
@@ -145,6 +159,9 @@ int boot_trailer_scramble_offset(const struct flash_area *fa, size_t alignment,
                                  size_t *off)
 {
     int ret = 0;
+
+    BOOT_LOG_DBG("boot_trailer_scramble_offset: flash_area %p, alignment %u",
+                 fa, (unsigned int)alignment);
 
     /* Not allowed to enforce alignment smaller than device allows */
     if (alignment < flash_area_align(fa)) {
@@ -167,6 +184,9 @@ int boot_trailer_scramble_offset(const struct flash_area *fa, size_t alignment,
         *off = flash_area_get_size(fa) - ALIGN_DOWN(boot_trailer_sz(alignment), alignment);
     }
 
+    BOOT_LOG_DBG("boot_trailer_scramble_offset: final alignment %u, offset %u",
+                 (unsigned int)alignment, (unsigned int)*off);
+
     return ret;
 }
 
@@ -177,6 +197,8 @@ int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *o
     const size_t write_block = flash_area_align(fa);
     size_t loff = 0;
     struct flash_sector sector;
+
+    BOOT_LOG_DBG("boot_header_scramble_off_sz: slot %d", slot);
 
     (void)slot;
 #if defined(MCUBOOT_SWAP_USING_OFFSET)
@@ -205,6 +227,8 @@ int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *o
         *size = ALIGN_UP(sizeof(((struct image_header *)0)->ih_magic), write_block);
     }
     *off = loff;
+
+    BOOT_LOG_DBG("boot_header_scramble_off_sz: size %u", (unsigned int)*size);
 
     return ret;
 }
@@ -482,18 +506,31 @@ uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct f
 
     return slot_trailer_off - trailer_padding;
 #elif defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET)
-    (void) state;
+    (void) fap;
 
-    struct flash_sector sector;
-    /* get the last sector offset */
-    int rc = flash_area_get_sector(fap, boot_status_off(fap), &sector);
-    if (rc) {
-        BOOT_LOG_ERR("Unable to determine flash sector of the image trailer");
-        return 0; /* Returning of zero here should cause any check which uses
-                   * this value to fail.
-                   */
-    }
-    return flash_sector_get_off(&sector);
+    /* The slot whose size is used to compute the maximum image size must be the one containing the
+     * padding required for the swap. */
+#ifdef MCUBOOT_SWAP_USING_MOVE
+    size_t slot = BOOT_PRIMARY_SLOT;
+#else
+    size_t slot = BOOT_SECONDARY_SLOT;
+#endif
+
+    const struct flash_area *fap_padded_slot = BOOT_IMG_AREA(state, slot);
+    assert(fap_padded_slot != NULL);
+
+    size_t trailer_sz = boot_trailer_sz(BOOT_WRITE_SZ(state));
+    size_t sector_sz = boot_img_sector_size(state, slot, 0);
+    size_t padding_sz = sector_sz;
+
+    /* The trailer size needs to be sector-aligned */
+    trailer_sz = ALIGN_UP(trailer_sz, sector_sz);
+    BOOT_LOG_DBG("Flash area size %u", flash_area_get_size(fap_padded_slot));
+    BOOT_LOG_DBG("Flash area size %u", flash_area_get_size(fap));
+    BOOT_LOG_DBG("Trailer sz %u\n", trailer_sz);
+    BOOT_LOG_DBG("padding sz %u\n", padding_sz);
+
+    return flash_area_get_size(fap_padded_slot) - trailer_sz - padding_sz;
 #elif defined(MCUBOOT_OVERWRITE_ONLY)
     (void) state;
     return boot_swap_info_off(fap);
@@ -624,12 +661,17 @@ boot_erase_region(const struct flash_area *fa, uint32_t off, uint32_t size, bool
 {
     int rc = 0;
 
+    BOOT_LOG_DBG("boot_erase_region: flash_area %p, offset %d, size %d, backwards == %d",
+                 fa, off, size, (int)backwards);
+
     if (off >= flash_area_get_size(fa) || (flash_area_get_size(fa) - off) < size) {
         rc = -1;
         goto end;
     } else if (device_requires_erase(fa)) {
         uint32_t end_offset = 0;
         struct flash_sector sector;
+
+        BOOT_LOG_DBG("boot_erase_region: device with erase");
 
         if (backwards) {
             /* Get the lowest page offset first */
@@ -704,6 +746,8 @@ boot_erase_region(const struct flash_area *fa, uint32_t off, uint32_t size, bool
                 off += 1;
             }
         }
+    } else {
+        BOOT_LOG_DBG("boot_erase_region: device without erase");
     }
 
 end:
