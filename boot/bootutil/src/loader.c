@@ -663,6 +663,7 @@ boot_verify_slot_dependencies(struct boot_loader_state *state, uint32_t slot)
     }
 
 done:
+    BOOT_LOG_DBG("boot_verify_slot_dependencies: scramble returns with %d", rc);
     return rc;
 }
 
@@ -1712,6 +1713,7 @@ boot_scramble_region(const struct flash_area *fa, uint32_t off, uint32_t size, b
         } else {
             end_offset = ALIGN_DOWN((off + size), write_block);
         }
+        BOOT_LOG_DBG("boot_scramble_region: start offset %u, end offset %u", off, end_offset);
 
         while (true) {
             /* Write over the area to scramble data that is there */
@@ -1732,17 +1734,19 @@ boot_scramble_region(const struct flash_area *fa, uint32_t off, uint32_t size, b
 
                 off -= write_block;
             } else {
-                if (end_offset < off) {
+                off += write_block;
+
+                if (end_offset <= off) {
                     /* Reached the end offset in range and already scrambled it */
                     break;
                 }
 
-                off += write_block;
             }
         }
     }
 
 done:
+    BOOT_LOG_DBG("boot_scramble_region: ended with %d", rc);
     return rc;
 }
 

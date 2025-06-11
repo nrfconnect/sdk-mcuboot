@@ -643,7 +643,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 
     rc = bootutil_tlv_iter_begin(&it, hdr, fap, IMAGE_TLV_ANY, false);
     if (rc) {
-        BOOT_LOG_DBG("bootutil_img_validate: TLV iteration failed");
+        BOOT_LOG_DBG("bootutil_img_validate: TLV iteration failed %d", rc);
         goto out;
     }
 
@@ -652,10 +652,11 @@ bootutil_img_validate(struct boot_loader_state *state,
 #else
     img_sz = it.tlv_end;
 #endif
+    BOOT_LOG_DBG("bootutil_img_validate: TLV off %u, end %u", it.tlv_off, it.tlv_end);
 
     if (img_sz > bootutil_max_image_size(state, fap)) {
         rc = -1;
-	BOOT_LOG_DBG("bootutil_img_validate: TLV beyond image size");
+	BOOT_LOG_DBG("bootutil_img_validate: TLV beyond image size %u %u", img_sz, bootutil_max_image_size(state, fap));
         goto out;
     }
 

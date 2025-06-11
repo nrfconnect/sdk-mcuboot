@@ -525,6 +525,10 @@ uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct f
 
     /* The trailer size needs to be sector-aligned */
     trailer_sz = ALIGN_UP(trailer_sz, sector_sz);
+    BOOT_LOG_DBG("Flash area size %u", flash_area_get_size(fap_padded_slot));
+    BOOT_LOG_DBG("Flash area size %u", flash_area_get_size(fap));
+    BOOT_LOG_DBG("Trailer sz %u\n", trailer_sz);
+    BOOT_LOG_DBG("padding sz %u\n", padding_sz);
 
     return flash_area_get_size(fap_padded_slot) - trailer_sz - padding_sz;
 #elif defined(MCUBOOT_OVERWRITE_ONLY)
