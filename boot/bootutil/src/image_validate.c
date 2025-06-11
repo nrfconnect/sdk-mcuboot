@@ -50,10 +50,6 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #include <compression/decompression.h>
 #endif
 
-#include "bootutil/bootutil_log.h"
-
-BOOT_LOG_MODULE_DECLARE(mcuboot);
-
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
