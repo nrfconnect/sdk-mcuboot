@@ -64,11 +64,16 @@ endif()
 # Zephyr port-specific sources.
 zephyr_library_sources(
   main.c
-  io.c
   flash_map_extended.c
   os.c
   keys.c
   )
+
+if(CONFIG_NCS_BM)
+  zephyr_library_sources(io_bm.c)
+else()
+  zephyr_library_sources(io.c)
+endif()
 
 if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
   zephyr_library_sources(
@@ -148,9 +153,15 @@ elseif(CONFIG_SINGLE_APPLICATION_SLOT)
     )
   zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
 elseif(CONFIG_BOOT_FIRMWARE_LOADER)
-  zephyr_library_sources(
-    ${BOOT_DIR}/zephyr/firmware_loader.c
-    )
+  if(CONFIG_NCS_BM)
+    zephyr_library_sources(
+      ${BOOT_DIR}/zephyr/firmware_loader_bm.c
+      )
+  else()
+    zephyr_library_sources(
+      ${BOOT_DIR}/zephyr/firmware_loader.c
+      )
+  endif()
   zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
 else()
   zephyr_library_sources(
