@@ -156,9 +156,15 @@ elseif(CONFIG_SINGLE_APPLICATION_SLOT)
     )
   zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
 elseif(CONFIG_BOOT_FIRMWARE_LOADER)
-  zephyr_library_sources(
-    ${BOOT_DIR}/zephyr/firmware_loader.c
-    )
+  if(CONFIG_BM_INSTALL)
+    zephyr_library_sources(
+      ${BOOT_DIR}/zephyr/firmware_loader_bm.c
+      )
+  else()
+    zephyr_library_sources(
+      ${BOOT_DIR}/zephyr/firmware_loader.c
+      )
+  endif()
   zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
 else()
   zephyr_library_sources(
