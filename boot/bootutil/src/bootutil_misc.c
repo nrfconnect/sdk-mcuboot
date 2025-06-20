@@ -457,7 +457,7 @@ get_first_trailer_sector_end_off(struct boot_loader_state *state, size_t slot, s
 
 uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct flash_area *fap)
 {
-#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+#if defined(CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) && CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
     if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
         /* NSIB is a direct upgrade without any status or trailer, get the full size of the
          * primary slot.
