@@ -1203,4 +1203,5 @@ config MCUBOOT_VERIFY_IMG_ADDRESS
 	  also be useful when BOOT_DIRECT_XIP is enabled, to ensure that the image
 	  linked at the correct address is loaded.
 
+rsource "Kconfig.minimal"
 source "Kconfig.zephyr"
