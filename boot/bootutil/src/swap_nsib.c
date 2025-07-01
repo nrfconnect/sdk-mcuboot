@@ -62,7 +62,7 @@ void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs)
     rc = swap_scramble_trailer_sectors(state, fap_sec);
     assert(rc == 0);
 
-    rc = boot_erase_region(fap_sec, 0, MIN((fap_pri->fa_size + sector_sz), fap_sec->fa_size), false);
+    rc = boot_scramble_region(fap_sec, 0, MIN((fap_pri->fa_size + sector_sz), fap_sec->fa_size), false);
     assert(rc == 0);
 
     flash_area_close(fap_pri);
