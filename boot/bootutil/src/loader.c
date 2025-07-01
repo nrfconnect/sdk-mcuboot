@@ -3075,7 +3075,6 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
              */
         }
 
-#ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
 #ifdef PM_S1_ADDRESS
         /* Patch needed for NCS. Image 1 primary is the currently
          * executing MCUBoot image, and is therefore already validated by NSIB and
@@ -3083,6 +3082,10 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
          */
         bool image_validated_by_nsib = BOOT_CURR_IMG(state) ==
                                        CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER;
+#endif
+
+#ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
+#ifdef PM_S1_ADDRESS
         if (!image_validated_by_nsib)
 #endif
         {
