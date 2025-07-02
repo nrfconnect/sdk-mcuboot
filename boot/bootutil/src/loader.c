@@ -1331,15 +1331,19 @@ check_validity:
     if (fap == BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT)) {
         const struct flash_area *pri_fa = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
         struct image_header *secondary_hdr = boot_img_hdr(state, slot);
-        uint32_t reset_value = 0;
-        uint32_t reset_addr = secondary_hdr->ih_hdr_size + sizeof(reset_value);
+        uint32_t internal_img_addr = 0; /* either the reset handler addres or the image beginning addres */
         uint32_t min_addr, max_addr;
         bool check_addresses = false;
 
-        if (flash_area_read(fap, reset_addr, &reset_value, sizeof(reset_value)) != 0) {
+#ifdef CONFIG_MCUBOOT_USE_CHECK_LOAD_ADDR
+        internal_img_addr = secondary_hdr->ih_load_addr;
+#else
+        if (flash_area_read(fap, secondary_hdr->ih_hdr_size + sizeof(internal_img_addr),
+            &internal_img_addr, sizeof(internal_img_addr)) != 0) {
             fih_rc = FIH_NO_BOOTABLE_IMAGE;
             goto out;
         }
+#endif
 
 #ifdef PM_CPUNET_APP_ADDRESS
         /* The primary slot for the network core is emulated in RAM.
@@ -1380,7 +1384,7 @@ check_validity:
             check_addresses = true;
         }
 
-        if (check_addresses == true && (reset_value < min_addr || reset_value > max_addr)) {
+        if (check_addresses == true && (internal_img_addr < min_addr || internal_img_addr > max_addr)) {
             BOOT_LOG_ERR("Reset address of image in secondary slot is not in the primary slot");
             BOOT_LOG_ERR("Erasing image from secondary slot");
 
@@ -1597,6 +1601,17 @@ static inline void sec_slot_cleanup_if_unusable(void)
 #endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
           defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
 
+#define IS_IN_RANGE_CPUNET_APP_ADDR(_addr) ((_addr) >= PM_CPUNET_APP_ADDRESS && (_addr) < PM_CPUNET_APP_END_ADDRESS)
+#define _IS_IN_RANGE_S_VARIANT_ADDR(_addr, x) ((_addr) >= PM_S##x_ADDRESS && (_addr) <= (PM_S##x_ADDRESS + PM_S##x_SIZE))
+#if (CONFIG_NCS_IS_VARIANT_IMAGE)
+    #define IS_IN_RANGE_S_ALTERNATE_ADDR(_addr) _IS_IN_RANGE_S_VARIANT_ADDR(_addr, 0)
+    #define IS_IN_RANGE_S_CURRENT_ADDR(_addr)   _IS_IN_RANGE_S_VARIANT_ADDR(_addr, 1)
+#else
+    #define IS_IN_RANGE_S_ALTERNATE_ADDR(_addr) _IS_IN_RANGE_S_VARIANT_ADDR(_addr, 1)
+    #define IS_IN_RANGE_S_CURRENT_ADDR(_addr)   _IS_IN_RANGE_S_VARIANT_ADDR(_addr, 0)
+#endif
+#define IS_IN_RANGE_IMAGE_ADDR(_addr, _fa) ((_addr) >= _fa->fa_off && (_addr) < (_fa->fa_off + _fa->fa_size))
+
 /**
  * Determines which swap operation to perform, if any.  If it is determined
  * that a swap operation is required, the image in the secondary slot is checked
@@ -1620,8 +1635,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
     const struct flash_area *secondary_fa =
         BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
-    uint32_t reset_addr = 0;
+    uint32_t internal_img_addr = 0; /* either the reset handler addres or the image beginning addres */
     int rc = 0;
+
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
      * whether the update candidate in the secondary slot is intended for
@@ -1631,18 +1647,22 @@ boot_validated_swap_type(struct boot_loader_state *state,
      */
 
     if (hdr->ih_magic == IMAGE_MAGIC) {
+#ifdef CONFIG_MCUBOOT_USE_CHECK_LOAD_ADDR
+        internal_img_addr = hdr->ih_load_addr;
+#else
         rc = flash_area_read(secondary_fa, hdr->ih_hdr_size +
-                             sizeof(uint32_t), &reset_addr,
-                             sizeof(reset_addr));
+                             sizeof(uint32_t), &internal_img_addr,
+                             sizeof(internal_img_addr));
         if (rc != 0) {
             return BOOT_SWAP_TYPE_FAIL;
         }
+#endif /* CONFIG_MCUBOOT_USE_CHECK_LOAD_ADDR */
 
         sec_slot_touch(state);
 
 #ifdef PM_S1_ADDRESS
 #ifdef PM_CPUNET_B0N_ADDRESS
-        if(!(reset_addr >= PM_CPUNET_APP_ADDRESS && reset_addr < PM_CPUNET_APP_END_ADDRESS))
+        if(!IS_IN_RANGE_CPUNET_APP_ADDR(internal_img_addr))
 #endif
         {
             const struct flash_area *primary_fa;
@@ -1654,11 +1674,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
             }
 
             /* Check start and end of primary slot for current image */
-#if (CONFIG_NCS_IS_VARIANT_IMAGE)
-            if (reset_addr >= PM_S0_ADDRESS && reset_addr <= (PM_S0_ADDRESS + PM_S0_SIZE)) {
-#else
-            if (reset_addr >= PM_S1_ADDRESS && reset_addr <= (PM_S1_ADDRESS + PM_S1_SIZE)) {
-#endif
+            if (IS_IN_RANGE_S_ALTERNATE_ADDR(internal_img_addr)) {
                 if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
                     /* This is not the s0/s1 upgrade image but the application image, pretend
                      * there is no image so the NSIB update can be loaded
@@ -1667,18 +1683,14 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 }
 
                 owner_nsib[BOOT_CURR_IMG(state)] = true;
-#if (CONFIG_NCS_IS_VARIANT_IMAGE)
-            } else if (reset_addr >= PM_S1_ADDRESS && reset_addr <= (PM_S1_ADDRESS + PM_S1_SIZE)) {
-#else
-            } else if (reset_addr >= PM_S0_ADDRESS && reset_addr <= (PM_S0_ADDRESS + PM_S0_SIZE)) {
-#endif
+            } else if (IS_IN_RANGE_S_CURRENT_ADDR(internal_img_addr)) {
                 /* NSIB upgrade but for the wrong slot, must be erased */
                 BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
                 flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
                 sec_slot_untouch(state);
                 BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
                 return BOOT_SWAP_TYPE_FAIL;
-            } else if (reset_addr < primary_fa->fa_off || reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
+            } else if (!IS_IN_RANGE_IMAGE_ADDR(internal_img_addr, primary_fa)) {
                 /* The image in the secondary slot is not intended for any */
                 return BOOT_SWAP_TYPE_NONE;
             }
@@ -1715,8 +1727,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
          * update and indicate to the caller of this function that no update is
          * available
          */
-        if (upgrade_valid && reset_addr >= PM_CPUNET_APP_ADDRESS &&
-            reset_addr < PM_CPUNET_APP_END_ADDRESS) {
+        if (upgrade_valid && IS_IN_RANGE_CPUNET_APP_ADDR(internal_img_addr)) {
             struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
