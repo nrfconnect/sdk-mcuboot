@@ -839,6 +839,13 @@ int main(void)
 
     mcuboot_status_change(MCUBOOT_STATUS_BOOTABLE_IMAGE_FOUND);
 
+    /* From this point MCUboot does not need access to crypto keys.
+     * Clean up backend key objects and apply key access policies that
+     * will take effect from now through entire boot session and application
+     * run.
+     */
+    nrf_crypto_keys_housekeeping();
+
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
 
 #ifdef PM_S1_ADDRESS
