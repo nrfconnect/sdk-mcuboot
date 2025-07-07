@@ -69,7 +69,7 @@ zephyr_library_sources(
   keys.c
   )
 
-if(CONFIG_NRF_BM)
+if(CONFIG_NCS_BM)
   zephyr_library_sources(io_bm.c)
 else()
   zephyr_library_sources(io.c)
@@ -161,7 +161,7 @@ elseif(CONFIG_SINGLE_APPLICATION_SLOT)
     )
   zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
 elseif(CONFIG_BOOT_FIRMWARE_LOADER)
-  if(CONFIG_NRF_BM)
+  if(CONFIG_NCS_BM)
     zephyr_library_sources(
       ${BOOT_DIR}/zephyr/firmware_loader_bm.c
       )
