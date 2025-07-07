@@ -257,7 +257,7 @@ invalid_firmware_loader:
     } else if (boot_firmware_loader == true && softdevice_image_valid == true &&
                firmware_loader_image_valid == true) {
         /* Boot firmware loader */
-        BOOT_LOG_INF("Bootinf firmware loader");
+        BOOT_LOG_INF("Booting firmware loader");
         rsp->br_image_off = flash_area_get_off(&fa_firmware_loader);
         rsp->br_hdr = &hdr_firmware_loader;
     } else if (app_installer_image_valid == true && softdevice_image_valid == true) {
