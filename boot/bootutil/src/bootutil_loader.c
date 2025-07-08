@@ -47,6 +47,10 @@
 #endif
 #include "bootutil/bootutil_log.h"
 
+#if defined(CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS)
+#include <zephyr/kernel.h>
+#endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS */
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 bool
@@ -199,8 +203,36 @@ boot_check_image(struct boot_loader_state *state, struct boot_status *bs, int sl
     }
 #endif
 
-    FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
-             NULL, 0, NULL);
+    for (int i = 1; i <= CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT; i++ ) {
+#if CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
+      BOOT_LOG_DBG("Image validation attempt %d/%d", i, CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT);
+#endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
+
+        FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
+                NULL, 0, NULL);
+        if (FIH_EQ(fih_rc, FIH_SUCCESS)) {
+#if CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
+          BOOT_LOG_DBG("Image validation attempt %d/%d success", i, CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT);
+#endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
+          break;
+        } else {
+#if CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
+          BOOT_LOG_WRN("Image validation attempt %d/%d failure: %d",
+                       i,
+                       CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT, fih_rc);
+#endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
+
+          if (i < CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT) {
+#if defined(CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS)
+#if CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
+            BOOT_LOG_DBG("Waiting %d ms before next attempt",
+                         CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS);
+#endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
+            k_busy_wait(CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS * 1000);
+#endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS */
+          }
+        }
+    }
 
     FIH_RET(fih_rc);
 }
