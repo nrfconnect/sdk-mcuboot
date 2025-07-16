@@ -316,8 +316,13 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
       )
     endif()
 
+  elseif(NOT CONFIG_BOOT_SIGNATURE_USING_KMU)
     zephyr_library_sources(
       ${BOOT_DIR}/bootutil/src/ed25519_psa.c
+    )
+  else()
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/ed25519_psa_kmu.c
     )
   endif()
 endif()
