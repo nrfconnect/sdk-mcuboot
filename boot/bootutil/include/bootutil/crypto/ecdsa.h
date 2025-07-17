@@ -134,6 +134,7 @@ static int bootutil_import_key(uint8_t **cp, uint8_t *end)
 }
 #endif /* (MCUBOOT_USE_TINYCRYPT || MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310) && !MCUBOOT_USE_PSA_CRYPTO */
 
+#ifndef MCUBOOT_USE_PSA_CRYPTO
 /*
  * cp points to ASN1 string containing an integer.
  * Verify the tag, and that the length is 32 bytes. Helper function.
@@ -183,6 +184,7 @@ static int bootutil_decode_sig(uint8_t signature[NUM_ECC_BYTES * 2], uint8_t *cp
     }
     return 0;
 }
+#endif /* !MCUBOOT_USE_PSA_CRYPTO */
 
 #if defined(MCUBOOT_USE_TINYCRYPT)
 typedef uintptr_t bootutil_ecdsa_context;
