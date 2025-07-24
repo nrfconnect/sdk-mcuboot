@@ -62,7 +62,7 @@
 #endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS */
 #endif
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS)
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
 #include <dfu/pcd.h>
 #ifdef CONFIG_PCD_READ_NETCORE_APP_VERSION
 #include <fw_info_bare.h>
