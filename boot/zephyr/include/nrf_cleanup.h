@@ -26,7 +26,7 @@ void nrf_cleanup_ns_ram(void);
  * crypto backend and apply key policies that should take effect after
  * MCUboot no longer needs access to keys.
  */
-#if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+#if defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_PSA_CORE_LITE)
 extern void nrf_crypto_keys_housekeeping(void);
 #else
 #define nrf_crypto_keys_housekeeping() do {} while (0)
