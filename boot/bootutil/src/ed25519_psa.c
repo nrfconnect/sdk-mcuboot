@@ -165,32 +165,4 @@ out:
     return ret;
 }
 #endif /* CONFIG_BOOT_KMU_KEYS_REVOCATION */
-
-void nrf_crypto_keys_housekeeping(void)
-{
-    psa_status_t status;
-
-    /* We will continue through all keys, even if we have error while
-     * processing any of it. Only doing BOOT_LOG_DBG, as we do not
-     * really want to inform on failures to lock.
-     */
-    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; ++i) {
-        psa_key_attributes_t attr;
-
-        status = psa_get_key_attributes(kmu_key_ids[i], &attr);
-        BOOT_LOG_DBG("KMU key 0x%x(%d) attr query status == %d",
-                     kmu_key_ids[i], i, status);
-
-        if (status == PSA_SUCCESS) {
-            status = cracen_kmu_block(&attr);
-            BOOT_LOG_DBG("KMU key lock status == %d", status);
-        }
-
-        status = psa_purge_key(kmu_key_ids[i]);
-        BOOT_LOG_DBG("KMU key 0x%x(%d) purge status == %d",
-                     kmu_key_ids[i], i, status);
-
-    }
-}
-
 #endif
