@@ -185,11 +185,6 @@ void nrf_crypto_keys_housekeeping(void)
             status = cracen_kmu_block(&attr);
             BOOT_LOG_DBG("KMU key lock status == %d", status);
         }
-
-        status = psa_purge_key(kmu_key_ids[i]);
-        BOOT_LOG_DBG("KMU key 0x%x(%d) purge status == %d",
-                     kmu_key_ids[i], i, status);
-
     }
 }
 
