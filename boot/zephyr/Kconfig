@@ -1214,6 +1214,18 @@ config MCUBOOT_BOOT_BANNER
 config BOOT_BANNER_STRING
         default "Using Zephyr OS build" if MCUBOOT_BOOT_BANNER
 
+config MCUBOOT_USE_TLV_ALLOW_LIST
+	bool "Check unprotected TLVs against allow list"
+	default y
+	help
+	  Every unprotected TLV will be checked against list of allowed TLVs,
+	  which is compiled in and depends on configuration; an image that
+	  contain TLV not present on the list will be automaticaly rejected.
+	  This is additional check, as MCUboot will not be parsing TLVs it
+	  has not been compiled to parse in the first place.
+	  Disabling this option will cut down MCUboot size.
+	  The Kconfig controlls MCUboot configuration option MCUBOOT_USE_TLV_ALLOW_LIST.
+
 config BOOT_DECOMPRESSION_SUPPORT
 	bool
 	depends on NRF_COMPRESS && NRF_COMPRESS_DECOMPRESSION && (NRF_COMPRESS_LZMA_VERSION_LZMA1 || NRF_COMPRESS_LZMA_VERSION_LZMA2)
