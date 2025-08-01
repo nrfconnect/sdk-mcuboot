@@ -75,6 +75,12 @@
 
 #include "bootutil/boot_hooks.h"
 
+#include "io/io.h"
+
+extern bool image_uploaded;
+
+extern void do_boot(struct boot_rsp *rsp);
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #ifndef ARRAY_SIZE
@@ -1054,6 +1060,46 @@ out:
 #endif
 
     flash_area_close(fap);
+
+    if (image_uploaded == true) 
+    {
+        io_led_set(0);
+        k_msleep(200);
+        io_led_set(1);
+        k_msleep(200);
+        
+        io_led_set(0);
+        k_msleep(200);
+        io_led_set(1);
+        k_msleep(200);
+        
+        io_led_set(0);
+        k_msleep(200);
+        io_led_set(1);
+        k_msleep(200);
+        
+        io_led_set(0);
+        k_msleep(200);
+        io_led_set(1);
+        k_msleep(200);
+        
+        io_led_set(0);
+        k_msleep(200);
+        io_led_set(1);
+        k_msleep(200);
+        io_led_set(0);
+        k_msleep(200);
+
+        struct boot_rsp rsp;
+        memset(&rsp, 0, sizeof(rsp));
+
+        // Ask MCUboot to select the best image to boot (usually slot 0)
+        if (boot_go(&rsp) == 0) {
+            BOOT_LOG_INF("Bootable image found. Jumping...");
+            do_boot(&rsp);  
+            // This does not return
+        }
+    }
 }
 
 #ifdef MCUBOOT_BOOT_MGMT_ECHO
