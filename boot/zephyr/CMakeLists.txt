@@ -496,6 +496,10 @@ if(CONFIG_MCUBOOT_CLEANUP_ARM_CORE)
   )
 endif()
 
+if(CONFIG_SOC_NRF54H20_PM_S2RAM_OVERRIDE)
+  zephyr_library_sources(${BOOT_DIR}/zephyr/nrf54h20_custom_s2ram.c)
+endif()
+
 if(CONFIG_MCUBOOT_BOOT_BANNER)
   # Replace Zephyr's boot banner with the MCUboot one
   zephyr_sources(kernel/banner.c)
