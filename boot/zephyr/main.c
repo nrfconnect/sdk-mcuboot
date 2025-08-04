@@ -161,7 +161,7 @@ struct arm_vector_table {
     uint32_t reset;
 };
 
-static void do_boot(struct boot_rsp *rsp)
+void do_boot(struct boot_rsp *rsp)
 {
     struct arm_vector_table *vt;
 
@@ -452,6 +452,19 @@ void zephyr_boot_log_stop(void)
         */
 
 #ifdef CONFIG_MCUBOOT_SERIAL
+
+#include <zephyr/sys/reboot.h>
+#include <zephyr/usb/usbd.h>
+
+static void on_upload_done(int slot, int status)
+{
+    printk("Upload done. Status=%d, slot=%d\n", status, slot);
+
+    if (status == 0) {
+        sys_reboot(SYS_REBOOT_WARM);
+    }
+}
+
 static void boot_serial_enter()
 {
     int rc;
@@ -469,11 +482,30 @@ static void boot_serial_enter()
     __ASSERT(0, "Bootloader serial process was terminated unexpectedly.\n");
 }
 #endif
+BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
+            "Console device is not ACM CDC UART device");
 
 int main(void)
 {
     struct boot_rsp rsp;
     int rc;
+
+    io_led_init();
+
+    BOOT_LOG_INF("MCUboot start: checking image BOOT_LOG_INF...");
+    k_sleep(K_MSEC(200));
+
+    rc = boot_go(&rsp);
+    if (rc != 0) {
+        BOOT_LOG_ERR("No valid image found, entering serial recovery mode");
+        boot_serial_enter();
+        /* Never returns if DFU starts. Otherwise, system will reboot. */
+        sys_reboot(SYS_REBOOT_COLD);
+    }
+
+    BOOT_LOG_INF("Valid image found, booting...");
+    do_boot(&rsp);
+
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
     MCUBOOT_WATCHDOG_SETUP();
