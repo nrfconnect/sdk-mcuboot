@@ -148,6 +148,25 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #include <nrf_cleanup.h>
 #endif
 
+#include <zephyr/linker/linker-defs.h>
+#define CLEANUP_RAM_GAP_START ((int)__ramfunc_region_start)
+#define CLEANUP_RAM_GAP_SIZE ((int) (__ramfunc_end - __ramfunc_region_start))
+
+#if defined(CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX)
+/* Disabling R_X has to be done while running from RAM for obvious reasons.
+ * Moreover as a last step before jumping to application it must work even after
+ * RAM has been cleared, therefore these operations are performed while executing from RAM.
+ * RAM cleanup ommits portion of the memory where code lives.
+ */
+#include <hal/nrf_rramc.h>
+
+#define RRAMC_REGION_RWX_LSB 0
+#define RRAMC_REGION_RWX_WIDTH 3
+#define RRAMC_REGION_TO_LOCK_ADDR NRF_RRAMC->REGION[4].CONFIG
+#define RRAMC_REGION_TO_LOCK_ADDR_H (((uint32_t)(&(RRAMC_REGION_TO_LOCK_ADDR))) >> 16)
+#define RRAMC_REGION_TO_LOCK_ADDR_L (((uint32_t)(&(RRAMC_REGION_TO_LOCK_ADDR))) & 0x0000fffful)
+#endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
+
 BOOT_LOG_MODULE_REGISTER(mcuboot);
 
 void os_heap_init(void);
@@ -162,6 +181,84 @@ struct arm_vector_table {
     uint32_t msp;
     uint32_t reset;
 };
+
+static void __ramfunc jump_in(uint32_t reset)
+{
+        __asm__ volatile (
+                /* reset -> r0 */
+                "   mov  r0, %0\n"
+#ifdef CONFIG_MCUBOOT_CLEANUP_RAM
+                /* Base to write -> r1 */
+                "   mov  r1, %1\n"
+                /* Size to write -> r2 */
+                "   mov  r2, %2\n"
+                /* Value to write -> r3 */
+                "   movw r3, %5\n"
+                /* gap start */
+                "   mov  r4, %3\n"
+                /* gap size */
+                "   mov  r5, %4\n"
+                "clear:\n"
+                "   subs r6, r4, r1\n"
+                "   cbnz r6, skip_gap\n"
+                "   add  r1, r5\n"
+                "skip_gap:\n"
+                "   str  r3, [r1]\n"
+                "   add  r1, r1, #1\n"
+                "   sub  r2, r2, #1\n"
+                "   cbz  r2, clear_end\n"
+                "   b    clear\n"
+                "clear_end:\n"
+                "   dsb\n"
+#ifdef CONFIG_MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
+                "   b       clear_end\n"
+#endif /* CONFIG_MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP */
+#endif /* CONFIG_MCUBOOT_CLEANUP_RAM */
+
+#ifdef CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
+                ".thumb_func\n"
+                "region_disable_rwx:\n"
+                "   movw r1, %6\n"
+                "   movt r1, %7\n"
+                "   ldr  r2, [r1]\n"
+                /* Size of the region should be set at this point
+                 * by NSIB's DISABLE_NEXT_W.
+                 * If not, set it according partition size.
+                 */
+                "   ands r4, r2, %12\n"
+                "   cbnz r4, clear_rwx\n"
+                "   movt r2, %8\n"
+                "clear_rwx:\n"
+                "   bfc  r2, %9, %10\n"
+                /* Disallow further modifications */
+                "   orr  r2, %11\n"
+                "   str  r2, [r1]\n"
+                "   dsb\n"
+                /* Next assembly line is important for current function */
+
+ #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
+
+                /* Jump to reset vector of an app */
+                "   bx   r0\n"
+                :
+                : "r" (reset),
+                  "r" (CONFIG_SRAM_BASE_ADDRESS),
+                  "i" (CONFIG_SRAM_SIZE * 1024),
+                  "r" (CLEANUP_RAM_GAP_START),
+                  "r" (CLEANUP_RAM_GAP_SIZE),
+                  "i" (0)
+#ifdef CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
+                  , "i" (RRAMC_REGION_TO_LOCK_ADDR_L),
+                  "i" (RRAMC_REGION_TO_LOCK_ADDR_H),
+                  "i" (CONFIG_PM_PARTITION_SIZE_B0_IMAGE / 1024),
+                  "i" (RRAMC_REGION_RWX_LSB),
+                  "i" (RRAMC_REGION_RWX_WIDTH),
+                  "i" (RRAMC_REGION_CONFIG_LOCK_Msk),
+                  "i" (RRAMC_REGION_CONFIG_SIZE_Msk)
+#endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
+                : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "memory"
+        );
+}
 
 static void do_boot(struct boot_rsp *rsp)
 {
@@ -273,37 +370,7 @@ static void do_boot(struct boot_rsp *rsp)
     __set_CONTROL(0x00); /* application will configures core on its own */
     __ISB();
 #endif
-#if CONFIG_MCUBOOT_CLEANUP_RAM
-    __asm__ volatile (
-        /* vt->reset -> r0 */
-        "   mov     r0, %0\n"
-        /* base to write -> r1 */
-        "   mov     r1, %1\n"
-        /* size to write -> r2 */
-        "   mov     r2, %2\n"
-        /* value to write -> r3 */
-        "   mov     r3, %3\n"
-        "clear:\n"
-        "   str     r3, [r1]\n"
-        "   add     r1, r1, #4\n"
-        "   sub     r2, r2, #4\n"
-        "   cbz     r2, out\n"
-        "   b       clear\n"
-        "out:\n"
-        "   dsb\n"
-#if CONFIG_MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
-        "   b       out\n"
-#endif /*CONFIG_MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP */
-        /* jump to reset vector of an app */
-        "   bx      r0\n"
-        :
-        : "r" (vt->reset), "i" (CONFIG_SRAM_BASE_ADDRESS),
-          "i" (CONFIG_SRAM_SIZE * 1024), "i" (0)
-        : "r0", "r1", "r2", "r3", "memory"
-    );
-#else
-    ((void (*)(void))vt->reset)();
-#endif
+    jump_in(vt->reset);
 }
 
 #elif defined(CONFIG_XTENSA) || defined(CONFIG_RISCV)
