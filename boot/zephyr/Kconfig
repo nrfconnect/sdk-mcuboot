@@ -1079,6 +1079,7 @@ config MCUBOOT_HW_DOWNGRADE_PREVENTION
 config MCUBOOT_HW_DOWNGRADE_PREVENTION_COUNTER_LIMITED
 	bool "HW based downgrade prevention counter has limited number of updates"
 	depends on MCUBOOT_HW_DOWNGRADE_PREVENTION
+	default y if SOC_NRF5340_CPUAPP || SOC_SERIES_NRF91X || SOC_SERIES_NRF54LX
 	help
 	  When this option is set, the hardware downgrade prevention counter
 	  has limited number of updates. This option will enable checking
