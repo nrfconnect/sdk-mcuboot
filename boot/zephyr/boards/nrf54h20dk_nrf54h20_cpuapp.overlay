@@ -51,3 +51,14 @@
 &gpio_pad_group9 {
 	status = "disabled";
 };
+
+/*
+ * Copy from app.overlay as the board overlay take precedence
+ * over app overlay.
+ */
+
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+};
