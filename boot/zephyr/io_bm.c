@@ -89,13 +89,31 @@ void io_led_set(int value)
 
 bool io_detect_pin(void)
 {
+    int rc;
     bool pin_active;
 
-    nrf_gpio_cfg_input(BOARD_PIN_BTN_0, BM_BUTTONS_PIN_PULLUP);
+    rc = bm_buttons_init(
+            &(struct bm_buttons_config){
+                .pin_number = BOARD_PIN_BTN_0,
+                .active_state = BM_BUTTONS_ACTIVE_LOW,
+                .pull_config = BM_BUTTONS_PIN_PULLUP,
+            },
+            1,
+            BM_BUTTONS_DETECTION_DELAY_MIN_US);
+    if (rc) {
+        BOOT_LOG_ERR("Failed to initialize buttons: %d", rc);
+        return false;
+    }
 
-    pin_active = (bool)nrf_gpio_pin_read(BOARD_PIN_BTN_0);
+    rc = bm_buttons_enable();
+    if (rc) {
+        BOOT_LOG_ERR("Failed to enable button detection: %d", rc);
+        return false;
+    }
 
-    if (!pin_active) {
+    pin_active = bm_buttons_is_pressed(BOARD_PIN_BTN_0);
+
+    if (pin_active) {
         if (BUTTON_0_DETECT_DELAY > 0) {
 #ifdef CONFIG_MULTITHREADING
             k_sleep(K_MSEC(50));
@@ -107,15 +125,13 @@ bool io_detect_pin(void)
             int64_t timestamp = k_uptime_get();
 
             for(;;) {
-                uint32_t delta;
-
-                pin_active = (bool)nrf_gpio_pin_read(BOARD_PIN_BTN_0);
+                pin_active = bm_buttons_is_pressed(BOARD_PIN_BTN_0);
 
                 /* Get delta from when this started */
-                delta = k_uptime_get() -  timestamp;
+                uint32_t delta = k_uptime_get() -  timestamp;
 
                 /* If not pressed OR if pressed > debounce period, stop. */
-                if (delta >= BUTTON_0_DETECT_DELAY || pin_active) {
+                if (delta >= BUTTON_0_DETECT_DELAY || !pin_active) {
                     break;
                 }
 
@@ -129,7 +145,18 @@ bool io_detect_pin(void)
         }
     }
 
-    return (bool)!pin_active;
+    rc = bm_buttons_disable();
+
+    if (rc) {
+        BOOT_LOG_ERR("Failed to disable buttons: %d", rc);
+    }
+
+    rc = bm_buttons_deinit();
+    if (rc) {
+        BOOT_LOG_ERR("Failed to de-initialize buttons: %d", rc);
+    }
+
+    return (bool)pin_active;
 }
 #endif
 
