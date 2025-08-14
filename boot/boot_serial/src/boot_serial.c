@@ -77,12 +77,6 @@
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
-#if !(defined(MCUBOOT_SINGLE_APPLICATION_SLOT) || \
-    defined(MCUBOOT_FIRMWARE_LOADER) ||           \
-    defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD))
-#define BOOT_IMAGE_HAS_STATUS_FIELDS
-#endif
-
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE ZCBOR_ARRAY_SIZE
 #endif
@@ -920,10 +914,8 @@ bs_upload(char *buf, int len)
                                          * erase has stopped to let us know whether erase
                                          * is needed to be able to write current chunk.
                                          */
-#ifdef BOOT_IMAGE_HAS_STATUS_FIELDS
     static struct flash_sector status_sector;
 #endif
-#endif /* MCUBOOT_ERASE_PROGRESSIVELY */
 #ifdef MCUBOOT_SWAP_USING_OFFSET
     static uint32_t start_off = 0;
 #endif
@@ -996,7 +988,7 @@ bs_upload(char *buf, int len)
 #endif
 
         curr_off = 0;
-#if defined(MCUBOOT_ERASE_PROGRESSIVELY) && defined(BOOT_IMAGE_HAS_STATUS_FIELDS)
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
         /* Get trailer sector information; this is done early because inability to get
          * that sector information means that upload will not work anyway.
          * TODO: This is single occurrence issue, it should get detected during tests
@@ -1175,7 +1167,7 @@ bs_upload(char *buf, int len)
     if (rc == 0) {
         curr_off += img_chunk_len + rem_bytes;
         if (curr_off == img_size) {
-#if defined(MCUBOOT_ERASE_PROGRESSIVELY) && defined(BOOT_IMAGE_HAS_STATUS_FIELDS)
+#ifdef MCUBOOT_ERASE_PROGRESSIVELY
             /* Assure that sector for image trailer was erased. */
             /* Check whether it was erased during previous upload. */
             off_t start = flash_sector_get_off(&status_sector);
