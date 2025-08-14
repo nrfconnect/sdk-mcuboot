@@ -41,6 +41,9 @@
 #include "bootutil/fault_injection_hardening.h"
 
 #include "mcuboot_config/mcuboot_config.h"
+#include "bootutil/bootutil_log.h"
+
+BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
@@ -50,10 +53,6 @@
 #endif
 #if defined(MCUBOOT_SIGN_EC256)
 #include "mbedtls/ecdsa.h"
-#endif
-#if defined(MCUBOOT_ENC_IMAGES) || defined(MCUBOOT_SIGN_RSA) || \
-    defined(MCUBOOT_SIGN_EC256)
-#include "mbedtls/asn1.h"
 #endif
 
 #include "bootutil_priv.h"
@@ -69,9 +68,6 @@ bootutil_img_hash(struct boot_loader_state *state,
                   struct image_header *hdr, const struct flash_area *fap,
                   uint8_t *tmp_buf, uint32_t tmp_buf_sz, uint8_t *hash_result,
                   uint8_t *seed, int seed_len
-#if defined(MCUBOOT_SWAP_USING_OFFSET) && defined(MCUBOOT_SERIAL_RECOVERY)
-                  , uint32_t start_offset
-#endif
                  )
 {
     bootutil_sha_context sha_ctx;
@@ -83,6 +79,10 @@ bootutil_img_hash(struct boot_loader_state *state,
     int rc;
     uint32_t off;
     uint32_t blk_sz;
+#endif
+#ifdef MCUBOOT_HASH_STORAGE_DIRECTLY
+    uintptr_t base = 0;
+    int fa_ret;
 #endif
 #if defined(MCUBOOT_ENC_IMAGES)
     struct enc_key_data *enc_state;
@@ -107,6 +107,7 @@ bootutil_img_hash(struct boot_loader_state *state,
     (void)tmp_buf_sz;
 #endif
 #endif
+    BOOT_LOG_DBG("bootutil_img_hash");
 
 #ifdef MCUBOOT_ENC_IMAGES
     if (state == NULL) {
@@ -120,6 +121,7 @@ bootutil_img_hash(struct boot_loader_state *state,
     /* Encrypted images only exist in the secondary slot */
     if (MUST_DECRYPT(fap, image_index, hdr) &&
             !boot_enc_valid(enc_state, 1)) {
+        BOOT_LOG_DBG("bootutil_img_hash: error encrypted image found in primary slot");
         return -1;
     }
 #endif
@@ -128,11 +130,7 @@ bootutil_img_hash(struct boot_loader_state *state,
     /* For swap using offset mode, the image starts in the second sector of the upgrade slot, so
      * apply the offset when this is needed
      */
-#if defined(MCUBOOT_SERIAL_RECOVERY)
-    sector_off = boot_get_state_secondary_offset(state, fap) + start_offset;
-#else
     sector_off = boot_get_state_secondary_offset(state, fap);
-#endif
 #endif
 
     bootutil_sha_init(&sha_ctx);
@@ -155,7 +153,12 @@ bootutil_img_hash(struct boot_loader_state *state,
     /* No chunk loading, storage is mapped to address space and can
      * be directly given to hashing function.
      */
-    bootutil_sha_update(&sha_ctx, (void *)flash_area_get_off(fap), size);
+    fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
+    if (fa_ret != 0) {
+        base = 0;
+    }
+
+    bootutil_sha_update(&sha_ctx, (void *)(base + flash_area_get_off(fap)), size);
 #else /* MCUBOOT_HASH_STORAGE_DIRECTLY */
 #ifdef MCUBOOT_RAM_LOAD
     bootutil_sha_update(&sha_ctx,
@@ -187,6 +190,8 @@ bootutil_img_hash(struct boot_loader_state *state,
 #endif
         if (rc) {
             bootutil_sha_drop(&sha_ctx);
+            BOOT_LOG_DBG("bootutil_img_validate Error %d reading data chunk %p %u %u",
+                         rc, fap, off, blk_sz);
             return rc;
         }
 #ifdef MCUBOOT_ENC_IMAGES
@@ -271,6 +276,8 @@ bootutil_img_hash(struct boot_loader_state *state,
 #   define KEY_BUF_SIZE         (SIG_BUF_SIZE + 24)
 #endif /* !MCUBOOT_HW_KEY */
 
+#if !defined(MCUBOOT_BYPASS_KEY_MATCH)
+/* Find functions are only needed when key is checked first */
 #if !defined(MCUBOOT_HW_KEY)
 static int
 bootutil_find_key(uint8_t *keyhash, uint8_t keyhash_len)
@@ -279,6 +286,8 @@ bootutil_find_key(uint8_t *keyhash, uint8_t keyhash_len)
     int i;
     const struct bootutil_key *key;
     uint8_t hash[IMAGE_HASH_SIZE];
+
+    BOOT_LOG_DBG("bootutil_find_key");
 
     if (keyhash_len > IMAGE_HASH_SIZE) {
         return -1;
@@ -308,6 +317,8 @@ bootutil_find_key(uint8_t image_index, uint8_t *key, uint16_t key_len)
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
+    BOOT_LOG_DBG("bootutil_find_key: image_index %d", image_index);
+
     bootutil_sha_init(&sha_ctx);
     bootutil_sha_update(&sha_ctx, key, key_len);
     bootutil_sha_finish(&sha_ctx, hash);
@@ -319,8 +330,8 @@ bootutil_find_key(uint8_t image_index, uint8_t *key, uint16_t key_len)
     }
 
     /* Adding hardening to avoid this potential attack:
-     *  - Image is signed with an arbitrary key and the corresponding public
-     *    key is added as a TLV field.
+     * - Image is signed with an arbitrary key and the corresponding public
+     *   key is added as a TLV field.
      * - During public key validation (comparing against key-hash read from
      *   HW) a fault is injected to accept the public key as valid one.
      */
@@ -336,6 +347,18 @@ bootutil_find_key(uint8_t image_index, uint8_t *key, uint16_t key_len)
 #endif /* !MCUBOOT_HW_KEY */
 #endif /* !MCUBOOT_BUILTIN_KEY */
 #endif /* EXPECTED_SIG_TLV */
+#else  /* !MCUBOOT_BYPASS_KEY_MATCH */
+static inline int
+bootutil_find_key(uint8_t image_index, uint8_t *key, uint16_t key_len)
+{
+    (void)image_index;
+    (void)key;
+    (void)key_len;
+
+    /* There is only one key, so it always matches */
+    return 0;
+}
+#endif /* !MCUBOOT_BYPASS_KEY_MATCH */
 
 /**
  * Reads the value of an image's security counter.
@@ -463,7 +486,11 @@ static const uint16_t allowed_unprot_tlvs[] = {
      IMAGE_TLV_ENC_RSA2048,
      IMAGE_TLV_ENC_KW,
      IMAGE_TLV_ENC_EC256,
+#if !defined(MCUBOOT_HMAC_SHA512)
      IMAGE_TLV_ENC_X25519,
+#else
+     IMAGE_TLV_ENC_X25519_SHA512,
+#endif
      /* Mark end with ANY. */
      IMAGE_TLV_ANY,
 };
@@ -478,9 +505,6 @@ bootutil_img_validate(struct boot_loader_state *state,
                       struct image_header *hdr, const struct flash_area *fap,
                       uint8_t *tmp_buf, uint32_t tmp_buf_sz, uint8_t *seed,
                       int seed_len, uint8_t *out_hash
-#if defined(MCUBOOT_SWAP_USING_OFFSET) && defined(MCUBOOT_SERIAL_RECOVERY)
-                      , uint32_t start_offset
-#endif
                      )
 {
 #if (defined(EXPECTED_KEY_TLV) && defined(MCUBOOT_HW_KEY)) || defined(MCUBOOT_HW_ROLLBACK_PROT)
@@ -518,13 +542,10 @@ bootutil_img_validate(struct boot_loader_state *state,
     FIH_DECLARE(security_counter_valid, FIH_FAILURE);
 #endif
 
+    BOOT_LOG_DBG("bootutil_img_validate: flash area %p", fap);
+
 #if defined(EXPECTED_HASH_TLV) && !defined(MCUBOOT_SIGN_PURE)
-#if defined(MCUBOOT_SWAP_USING_OFFSET) && defined(MCUBOOT_SERIAL_RECOVERY)
-    rc = bootutil_img_hash(state, hdr, fap, tmp_buf, tmp_buf_sz, hash, seed, seed_len,
-                           start_offset);
-#else
     rc = bootutil_img_hash(state, hdr, fap, tmp_buf, tmp_buf_sz, hash, seed, seed_len);
-#endif
     if (rc) {
         goto out;
     }
@@ -538,20 +559,18 @@ bootutil_img_validate(struct boot_loader_state *state,
     /* If Pure type signature is expected then it has to be there */
     rc = bootutil_check_for_pure(hdr, fap);
     if (rc != 0) {
-	goto out;
+        BOOT_LOG_DBG("bootutil_img_validate: pure expected");
+        goto out;
     }
 #endif
 
 #if defined(MCUBOOT_SWAP_USING_OFFSET)
-#if defined(MCUBOOT_SERIAL_RECOVERY)
-    it.start_off = boot_get_state_secondary_offset(state, fap) + start_offset;
-#else
     it.start_off = boot_get_state_secondary_offset(state, fap);
-#endif
 #endif
 
     rc = bootutil_tlv_iter_begin(&it, hdr, fap, IMAGE_TLV_ANY, false);
     if (rc) {
+        BOOT_LOG_DBG("bootutil_img_validate: TLV iteration failed %d", rc);
         goto out;
     }
 
@@ -560,9 +579,11 @@ bootutil_img_validate(struct boot_loader_state *state,
 #else
     img_sz = it.tlv_end;
 #endif
+    BOOT_LOG_DBG("bootutil_img_validate: TLV off %u, end %u", it.tlv_off, it.tlv_end);
 
     if (img_sz > bootutil_max_image_size(state, fap)) {
         rc = -1;
+        BOOT_LOG_DBG("bootutil_img_validate: TLV beyond image size");
         goto out;
     }
 
@@ -593,6 +614,7 @@ bootutil_img_validate(struct boot_loader_state *state,
                   }
              }
              if (!found) {
+                  BOOT_LOG_DBG("bootutil_img_validate: TLV %d not permitted", type);
                   FIH_SET(fih_rc, FIH_FAILURE);
                   goto out;
              }
@@ -602,6 +624,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 #if defined(EXPECTED_HASH_TLV) && !defined(MCUBOOT_SIGN_PURE)
         case EXPECTED_HASH_TLV:
         {
+            BOOT_LOG_DBG("bootutil_img_validate: EXPECTED_HASH_TLV == %d", EXPECTED_HASH_TLV);
             /* Verify the image hash. This must always be present. */
             if (len != sizeof(hash)) {
                 rc = -1;
@@ -625,6 +648,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 #ifdef EXPECTED_KEY_TLV
         case EXPECTED_KEY_TLV:
         {
+            BOOT_LOG_DBG("bootutil_img_validate: EXPECTED_KEY_TLV == %d", EXPECTED_KEY_TLV);
             /*
              * Determine which key we should be checking.
              */
@@ -655,6 +679,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 #ifdef EXPECTED_SIG_TLV
         case EXPECTED_SIG_TLV:
         {
+            BOOT_LOG_DBG("bootutil_img_validate: EXPECTED_SIG_TLV == %d", EXPECTED_SIG_TLV);
             /* Ignore this signature if it is out of bounds. */
             if (key_id < 0 || key_id >= bootutil_key_cnt) {
                 key_id = -1;
@@ -715,6 +740,8 @@ bootutil_img_validate(struct boot_loader_state *state,
             fih_rc = fih_ret_encode_zero_equality(img_security_cnt <
                                    (uint32_t)fih_int_decode(security_cnt));
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+                BOOT_LOG_ERR("Image security counter value %u lower than monotonic value %u",
+                             img_security_cnt, (uint32_t)fih_int_decode(security_cnt));
                 FIH_SET(fih_rc, FIH_FAILURE);
                 goto out;
             }

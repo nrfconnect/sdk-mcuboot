@@ -88,6 +88,7 @@ TLV_VALUES = {
         'ENCKW': 0x31,
         'ENCEC256': 0x32,
         'ENCX25519': 0x33,
+        'ENCX25519_SHA512': 0x34,
         'DEPENDENCY': 0x40,
         'SEC_CNT': 0x50,
         'BOOT_RECORD': 0x60,
@@ -184,6 +185,7 @@ ALLOWED_KEY_SHA = {
     keys.ECDSA384P1         : ['384'],
     keys.ECDSA384P1Public   : ['384'],
     keys.ECDSA256P1         : ['256'],
+    keys.ECDSA256P1Public   : ['256'],
     keys.RSA                : ['256'],
     keys.RSAPublic          : ['256'],
     # This two are set to 256 for compatibility, the right would be 512
@@ -348,7 +350,6 @@ class Image:
                     self.payload = copy.copy(self.infile_data)
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
-        self.image_size = len(self.payload)
 
         # Add the image header if needed.
         if self.pad_header and self.header_size > 0:
@@ -357,6 +358,8 @@ class Image:
                 self.base_addr -= self.header_size
             self.payload = bytes([self.erased_val] * self.header_size) + \
                 self.payload
+
+        self.image_size = len(self.payload) - self.header_size
 
         self.check_header()
 
@@ -366,14 +369,19 @@ class Image:
         self.image_size = len(self.payload)
 
         # Add the image header if needed.
-        if self.pad_header and self.header_size > 0:
-            if self.base_addr:
-                # Adjust base_addr for new header
-                self.base_addr -= self.header_size
-            self.payload = bytes([self.erased_val] * self.header_size) + \
-                self.payload
-
-        self.check_header()
+        if self.header_size > 0:
+            if self.pad_header:
+                if self.base_addr:
+                    # Adjust base_addr for new header
+                    self.base_addr -= self.header_size
+                self.payload = bytes([self.erased_val] * self.header_size) + \
+                    self.payload
+            else:
+                # Fill header padding with zeros to align with what is expected
+                # for uncompressed images when no pad_header is requested
+                # (see self.check_header())
+                self.payload = bytes([0] * self.header_size) + \
+                    self.payload
 
     def save(self, path, hex_addr=None):
         """Save an image from a given file"""
@@ -429,21 +437,30 @@ class Image:
                           len(self.payload), tsize, self.slot_size)
                 raise click.UsageError(msg)
 
-    def ecies_hkdf(self, enckey, plainkey):
+    def ecies_hkdf(self, enckey, plainkey, hmac_sha_alg):
         if isinstance(enckey, ecdsa.ECDSA256P1Public):
             newpk = ec.generate_private_key(ec.SECP256R1(), default_backend())
             shared = newpk.exchange(ec.ECDH(), enckey._get_public())
         else:
             newpk = X25519PrivateKey.generate()
             shared = newpk.exchange(enckey._get_public())
+
+        # Detect AES key length from plainkey size
+        key_len = len(plainkey)  # 16 for AES-128, 32 for AES-256
+
+        # Generate derived key with appropriate length (key_len + 32 bytes for HMAC)
         derived_key = HKDF(
-            algorithm=hashes.SHA256(), length=48, salt=None,
+            algorithm=hmac_sha_alg, length=key_len + hmac_sha_alg.digest_size, salt=None,
             info=b'MCUBoot_ECIES_v1', backend=default_backend()).derive(shared)
-        encryptor = Cipher(algorithms.AES(derived_key[:16]),
+
+        # Use appropriate key length for AES encryption
+        encryptor = Cipher(algorithms.AES(derived_key[:key_len]),
                            modes.CTR(bytes([0] * 16)),
                            backend=default_backend()).encryptor()
         cipherkey = encryptor.update(plainkey) + encryptor.finalize()
-        mac = hmac.HMAC(derived_key[16:], hashes.SHA256(),
+
+        # Use remaining bytes for HMAC (after the AES key)
+        mac = hmac.HMAC(derived_key[key_len:], hmac_sha_alg,
                         backend=default_backend())
         mac.update(cipherkey)
         ciphermac = mac.finalize()
@@ -461,7 +478,8 @@ class Image:
                sw_type=None, custom_tlvs=None, compression_tlvs=None,
                compression_type=None, encrypt_keylen=128, clear=False,
                fixed_sig=None, pub_key=None, vector_to_sign=None,
-               user_sha='auto', is_pure=False, keep_comp_size=False, dont_encrypt=False):
+               user_sha='auto', hmac_sha='auto', is_pure=False, keep_comp_size=False,
+               dont_encrypt=False):
         self.enckey = enckey
 
         # key decides on sha, then pub_key; of both are none default is used
@@ -581,8 +599,9 @@ class Image:
             if dependencies is not None:
                 for i in range(dependencies_num):
                     payload = struct.pack(
-                        e + 'B3x' + 'BBHI',
+                        e + 'BB2x' + 'BBHI',
                         int(dependencies[DEP_IMAGES_KEY][i]),
+                        dependencies[DEP_VERSIONS_KEY][i].slot,
                         dependencies[DEP_VERSIONS_KEY][i].major,
                         dependencies[DEP_VERSIONS_KEY][i].minor,
                         dependencies[DEP_VERSIONS_KEY][i].revision,
@@ -668,6 +687,17 @@ class Image:
             else:
                 plainkey = os.urandom(16)
 
+            if not isinstance(enckey, rsa.RSAPublic):
+                if hmac_sha == 'auto' or hmac_sha == '256':
+                    hmac_sha = '256'
+                    hmac_sha_alg = hashes.SHA256()
+                elif hmac_sha == '512':
+                    if not isinstance(enckey, x25519.X25519Public):
+                        raise click.UsageError("Currently only ECIES-X25519 supports HMAC-SHA512")
+                    hmac_sha_alg = hashes.SHA512()
+                else:
+                    raise click.UsageError("Unsupported HMAC-SHA")
+
             if isinstance(enckey, rsa.RSAPublic):
                 cipherkey = enckey._get_public().encrypt(
                     plainkey, padding.OAEP(
@@ -676,15 +706,19 @@ class Image:
                         label=None))
                 self.enctlv_len = len(cipherkey)
                 tlv.add('ENCRSA2048', cipherkey)
-            elif isinstance(enckey, (ecdsa.ECDSA256P1Public,
-                                     x25519.X25519Public)):
-                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey)
+            elif isinstance(enckey, ecdsa.ECDSA256P1Public):
+                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey, hmac_sha_alg)
                 enctlv = pubk + mac + cipherkey
                 self.enctlv_len = len(enctlv)
-                if isinstance(enckey, ecdsa.ECDSA256P1Public):
-                    tlv.add('ENCEC256', enctlv)
-                else:
+                tlv.add('ENCEC256', enctlv)
+            elif isinstance(enckey, x25519.X25519Public):
+                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey, hmac_sha_alg)
+                enctlv = pubk + mac + cipherkey
+                self.enctlv_len = len(enctlv)
+                if (hmac_sha == '256'):
                     tlv.add('ENCX25519', enctlv)
+                else:
+                    tlv.add('ENCX25519_SHA512', enctlv)
 
             if not clear:
                 nonce = bytes([0] * 16)
