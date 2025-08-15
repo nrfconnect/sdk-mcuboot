@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * Copyright (c) 2023-2024 Arm Limited
+ * Copyright (c) 2023-2025 Arm Limited
  */
 
 /*
@@ -69,7 +69,9 @@
 #include "mbedtls/oid.h"
 #include "mbedtls/asn1.h"
 #include "bootutil/sign_key.h"
-#include "common.h"
+#if !defined(MCUBOOT_USE_PSA_CRYPTO)
+#include "bootutil/crypto/common.h"
+#endif
 
 #if defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)
     #include <bl_crypto.h>

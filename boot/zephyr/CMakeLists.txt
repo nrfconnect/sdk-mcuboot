@@ -85,17 +85,11 @@ if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
     SECTIONS include/boot_serial/boot_serial.ld
   )
 
-  if(DEFINED CONFIG_BOOT_MGMT_CUSTOM_STORAGE_ERASE OR DEFINED CONFIG_BOOT_MGMT_CUSTOM_IMG_LIST)
+  if(DEFINED CONFIG_BOOT_MGMT_CUSTOM_STORAGE_ERASE)
     zephyr_library_sources(
       boot_serial_extension_zephyr_basic.c
       )
   endif()
-endif()
-
-if(NOT DEFINED CONFIG_FLASH_PAGE_LAYOUT)
-  zephyr_library_sources(
-    flash_map_legacy.c
-    )
 endif()
 
 if(DEFINED CONFIG_BOOT_SHARE_BACKEND_RETENTION)
@@ -482,9 +476,17 @@ if(CONFIG_BOOT_ENCRYPTION_KEY_FILE AND NOT CONFIG_BOOT_ENCRYPTION_KEY_FILE STREQ
 endif()
 
 if(CONFIG_MCUBOOT_CLEANUP_ARM_CORE)
-zephyr_library_sources(
-  ${BOOT_DIR}/zephyr/arm_cleanup.c
-)
+  # ARM Cortex-M
+  zephyr_library_sources_ifdef(
+    CONFIG_CPU_CORTEX_M
+    ${BOOT_DIR}/zephyr/cleanup/arm_cortex_m.c
+  )
+
+  # ARM Cortex-R
+  zephyr_library_sources_ifdef(
+    CONFIG_ARMV7_R
+    ${BOOT_DIR}/zephyr/cleanup/arm_cortex_r.c
+  )
 endif()
 
 if(CONFIG_MCUBOOT_BOOT_BANNER)
@@ -577,6 +579,10 @@ endif()
 
 if((CONFIG_BOOT_SWAP_USING_SCRATCH OR CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET) AND (DEFINED write_size_slot0 OR DEFINED write_size_slot1))
   zephyr_library_sources(flash_check.c)
+endif()
+
+if(CONFIG_BOOT_RAM_LOAD)
+  zephyr_library_sources(ram_load.c)
 endif()
 
 if(SYSBUILD)
