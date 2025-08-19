@@ -158,12 +158,3 @@ void nrf_cleanup_peripheral(void)
     nrf_cleanup_clock();
 #endif
 }
-
-#if USE_PARTITION_MANAGER \
-	&& defined(CONFIG_ARM_TRUSTZONE_M) \
-	&& defined(PM_SRAM_NONSECURE_NAME)
-void nrf_cleanup_ns_ram(void)
-{
-	memset((void *) PM_SRAM_NONSECURE_ADDRESS, 0, PM_SRAM_NONSECURE_SIZE);
-}
-#endif
