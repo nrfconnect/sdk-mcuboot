@@ -3,6 +3,7 @@
  * Copyright (c) 2020 Arm Limited
  * Copyright (c) 2021-2023 Nordic Semiconductor ASA
  * Copyright (c) 2025 Aerlync Labs Inc.
+ * Copyright (c) 2025 Siemens Mobility GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +33,7 @@
 #include <zephyr/cache.h>
 #endif
 
-#if defined(CONFIG_ARM)
+#if defined(CONFIG_CPU_CORTEX_M)
 #include <cmsis_core.h>
 #endif
 
@@ -135,8 +136,8 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 /* synchronous log mode doesn't need to be initalized by the application */
 #define ZEPHYR_BOOT_LOG_START() do { } while (false)
 #define ZEPHYR_BOOT_LOG_STOP() do { } while (false)
-#endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
-        * !defined(ZEPHYR_LOG_MODE_MINIMAL)
+#endif /* defined(CONFIG_LOG) && !defined(CONFIG_LOG_MODE_IMMEDIATE) && \
+        * !defined(CONFIG_LOG_MODE_MINIMAL)
 	*/
 
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
@@ -159,8 +160,19 @@ extern void *_vector_table_pointer;
 #endif
 
 struct arm_vector_table {
+#ifdef CONFIG_CPU_CORTEX_M
     uint32_t msp;
     uint32_t reset;
+#else
+    uint32_t reset;
+    uint32_t undef_instruction;
+    uint32_t svc;
+    uint32_t abort_prefetch;
+    uint32_t abort_data;
+    uint32_t reserved;
+    uint32_t irq;
+    uint32_t fiq;
+#endif
 };
 
 static void do_boot(struct boot_rsp *rsp)
@@ -225,7 +237,7 @@ static void do_boot(struct boot_rsp *rsp)
     nrf_cleanup_peripheral();
 #endif
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
-    cleanup_arm_nvic(); /* cleanup NVIC registers */
+    cleanup_arm_interrupts(); /* Disable and acknowledge all interrupts */
 
 #if defined(CONFIG_BOOT_DISABLE_CACHES)
     /* Flush and disable instruction/data caches before chain-loading the application */
@@ -235,7 +247,7 @@ static void do_boot(struct boot_rsp *rsp)
     sys_cache_data_disable();
 #endif
 
-#if CONFIG_CPU_HAS_ARM_MPU || CONFIG_CPU_HAS_NXP_MPU
+#if CONFIG_CPU_HAS_ARM_MPU || CONFIG_CPU_HAS_NXP_SYSMPU
     z_arm_clear_arm_mpu_config();
 #endif
 
@@ -268,10 +280,31 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 #endif /* CONFIG_BOOT_INTR_VEC_RELOC */
 
+#ifdef CONFIG_CPU_CORTEX_M
     __set_MSP(vt->msp);
+#endif
+
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
+#ifdef CONFIG_CPU_CORTEX_M
     __set_CONTROL(0x00); /* application will configures core on its own */
     __ISB();
+#else
+    /* Set mode to supervisor and A, I and F bit as described in the
+     * Cortex R5 TRM */
+    __asm__ volatile(
+        "   mrs r0, CPSR\n"
+        /* change mode bits to supervisor */
+        "   bic r0, #0x1f\n"
+        "   orr r0, #0x13\n"
+        /* set the A, I and F bit */
+        "   mov r1, #0b111\n"
+        "   lsl r1, #0x6\n"
+        "   orr r0, r1\n"
+
+        "   msr CPSR, r0\n"
+        ::: "r0", "r1");
+#endif /* CONFIG_CPU_CORTEX_M */
+
 #endif
 #if CONFIG_MCUBOOT_CLEANUP_RAM
     __asm__ volatile (
@@ -302,7 +335,18 @@ static void do_boot(struct boot_rsp *rsp)
         : "r0", "r1", "r2", "r3", "memory"
     );
 #else
+
+#ifdef CONFIG_CPU_CORTEX_M
     ((void (*)(void))vt->reset)();
+#else
+    /* Some ARM CPUs like the Cortex-R5 can run in thumb mode but reset into ARM
+     * mode (depending on a CPU signal configurations). To do the switch into ARM
+     * mode, if needed, an explicit branch with exchange instruction set
+     * instruction is needed
+     */
+    __asm__("bx %0\n" : : "r" (&vt->reset));
+#endif
+
 #endif
 }
 
@@ -366,6 +410,37 @@ static void do_boot(struct boot_rsp *rsp)
 #endif /* CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 */
 }
 
+#elif defined(CONFIG_ARC)
+
+/*
+ * ARC vector table has a pointer to the reset function as the first entry
+ * in the vector table. Assume the vector table is at the start of the image,
+ * and jump to reset
+ */
+static void do_boot(struct boot_rsp *rsp)
+{
+    struct arc_vector_table {
+        void (*reset)(void); /* Reset vector */
+    } *vt;
+
+#if defined(MCUBOOT_RAM_LOAD)
+    vt = (struct arc_vector_table *)(rsp->br_hdr->ih_load_addr + rsp->br_hdr->ih_hdr_size);
+#else
+    uintptr_t flash_base;
+    int rc;
+
+    rc = flash_device_base(rsp->br_flash_dev_id, &flash_base);
+    assert(rc == 0);
+
+    vt = (struct arc_vector_table *)(flash_base + rsp->br_image_off +
+                     rsp->br_hdr->ih_hdr_size);
+#endif
+
+    /* Lock interrupts and dive into the entry point */
+    irq_lock();
+    vt->reset();
+}
+
 #else
 /* Default: Assume entry point is at the very beginning of the image. Simply
  * lock interrupts and jump there. This is the right thing to do for X86 and
@@ -394,8 +469,8 @@ static void do_boot(struct boot_rsp *rsp)
 }
 #endif
 
-#if defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
-    !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL)
+#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_MODE_IMMEDIATE) && \
+    !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(CONFIG_LOG_MODE_MINIMAL)
 /* The log internal thread for log processing can't transfer log well as has too
  * low priority.
  * Dedicated thread for log processing below uses highest application
@@ -413,12 +488,7 @@ void boot_log_thread_func(void *dummy1, void *dummy2, void *dummy3)
     log_init();
 
     while (1) {
-#if defined(CONFIG_LOG1) || defined(CONFIG_LOG2)
-        /* support Zephyr legacy logging implementation before commit c5f2cde */
-        if (log_process(false) == false) {
-#else
         if (log_process() == false) {
-#endif
             if (boot_log_stop) {
                 break;
             }
@@ -452,8 +522,8 @@ void zephyr_boot_log_stop(void)
      */
     (void)k_sem_take(&boot_log_sem, K_FOREVER);
 }
-#endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
-        * !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL)
+#endif /* defined(CONFIG_LOG) && !defined(CONFIG_LOG_MODE_IMMEDIATE) && \
+        * !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(CONFIG_LOG_MODE_MINIMAL)
         */
 
 #if defined(CONFIG_BOOT_SERIAL_ENTRANCE_GPIO) || defined(CONFIG_BOOT_SERIAL_PIN_RESET) \

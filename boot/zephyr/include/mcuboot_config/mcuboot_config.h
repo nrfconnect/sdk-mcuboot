@@ -106,6 +106,10 @@
 #define MCUBOOT_DIRECT_XIP_REVERT
 #endif
 
+#ifdef CONFIG_BOOT_RAM_LOAD_REVERT
+#define MCUBOOT_RAM_LOAD_REVERT
+#endif
+
 #ifdef CONFIG_BOOT_RAM_LOAD
 #define MCUBOOT_RAM_LOAD 1
 #define IMAGE_EXECUTABLE_RAM_START CONFIG_BOOT_IMAGE_EXECUTABLE_RAM_START
@@ -144,6 +148,10 @@
 #define IMAGE_EXECUTABLE_RAM_SIZE CONFIG_BOOT_IMAGE_EXECUTABLE_RAM_SIZE
 #endif
 
+#ifdef CONFIG_MULTIPLE_EXECUTABLE_RAM_REGIONS
+#define MULTIPLE_EXECUTABLE_RAM_REGIONS
+#endif
+
 #ifdef CONFIG_LOG
 #define MCUBOOT_HAVE_LOGGING 1
 #endif
@@ -176,6 +184,15 @@
  */
 #ifdef CONFIG_BOOT_HMAC_SHA512
 #define MCUBOOT_HMAC_SHA512
+#endif
+
+/* Turn off check of public key hash against compiled in key
+ * before attempting signature verification. When there is only
+ * one key, matching is pointless, the signature may just be
+ * verified with the only key that there is.
+ */
+#ifdef CONFIG_BOOT_BYPASS_KEY_MATCH
+#define MCUBOOT_BYPASS_KEY_MATCH
 #endif
 
 #ifdef CONFIG_BOOT_DECOMPRESSION
@@ -263,10 +280,6 @@
 #define MCUBOOT_PERUSER_MGMT_GROUP_ENABLED 0
 #endif
 
-#ifdef CONFIG_BOOT_MGMT_CUSTOM_IMG_LIST
-#define MCUBOOT_MGMT_CUSTOM_IMG_LIST
-#endif
-
 #ifdef CONFIG_BOOT_MGMT_ECHO
 #define MCUBOOT_BOOT_MGMT_ECHO
 #endif
@@ -281,6 +294,10 @@
 
 #ifdef CONFIG_BOOT_FLASH_AREA_HOOKS
 #define MCUBOOT_FLASH_AREA_HOOKS
+#endif
+
+#ifdef CONFIG_FIND_NEXT_SLOT_HOOKS
+#define MCUBOOT_FIND_NEXT_SLOT_HOOKS
 #endif
 
 #ifdef CONFIG_MCUBOOT_VERIFY_IMG_ADDRESS
