@@ -26,22 +26,35 @@ BOOT_LOG_MODULE_REGISTER(ed25519_psa);
 #if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 /* List of KMU stored key ids available for MCUboot */
 #define MAKE_PSA_KMU_KEY_ID(id) PSA_KEY_HANDLE_FROM_CRACEN_KMU_SLOT(CRACEN_KMU_KEY_USAGE_SCHEME_RAW, id)
-static psa_key_id_t kmu_key_ids[3] =  {
+static psa_key_id_t key_ids[] =  {
     MAKE_PSA_KMU_KEY_ID(226),
     MAKE_PSA_KMU_KEY_ID(228),
     MAKE_PSA_KMU_KEY_ID(230)
 };
+
+#define KEY_SLOTS_COUNT CONFIG_BOOT_SIGNATURE_KMU_SLOTS
 
 #if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
 #include <bootutil/key_revocation.h>
 static psa_key_id_t *validated_with = NULL;
 #endif
 
-BUILD_ASSERT(CONFIG_BOOT_SIGNATURE_KMU_SLOTS <= ARRAY_SIZE(kmu_key_ids),
+BUILD_ASSERT(CONFIG_BOOT_SIGNATURE_KMU_SLOTS <= ARRAY_SIZE(key_ids),
 	     "Invalid number of KMU slots, up to 3 are supported on nRF54L15");
 #endif
 
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+#if defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
+static const psa_key_id_t key_ids[] =  {
+    0x40022100,
+    0x40022101,
+    0x40022102,
+    0x40022103
+};
+
+#define KEY_SLOTS_COUNT ARRAY_SIZE(key_ids)
+#endif
+
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
 int ED25519_verify(const uint8_t *message, size_t message_len,
                    const uint8_t signature[EDDSA_SIGNAGURE_LENGTH],
                    const uint8_t public_key[EDDSA_KEY_LENGTH])
@@ -102,7 +115,6 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
     ARG_UNUSED(public_key);
     /* Set to any error */
     psa_status_t status = PSA_ERROR_BAD_STATE;
-    int ret = 0;        /* Fail by default */
 
     /* Initialize PSA Crypto */
     status = psa_crypto_init();
@@ -113,24 +125,24 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
 
     status = PSA_ERROR_BAD_STATE;
 
-    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; ++i) {
-        psa_key_id_t kid = kmu_key_ids[i];
+    for (int i = 0; i < KEY_SLOTS_COUNT; ++i) {
+        psa_key_id_t kid = key_ids[i];
 
         status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message,
                                     message_len, signature,
                                     EDDSA_SIGNAGURE_LENGTH);
         if (status == PSA_SUCCESS) {
-            ret = 1;
 #if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
-            validated_with = kmu_key_ids + i;
+            validated_with = key_ids + i;
 #endif
-            break;
+            return 1;
         }
 
-        BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
     }
 
-    return ret;
+    BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
+
+    return 0;
 }
 #if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
 int exec_revoke(void)
@@ -149,12 +161,12 @@ int exec_revoke(void)
             goto out;
     }
     for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; i++) {
-        if ((kmu_key_ids + i) == validated_with) {
+        if ((key_ids + i) == validated_with) {
             break;
         }
         BOOT_LOG_DBG("Invalidating key ID %d", i);
 
-        status = psa_destroy_key(kmu_key_ids[i]);
+        status = psa_destroy_key(key_ids[i]);
         if (status == PSA_SUCCESS) {
             BOOT_LOG_DBG("Success on key ID %d", i);
         } else {
