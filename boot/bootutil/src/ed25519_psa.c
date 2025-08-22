@@ -41,7 +41,18 @@ BUILD_ASSERT(CONFIG_BOOT_SIGNATURE_KMU_SLOTS <= ARRAY_SIZE(kmu_key_ids),
 	     "Invalid number of KMU slots, up to 3 are supported on nRF54L15");
 #endif
 
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+#if defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
+static const psa_key_id_t its_key_ids[] =  {
+    0x40022100,
+    0x40022101,
+    0x40022102,
+    0x40022103
+};
+
+#define BOOT_SIGNATURE_ITS_KEY_SLOTS ARRAY_SIZE(its_key_ids)
+#endif
+
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
 int ED25519_verify(const uint8_t *message, size_t message_len,
                    const uint8_t signature[EDDSA_SIGNAGURE_LENGTH],
                    const uint8_t public_key[EDDSA_KEY_LENGTH])
@@ -103,6 +114,13 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
     /* Set to any error */
     psa_status_t status = PSA_ERROR_BAD_STATE;
     int ret = 0;        /* Fail by default */
+#if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+    const int key_slots_count = CONFIG_BOOT_SIGNATURE_KMU_SLOTS;
+    psa_key_id_t *key_ids = kmu_key_ids;
+#else
+    const int key_slots_count = BOOT_SIGNATURE_ITS_KEY_SLOTS;
+    psa_key_id_t const *key_ids = its_key_ids;
+#endif
 
     /* Initialize PSA Crypto */
     status = psa_crypto_init();
@@ -113,8 +131,8 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
 
     status = PSA_ERROR_BAD_STATE;
 
-    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; ++i) {
-        psa_key_id_t kid = kmu_key_ids[i];
+    for (int i = 0; i < key_slots_count; ++i) {
+        psa_key_id_t kid = key_ids[i];
 
         status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message,
                                     message_len, signature,
@@ -122,13 +140,14 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
         if (status == PSA_SUCCESS) {
             ret = 1;
 #if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
-            validated_with = kmu_key_ids + i;
+            validated_with = key_ids + i;
 #endif
-            break;
+            return ret;
         }
 
-        BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
     }
+
+    BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
 
     return ret;
 }
