@@ -545,13 +545,13 @@ bootutil_img_validate(struct boot_loader_state *state,
         case EXPECTED_SIG_TLV:
         {
             BOOT_LOG_DBG("bootutil_img_validate: EXPECTED_SIG_TLV == %d", EXPECTED_SIG_TLV);
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
             /* Ignore this signature if it is out of bounds. */
             if (key_id < 0 || key_id >= bootutil_key_cnt) {
                 key_id = -1;
                 continue;
             }
-#endif /* !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) */
+#endif /* !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS) */
             if (!EXPECTED_SIG_LEN(len) || len > sizeof(buf)) {
                 rc = -1;
                 goto out;
@@ -912,7 +912,7 @@ skip_security_counter_check:
 
             if (type == IMAGE_TLV_DECOMP_SIGNATURE) {
                 /* Ignore this signature if it is out of bounds. */
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
                 if (key_id < 0 || key_id >= bootutil_key_cnt) {
                     key_id = -1;
                     continue;
