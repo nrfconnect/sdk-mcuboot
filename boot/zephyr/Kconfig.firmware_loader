@@ -8,7 +8,7 @@ menu "Firmware loader entrance methods"
 
 menuconfig BOOT_FIRMWARE_LOADER_ENTRANCE_GPIO
 	bool "GPIO"
-	depends on GPIO
+	depends on GPIO || NCS_BM
 	help
 	  Use a GPIO to enter firmware loader mode.
 
