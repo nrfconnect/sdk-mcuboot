@@ -510,7 +510,8 @@ boot_write_copy_done(const struct flash_area *fap)
 
 #ifdef SEND_BOOT_REQUEST
 static int
-send_boot_request(uint8_t magic, bool confirm, int image_id, uint32_t slot_id)
+send_boot_request(uint8_t magic, uint8_t image_ok, bool confirm, int image_id,
+                  uint32_t slot_id)
 {
     int rc = BOOT_EBADIMAGE;
 
@@ -518,10 +519,16 @@ send_boot_request(uint8_t magic, bool confirm, int image_id, uint32_t slot_id)
     if ((magic == BOOT_MAGIC_GOOD) || (magic == BOOT_MAGIC_UNSET)) {
         if (confirm) {
             BOOT_LOG_DBG("Confirm image: %d, %d", image_id, slot_id);
-            rc = boot_request_confirm_slot(image_id, slot_id);
+            if ((image_ok != BOOT_FLAG_SET) || (magic != BOOT_MAGIC_GOOD)) {
+                rc = boot_request_confirm_slot(image_id, slot_id);
+            } else {
+                rc = 0;
+            }
+#ifdef CONFIG_NCS_MCUBOOT_BOOT_REQUEST_TEST_SETS_BOOT_PREFERENCE
         } else {
             BOOT_LOG_DBG("Set image preference: %d, %d", image_id, slot_id);
             rc = boot_request_set_preferred_slot(image_id, slot_id);
+#endif /* CONFIG_NCS_MCUBOOT_BOOT_REQUEST_TEST_SETS_BOOT_PREFERENCE */
         }
         if (rc != 0) {
             rc = BOOT_EBADIMAGE;
@@ -594,7 +601,8 @@ boot_set_next(const struct flash_area *fa, bool active, bool confirm)
     image_id = flash_area_to_image_slot(fa, &slot_id);
 
 #ifdef SEND_BOOT_REQUEST
-    rc = send_boot_request(slot_state.magic, confirm, image_id, slot_id);
+    rc = send_boot_request(slot_state.magic, slot_state.image_ok, confirm,
+                           image_id, slot_id);
     if ((rc != 0) || active) {
         return rc;
     }
@@ -683,7 +691,8 @@ boot_set_next(const struct flash_area *fa, bool active, bool confirm)
 #ifdef SEND_BOOT_REQUEST
     image_id = flash_area_to_image_slot(fa, &slot_id);
 
-    rc = send_boot_request(slot_state.magic, confirm, image_id, slot_id);
+    rc = send_boot_request(slot_state.magic, slot_state.image_ok, confirm,
+                           image_id, slot_id);
     if ((rc != 0) || active) {
         return rc;
     }
