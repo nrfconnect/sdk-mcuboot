@@ -360,8 +360,8 @@ bootutil_find_key(uint8_t image_index, uint8_t *key, uint16_t key_len)
     return -1;
 }
 #endif /* !MCUBOOT_HW_KEY */
-#endif /* !MCUBOOT_BUILTIN_KEY */
 #endif /* !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) */
+#endif /* !MCUBOOT_BUILTIN_KEY */
 #endif /* EXPECTED_SIG_TLV */
 
 /**
