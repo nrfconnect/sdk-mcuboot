@@ -51,6 +51,9 @@ if(CONFIG_BOOT_USE_NRF_CC310_BL)
   endif()
 endif()
 
+# Include the UUID generation code
+add_subdirectory(uuid)
+
 zephyr_library_include_directories(
   include
   )
