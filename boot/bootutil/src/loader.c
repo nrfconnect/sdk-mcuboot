@@ -1071,11 +1071,11 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) \
     && defined(CONFIG_PCD_APP) && defined(CONFIG_PCD_READ_NETCORE_APP_VERSION)
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
-            rc = pcd_version_cmp_net(fap, boot_img_hdr(state, BOOT_SECONDARY_SLOT));
+            rc = pcd_version_cmp_net(fap, boot_img_hdr(state, BOOT_SLOT_SECONDARY));
         } else {
              rc = boot_version_cmp(
-                                 &boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
-                                 &boot_img_hdr(state, BOOT_PRIMARY_SLOT)->ih_ver);
+                                 &boot_img_hdr(state, BOOT_SLOT_SECONDARY)->ih_ver,
+                                 &boot_img_hdr(state, BOOT_SLOT_PRIMARY)->ih_ver);
 
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
             if (rc >= 0 && BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
@@ -1096,8 +1096,8 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         }
 #else
 	rc = boot_version_cmp(
-			&boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
-			&boot_img_hdr(state, BOOT_PRIMARY_SLOT)->ih_ver);
+			&boot_img_hdr(state, BOOT_SLOT_SECONDARY)->ih_ver,
+			&boot_img_hdr(state, BOOT_SLOT_PRIMARY)->ih_ver);
 
 #if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
         if (rc >= 0 && BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
@@ -1116,7 +1116,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         }
 #endif
 #endif
-        if (rc < 0 && boot_check_header_erased(state, BOOT_PRIMARY_SLOT)) {
+        if (rc < 0 && boot_check_header_erased(state, BOOT_SLOT_PRIMARY)) {
             BOOT_LOG_ERR("insufficient version in secondary slot");
             boot_scramble_slot(fap, slot);
             /* Image in the secondary slot does not satisfy version requirement.
