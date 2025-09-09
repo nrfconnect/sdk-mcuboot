@@ -64,24 +64,24 @@ bool boot_is_compressed_header_valid(const struct image_header *hdr, const struc
     uint32_t protected_tlvs_size;
     uint32_t decompressed_size;
 
-    primary_fa_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), BOOT_PRIMARY_SLOT);
+    primary_fa_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), BOOT_SLOT_PRIMARY);
 
     if (primary_fa_id == fap->fa_id) {
         BOOT_LOG_ERR("Primary slots cannot be compressed, image: %d", BOOT_CURR_IMG(state));
         return false;
     }
 
-    if (BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT) == NULL) {
+    if (BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY) == NULL) {
         opened_flash_area = true;
     }
 
-    rc = flash_area_open(primary_fa_id, &BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT));
+    rc = flash_area_open(primary_fa_id, &BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
     assert(rc == 0);
 
-    size_check = flash_area_get_size(BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT));
+    size_check = flash_area_get_size(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
 
     if (opened_flash_area) {
-        (void)flash_area_close(BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT));
+        (void)flash_area_close(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
     }
 
     rc = bootutil_get_img_decomp_size(hdr, fap, &decompressed_size);
@@ -1100,7 +1100,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     uint8_t decryption_block_size = 0;
 #endif
 
-    hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
+    hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
 
 #ifdef MCUBOOT_ENC_IMAGES
     rc = bootutil_get_img_decrypted_comp_size(hdr, fap_src, &comp_size);
