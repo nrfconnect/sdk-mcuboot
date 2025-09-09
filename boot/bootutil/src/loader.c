@@ -1490,7 +1490,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         {
             const struct flash_area *primary_fa;
             rc = flash_area_open(flash_area_id_from_multi_image_slot(
-                                 BOOT_CURR_IMG(state), BOOT_PRIMARY_SLOT),
+                                 BOOT_CURR_IMG(state), BOOT_SLOT_PRIMARY),
                                  &primary_fa);
             if (rc != 0) {
                 return BOOT_SWAP_TYPE_FAIL;
