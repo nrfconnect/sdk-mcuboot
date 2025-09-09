@@ -1409,7 +1409,7 @@ static void sec_slot_cleanup_if_unusable(void)
             const struct flash_area *secondary_fa;
             int rc;
 
-            rc = flash_area_open(flash_area_id_from_multi_image_slot(idx, BOOT_SECONDARY_SLOT),
+            rc = flash_area_open(flash_area_id_from_multi_image_slot(idx, BOOT_SLOT_SECONDARY),
                                  &secondary_fa);
             if (!rc) {
                 rc = flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
