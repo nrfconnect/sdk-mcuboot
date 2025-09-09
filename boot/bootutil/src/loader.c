@@ -1084,7 +1084,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
                  */
                 int version_check;
 
-                version_check = boot_version_cmp(&boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
+                version_check = boot_version_cmp(&boot_img_hdr(state, BOOT_SLOT_SECONDARY)->ih_ver,
                                                  &mcuboot_s0_s1_image_version);
 
                 /* Only update rc if the currently running version is newer */
@@ -1106,7 +1106,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
              */
             int version_check;
 
-            version_check = boot_version_cmp(&boot_img_hdr(state, BOOT_SECONDARY_SLOT)->ih_ver,
+            version_check = boot_version_cmp(&boot_img_hdr(state, BOOT_SLOT_SECONDARY)->ih_ver,
                                              &mcuboot_s0_s1_image_version);
 
             /* Only update rc if the currently running version is newer */
