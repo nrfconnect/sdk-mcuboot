@@ -14,7 +14,7 @@
 /** Additional memory used by the retention subsystem (2B - prefix, 4B - CRC).*/
 #define BOOT_REQUEST_ENTRY_METADATA_SIZE (2 + 4)
 
-MCUBOOT_LOG_MODULE_REGISTER(bootloader_request);
+BOOT_LOG_MODULE_REGISTER(bootloader_request);
 
 static const struct device *bootloader_request_dev =
 	DEVICE_DT_GET(DT_CHOSEN(nrf_bootloader_request));
