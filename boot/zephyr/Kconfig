@@ -671,7 +671,6 @@ if BOOT_ENCRYPT_X25519 && BOOT_USE_PSA_CRYPTO
 
 choice BOOT_HMAC_SHA
 	prompt "SHA used for HMAC and HKDF in encryption key exchange"
-	default BOOT_HMAC_SHA512 if BOOT_ENCRYPT_X25519 && (SOC_NRF54L15_CPUAPP || SOC_NRF54LM20A_ENGA_CPUAPP)
 	default BOOT_HMAC_SHA256
 	help
 	  HMAC/HKDF sha algorithm may be selected to synchronize sha
