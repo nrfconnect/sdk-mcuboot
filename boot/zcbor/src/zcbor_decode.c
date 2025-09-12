@@ -926,7 +926,7 @@ bool zcbor_unordered_map_search(zcbor_decoder_t key_decoder, zcbor_state_t *stat
 		}
 
 		/* Skip over both the key and the value. */
-		if (!zcbor_any_skip(state, NULL) || !zcbor_any_skip(state, NULL)) {
+		if (!zcbor_any_skip(state, NULL)) {
 			goto error;
 		}
 	} while (state->elem_count != elem_count);
