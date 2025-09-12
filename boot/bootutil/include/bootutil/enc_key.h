@@ -39,8 +39,6 @@
 extern "C" {
 #endif
 
-#define BOOT_ENC_TLV_ALIGN_SIZE ALIGN_UP(BOOT_ENC_TLV_SIZE, BOOT_MAX_ALIGN)
-
 struct enc_key_data {
     uint8_t valid;
     bootutil_aes_ctr_context aes_ctr;
@@ -69,11 +67,7 @@ int boot_enc_set_key(struct enc_key_data *enc_state, uint8_t slot,
                      const struct boot_status *bs);
 int boot_enc_load(struct boot_loader_state *state, int slot,
                   const struct image_header *hdr, const struct flash_area *fap,
-                  struct boot_status *bs
-#if defined(MCUBOOT_SWAP_USING_OFFSET) && defined(MCUBOOT_SERIAL_RECOVERY)
-                  , uint32_t start_off
-#endif
-                 );
+                  struct boot_status *bs);
 bool boot_enc_valid(struct enc_key_data *enc_state, int slot);
 void boot_enc_encrypt(struct enc_key_data *enc_state, int slot,
         uint32_t off, uint32_t sz, uint32_t blk_off, uint8_t *buf);
