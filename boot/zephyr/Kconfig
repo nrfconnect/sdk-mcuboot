@@ -384,6 +384,19 @@ endif
 
 endchoice
 
+config BOOT_BYPASS_KEY_MATCH
+	bool "Do not match TLV key hash against built in key"
+	depends on !BOOT_SIGNATURE_TYPE_NONE
+	depends on !BOOT_HW_KEY
+	help
+	  MCUboot reads, from TLV, hash of a key that should be used to verify
+	  a signature and uses it to find a builtin key.
+	  This action is pointless when there is single key compiled in,
+	  as the signature verification process will just fail if that is not
+	  the right key.
+	  Enabling this option turns off key matching, slightly reducing
+	  MCUboot code and boot time.
+
 config BOOT_SIGNATURE_USING_KMU
 	bool "Use KMU stored keys for signature verification"
 	depends on NRF_SECURITY
@@ -452,7 +465,7 @@ endif
 
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
-	depends on CPU_CORTEX_M
+	depends on CPU_CORTEX_M || ARMV7_R
 	default y
 	help
 	  This option instructs MCUboot to perform a clean-up of a set of
@@ -531,6 +544,7 @@ config BOOT_VALIDATE_SLOT0_ONCE
 
 config BOOT_PREFER_SWAP_OFFSET
 	bool "Prefer the newer swap offset algorithm"
+	default y if !$(dt_nodelabel_enabled,scratch_partition) && !SOC_FAMILY_STM32
 	help
 	  If y, the BOOT_IMAGE_UPGRADE_MODE will default to using "offset" instead of "scratch".
 	  This is a separate bool config option, because Kconfig doesn't allow defaults to be
@@ -538,7 +552,7 @@ config BOOT_PREFER_SWAP_OFFSET
 
 config BOOT_PREFER_SWAP_MOVE
 	bool "Prefer the newer swap move algorithm"
-	default y if SOC_FAMILY_NORDIC_NRF
+	depends on !BOOT_PREFER_SWAP_OFFSET
 	default y if !$(dt_nodelabel_enabled,scratch_partition)
 	help
 	  If y, the BOOT_IMAGE_UPGRADE_MODE will default to using
@@ -634,6 +648,17 @@ config BOOT_DIRECT_XIP_REVERT
 	  attempt to boot the previous image. The images can also be made permanent
 	  (marked as confirmed in advance) just like in swap mode.
 
+config BOOT_RAM_LOAD_REVERT
+	bool "Enable the revert mechanism in ram-load mode"
+	depends on BOOT_RAM_LOAD
+	help
+	  If y, enables the revert mechanism in ram-load similar to the one in
+	  swap mode. It requires the trailer magic to be added to the signed image.
+	  When a reboot happens without the image being confirmed at runtime, the
+	  bootloader considers the image faulty and erases it. After this it will
+	  attempt to boot the previous image. The images can also be made permanent
+	  (marked as confirmed in advance) just like in swap mode.
+
 config BOOT_BOOTSTRAP
 	bool "Bootstrap erased the primary slot from the secondary slot"
 	help
@@ -676,6 +701,14 @@ config BOOT_IMAGE_EXECUTABLE_RAM_SIZE
 	int "Boot image executable base size"
 	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_SRAM),0)
 endif
+
+config MULTIPLE_EXECUTABLE_RAM_REGIONS
+	bool "Platform RAM is split over multiple areas"
+	depends on BOOT_RAM_LOAD
+	help
+	  To be selected if MCUBoot should be aware of several executable RAM areas.
+	  When selected, boot_get_image_exec_ram_info() should be updated to provide
+	  the information about the areas.
 
 config FLASH_RUNTIME_SOURCES
 	bool "Images are read from flash partitions defined at runtime"
@@ -1213,6 +1246,18 @@ config MCUBOOT_BOOT_BANNER
 
 config BOOT_BANNER_STRING
         default "Using Zephyr OS build" if MCUBOOT_BOOT_BANNER
+
+config MCUBOOT_USE_TLV_ALLOW_LIST
+	bool "Check unprotected TLVs against allow list"
+	default y
+	help
+	  Every unprotected TLV will be checked against list of allowed TLVs,
+	  which is compiled in and depends on configuration; an image that
+	  contain TLV not present on the list will be automaticaly rejected.
+	  This is additional check, as MCUboot will not be parsing TLVs it
+	  has not been compiled to parse in the first place.
+	  Disabling this option will cut down MCUboot size.
+	  The Kconfig controlls MCUboot configuration option MCUBOOT_USE_TLV_ALLOW_LIST.
 
 config BOOT_DECOMPRESSION_SUPPORT
 	bool

@@ -88,17 +88,11 @@ if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
     SECTIONS include/boot_serial/boot_serial.ld
   )
 
-  if(DEFINED CONFIG_BOOT_MGMT_CUSTOM_STORAGE_ERASE OR DEFINED CONFIG_BOOT_MGMT_CUSTOM_IMG_LIST)
+  if(DEFINED CONFIG_BOOT_MGMT_CUSTOM_STORAGE_ERASE)
     zephyr_library_sources(
       boot_serial_extension_zephyr_basic.c
       )
   endif()
-endif()
-
-if(NOT DEFINED CONFIG_FLASH_PAGE_LAYOUT)
-  zephyr_library_sources(
-    flash_map_legacy.c
-    )
 endif()
 
 if(DEFINED CONFIG_BOOT_SHARE_BACKEND_RETENTION)
@@ -117,6 +111,9 @@ endif()
 zephyr_library_include_directories(${BOOT_DIR}/bootutil/include)
 zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/image_validate.c
+  ${BOOT_DIR}/bootutil/src/bootutil_find_key.c
+  ${BOOT_DIR}/bootutil/src/bootutil_img_hash.c
+  ${BOOT_DIR}/bootutil/src/bootutil_img_security_cnt.c
   ${BOOT_DIR}/bootutil/src/tlv.c
   ${BOOT_DIR}/bootutil/src/encrypted.c
   ${BOOT_DIR}/bootutil/src/image_rsa.c
@@ -486,9 +483,17 @@ if(CONFIG_BOOT_ENCRYPTION_KEY_FILE AND NOT CONFIG_BOOT_ENCRYPTION_KEY_FILE STREQ
 endif()
 
 if(CONFIG_MCUBOOT_CLEANUP_ARM_CORE)
-zephyr_library_sources(
-  ${BOOT_DIR}/zephyr/arm_cleanup.c
-)
+  # ARM Cortex-M
+  zephyr_library_sources_ifdef(
+    CONFIG_CPU_CORTEX_M
+    ${BOOT_DIR}/zephyr/cleanup/arm_cortex_m.c
+  )
+
+  # ARM Cortex-R
+  zephyr_library_sources_ifdef(
+    CONFIG_ARMV7_R
+    ${BOOT_DIR}/zephyr/cleanup/arm_cortex_r.c
+  )
 endif()
 
 if(CONFIG_MCUBOOT_BOOT_BANNER)
@@ -512,7 +517,7 @@ function(dt_get_parent node)
   set(${node} "${${node}}" PARENT_SCOPE)
 endfunction()
 
-dt_nodelabel(slot0_flash NODELABEL "slot0_partition")
+dt_nodelabel(slot0_flash NODELABEL "slot0_partition" REQUIRED)
 dt_prop(slot0_size PATH "${slot0_flash}" PROPERTY "reg" INDEX 1)
 dt_get_parent(slot0_flash)
 dt_get_parent(slot0_flash)
@@ -530,7 +535,7 @@ if(CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET)
 endif()
 
 if(NOT CONFIG_SINGLE_APPLICATION_SLOT AND NOT CONFIG_SINGLE_APPLICATION_SLOT_RAM_LOAD)
-  dt_nodelabel(slot1_flash NODELABEL "slot1_partition")
+  dt_nodelabel(slot1_flash NODELABEL "slot1_partition" REQUIRED)
   dt_prop(slot1_size PATH "${slot1_flash}" PROPERTY "reg" INDEX 1)
   dt_get_parent(slot1_flash)
   dt_get_parent(slot1_flash)
@@ -583,15 +588,19 @@ if((CONFIG_BOOT_SWAP_USING_SCRATCH OR CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT
   zephyr_library_sources(flash_check.c)
 endif()
 
+if(CONFIG_BOOT_RAM_LOAD)
+  zephyr_library_sources(ram_load.c)
+endif()
+
 if(SYSBUILD)
   if(CONFIG_SINGLE_APPLICATION_SLOT OR CONFIG_BOOT_FIRMWARE_LOADER OR CONFIG_BOOT_SWAP_USING_SCRATCH OR CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET OR CONFIG_BOOT_UPGRADE_ONLY OR CONFIG_BOOT_DIRECT_XIP OR CONFIG_BOOT_RAM_LOAD)
     # TODO: RAM LOAD support
-    dt_nodelabel(slot0_flash NODELABEL "slot0_partition")
+    dt_nodelabel(slot0_flash NODELABEL "slot0_partition" REQUIRED)
     dt_get_parent(slot0_flash)
     dt_get_parent(slot0_flash)
 
     if(NOT CONFIG_SINGLE_APPLICATION_SLOT)
-      dt_nodelabel(slot1_flash NODELABEL "slot1_partition")
+      dt_nodelabel(slot1_flash NODELABEL "slot1_partition" REQUIRED)
       dt_get_parent(slot1_flash)
       dt_get_parent(slot1_flash)
 
