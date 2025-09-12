@@ -542,11 +542,9 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
         ]
         if compression == "lzma2armthumb":
             compression_filters.insert(0, {"id":lzma.FILTER_ARMTHUMB})
-
-        infile_offset = 0 if pad_header else header_size
-        compressed_data = lzma.compress(img.get_infile_data()[infile_offset:],
-            filters=compression_filters, format=lzma.FORMAT_RAW)
-        uncompressed_size = len(img.get_infile_data()[infile_offset:])
+        compressed_data = lzma.compress(img.get_infile_data(),filters=compression_filters,
+            format=lzma.FORMAT_RAW)
+        uncompressed_size = len(img.get_infile_data())
         compressed_size = len(compressed_data)
         print(f"compressed image size: {compressed_size} bytes")
         print(f"original image size: {uncompressed_size} bytes")
