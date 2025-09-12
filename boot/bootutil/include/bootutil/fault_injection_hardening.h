@@ -160,7 +160,9 @@ int fih_delay(void)
 
     delay = fih_delay_random_uchar();
 
-    for (volatile int i = 0; i < delay; i++) {
+    for (volatile int i = 0; i < delay;) {
+        int tmp = i;
+        i = tmp + 1;
         foo++;
     }
 
