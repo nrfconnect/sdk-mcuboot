@@ -47,6 +47,8 @@ def create_sw_component_data(sw_type, sw_version, sw_measurement_description,
 
     # Note: The measurement value must be the last item of the property
     #       list because later it will be modified by the bootloader.
-    last_key = list(properties.keys())[-1]
+    keys = list(properties.keys())
+    assert len(keys) > 0
+    last_key = keys[-1]
     assert SwComponent.MEASUREMENT_VALUE == last_key, 'Measurement value is not the last item of the property list'
     return dumps(properties)
