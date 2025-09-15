@@ -773,13 +773,8 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
       BOOT_LOG_DBG("Image validation attempt %d/%d", i, CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT);
 #endif /* CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
 
-#if defined(MCUBOOT_SWAP_USING_OFFSET) && defined(MCUBOOT_SERIAL_RECOVERY)
-        FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
-                NULL, 0, NULL, 0);
-#else
         FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
                 NULL, 0, NULL);
-#endif
 
         if (FIH_EQ(fih_rc, FIH_SUCCESS)) {
 #if CONFIG_NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
