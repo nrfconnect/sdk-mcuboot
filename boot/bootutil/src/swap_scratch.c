@@ -271,6 +271,16 @@ boot_status_internal_off(const struct boot_status *bs, int elem_sz)
 int
 boot_slots_compatible(struct boot_loader_state *state)
 {
+    size_t num_sectors_primary;
+    size_t num_sectors_secondary;
+    size_t sz0, sz1;
+    size_t primary_slot_sz, secondary_slot_sz;
+#ifndef MCUBOOT_OVERWRITE_ONLY
+    size_t scratch_sz;
+#endif
+    size_t i, j;
+    int8_t smaller;
+
 #ifdef PM_S1_ADDRESS
     /* Patch needed for NCS. In this case, image 1 primary points to the other
      * B1 slot (ie S0 or S1), and image 0 primary points to the app.
@@ -281,17 +291,17 @@ boot_slots_compatible(struct boot_loader_state *state)
      * partition manager is in use, and since we have the same sector size
      * in all of our flash.
      */
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
         return 1;
-#else
-    size_t num_sectors_primary;
-    size_t num_sectors_secondary;
-    size_t sz0, sz1;
-    size_t primary_slot_sz, secondary_slot_sz;
-#ifndef MCUBOOT_OVERWRITE_ONLY
-    size_t scratch_sz;
+    }
 #endif
-    size_t i, j;
-    int8_t smaller;
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+        return 1;
+    }
+#endif
+#endif
 
     num_sectors_primary = boot_img_num_sectors(state, BOOT_SLOT_PRIMARY);
     num_sectors_secondary = boot_img_num_sectors(state, BOOT_SLOT_SECONDARY);
@@ -380,7 +390,6 @@ boot_slots_compatible(struct boot_loader_state *state)
 #endif
 
     return 1;
-#endif /* PM_S1_ADDRESS */
 }
 
 #define BOOT_LOG_SWAP_STATE(area, state)                            \
