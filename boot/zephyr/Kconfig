@@ -1008,6 +1008,7 @@ config BOOT_USB_DFU_WAIT
 	select IMG_MANAGER
 	select STREAM_FLASH
 	select MULTITHREADING
+	imply DEPRECATION_TEST
 	help
 	  If y, MCUboot waits for a prescribed duration of time to allow
 	  for USB DFU to be invoked. Please note DFU always updates the
@@ -1020,6 +1021,7 @@ config BOOT_USB_DFU_GPIO
 	select IMG_MANAGER
 	select STREAM_FLASH
 	select MULTITHREADING
+	imply DEPRECATION_TEST
 	help
 	  If y, MCUboot uses GPIO to detect whether to invoke USB DFU.
 
