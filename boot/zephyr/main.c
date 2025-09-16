@@ -150,10 +150,7 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
         * !defined(CONFIG_LOG_MODE_MINIMAL)
 	*/
 
-#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
-#include <fprotect.h>
-#include <pm_config.h>
-#endif
+#include "nrf_protect.h"
 
 #if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
 #include <nrf_cleanup.h>
@@ -847,16 +844,6 @@ int main(void)
     nrf_crypto_keys_housekeeping();
 
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
-
-#ifdef PM_S1_ADDRESS
-/* MCUBoot is stored in either S0 or S1, protect both */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_S0_ADDRESS)
-#define PROTECT_ADDR PM_S0_ADDRESS
-#else
-/* There is only one instance of MCUBoot */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_MCUBOOT_ADDRESS)
-#define PROTECT_ADDR PM_MCUBOOT_ADDRESS
-#endif
 
     rc = fprotect_area(PROTECT_ADDR, PROTECT_SIZE);
 
