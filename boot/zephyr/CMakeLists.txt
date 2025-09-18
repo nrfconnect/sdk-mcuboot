@@ -491,7 +491,7 @@ zephyr_library_sources(
 )
 endif()
 
-if(CONFIG_SOC_NRF54H20_PM_S2RAM_OVERRIDE)
+if(CONFIG_PM_S2RAM_RESUME_INTERMEDIARY)
   zephyr_library_sources(${BOOT_DIR}/zephyr/nrf54h20_custom_s2ram.c)
 endif()
 
