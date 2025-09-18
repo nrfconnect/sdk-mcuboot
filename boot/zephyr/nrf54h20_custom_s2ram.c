@@ -45,17 +45,6 @@ void s2ram_designate_slot(uint8_t slot)
 }
 #endif
 
-int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
-{
-    (void)(system_off);
-    return -1;
-}
-
-void pm_s2ram_mark_set(void)
-{
-    /* empty */
-}
-
 struct arm_vector_table {
     uint32_t msp;
     uint32_t reset;
@@ -66,13 +55,13 @@ struct arm_vector_table {
  */
 #define APP_EXE_START_OFFSET 0x800 /* nRF54H20 */
 
-bool pm_s2ram_mark_check_and_clear(void)
+void pm_s2ram_mark_check_and_mediate(void)
 {
     uint32_t reset_reason = nrf_resetinfo_resetreas_local_get(NRF_RESETINFO);
 
     if (reset_reason != NRF_RESETINFO_RESETREAS_LOCAL_UNRETAINED_MASK) {
         /* Normal boot */
-        return false;
+        return;
     }
 
     /* S2RAM resume expected, do doublecheck */
@@ -120,6 +109,4 @@ bool pm_s2ram_mark_check_and_clear(void)
 
 resume_failed:
     FIH_PANIC;
-
-    return true;
 }
