@@ -88,7 +88,6 @@ TLV_VALUES = {
         'ENCKW': 0x31,
         'ENCEC256': 0x32,
         'ENCX25519': 0x33,
-        'ENCX25519_SHA512': 0x34,
         'DEPENDENCY': 0x40,
         'SEC_CNT': 0x50,
         'BOOT_RECORD': 0x60,
@@ -436,7 +435,7 @@ class Image:
                           len(self.payload), tsize, self.slot_size)
                 raise click.UsageError(msg)
 
-    def ecies_hkdf(self, enckey, plainkey, hmac_sha_alg):
+    def ecies_hkdf(self, enckey, plainkey):
         if isinstance(enckey, ecdsa.ECDSA256P1Public):
             newpk = ec.generate_private_key(ec.SECP256R1(), default_backend())
             shared = newpk.exchange(ec.ECDH(), enckey._get_public())
@@ -444,13 +443,13 @@ class Image:
             newpk = X25519PrivateKey.generate()
             shared = newpk.exchange(enckey._get_public())
         derived_key = HKDF(
-            algorithm=hmac_sha_alg, length=48, salt=None,
+            algorithm=hashes.SHA256(), length=48, salt=None,
             info=b'MCUBoot_ECIES_v1', backend=default_backend()).derive(shared)
         encryptor = Cipher(algorithms.AES(derived_key[:16]),
                            modes.CTR(bytes([0] * 16)),
                            backend=default_backend()).encryptor()
         cipherkey = encryptor.update(plainkey) + encryptor.finalize()
-        mac = hmac.HMAC(derived_key[16:], hmac_sha_alg,
+        mac = hmac.HMAC(derived_key[16:], hashes.SHA256(),
                         backend=default_backend())
         mac.update(cipherkey)
         ciphermac = mac.finalize()
@@ -468,8 +467,7 @@ class Image:
                sw_type=None, custom_tlvs=None, compression_tlvs=None,
                compression_type=None, encrypt_keylen=128, clear=False,
                fixed_sig=None, pub_key=None, vector_to_sign=None,
-               user_sha='auto', hmac_sha='auto', is_pure=False, keep_comp_size=False,
-               dont_encrypt=False):
+               user_sha='auto', is_pure=False, keep_comp_size=False, dont_encrypt=False):
         self.enckey = enckey
 
         # key decides on sha, then pub_key; of both are none default is used
@@ -676,17 +674,6 @@ class Image:
             else:
                 plainkey = os.urandom(16)
 
-            if not isinstance(enckey, rsa.RSAPublic):
-                if hmac_sha == 'auto' or hmac_sha == '256':
-                    hmac_sha = '256'
-                    hmac_sha_alg = hashes.SHA256()
-                elif hmac_sha == '512':
-                    if not isinstance(enckey, x25519.X25519Public):
-                        raise click.UsageError("Currently only ECIES-X25519 supports HMAC-SHA512")
-                    hmac_sha_alg = hashes.SHA512()
-                else:
-                    raise click.UsageError("Unsupported HMAC-SHA")
-
             if isinstance(enckey, rsa.RSAPublic):
                 cipherkey = enckey._get_public().encrypt(
                     plainkey, padding.OAEP(
@@ -695,19 +682,15 @@ class Image:
                         label=None))
                 self.enctlv_len = len(cipherkey)
                 tlv.add('ENCRSA2048', cipherkey)
-            elif isinstance(enckey, ecdsa.ECDSA256P1Public):
-                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey, hmac_sha_alg)
+            elif isinstance(enckey, (ecdsa.ECDSA256P1Public,
+                                     x25519.X25519Public)):
+                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey)
                 enctlv = pubk + mac + cipherkey
                 self.enctlv_len = len(enctlv)
-                tlv.add('ENCEC256', enctlv)
-            elif isinstance(enckey, x25519.X25519Public):
-                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey, hmac_sha_alg)
-                enctlv = pubk + mac + cipherkey
-                self.enctlv_len = len(enctlv)
-                if (hmac_sha == '256'):
-                    tlv.add('ENCX25519', enctlv)
+                if isinstance(enckey, ecdsa.ECDSA256P1Public):
+                    tlv.add('ENCEC256', enctlv)
                 else:
-                    tlv.add('ENCX25519_SHA512', enctlv)
+                    tlv.add('ENCX25519', enctlv)
 
             if not clear:
                 nonce = bytes([0] * 16)
