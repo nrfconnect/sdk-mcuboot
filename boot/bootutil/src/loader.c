@@ -1274,7 +1274,7 @@ boot_scramble_region(const struct flash_area *fa, uint32_t off, uint32_t size, b
             end_offset = ALIGN_DOWN((off + size), write_block);
         }
 
-        while (off != end_offset) {
+        while (true) {
             /* Write over the area to scramble data that is there */
             rc = flash_area_write(fa, off, buf, write_block);
             if (rc != 0) {
@@ -1291,12 +1291,12 @@ boot_scramble_region(const struct flash_area *fa, uint32_t off, uint32_t size, b
 
                 off -= write_block;
             } else {
-                off += write_block;
-
-                if (end_offset <= off) {
+                if (end_offset < off) {
                     /* Reached the end offset in range and already scrambled it */
                     break;
                 }
+
+                off += write_block;
             }
         }
     }
