@@ -2,7 +2,6 @@
  * Copyright (c) 2012-2014 Wind River Systems, Inc.
  * Copyright (c) 2020 Arm Limited
  * Copyright (c) 2021-2023 Nordic Semiconductor ASA
- * Copyright (c) 2025 Aerlync Labs Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -435,9 +434,6 @@ int main(void)
 {
     struct boot_rsp rsp;
     int rc;
-#if defined(CONFIG_BOOT_USB_DFU_GPIO) || defined(CONFIG_BOOT_USB_DFU_WAIT)
-    bool usb_dfu_requested = false;
-#endif
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
     MCUBOOT_WATCHDOG_SETUP();
@@ -477,36 +473,34 @@ int main(void)
 
 #if defined(CONFIG_BOOT_USB_DFU_GPIO)
     if (io_detect_pin()) {
-        usb_dfu_requested = true;
-
 #ifdef CONFIG_MCUBOOT_INDICATION_LED
         io_led_set(1);
 #endif
 
         mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_ENTERED);
-    }
-#elif defined(CONFIG_BOOT_USB_DFU_WAIT)
-    usb_dfu_requested = true;
-#endif
 
-#if defined(CONFIG_BOOT_USB_DFU_GPIO) || defined(CONFIG_BOOT_USB_DFU_WAIT)
-    if (usb_dfu_requested) {
         rc = usb_enable(NULL);
         if (rc) {
-            BOOT_LOG_ERR("Cannot enable USB: %d", rc);
+            BOOT_LOG_ERR("Cannot enable USB");
         } else {
             BOOT_LOG_INF("Waiting for USB DFU");
-
-#if defined(CONFIG_BOOT_USB_DFU_WAIT)
-            mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_WAITING);
-            wait_for_usb_dfu(K_MSEC(CONFIG_BOOT_USB_DFU_WAIT_DELAY_MS));
-            BOOT_LOG_INF("USB DFU wait time elapsed");
-            mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_TIMED_OUT);
-#else
             wait_for_usb_dfu(K_FOREVER);
-            BOOT_LOG_INF("USB DFU wait terminated");
-#endif
+            BOOT_LOG_INF("USB DFU wait time elapsed");
         }
+    }
+#elif defined(CONFIG_BOOT_USB_DFU_WAIT)
+    rc = usb_enable(NULL);
+    if (rc) {
+        BOOT_LOG_ERR("Cannot enable USB");
+    } else {
+        BOOT_LOG_INF("Waiting for USB DFU");
+
+        mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_WAITING);
+
+        wait_for_usb_dfu(K_MSEC(CONFIG_BOOT_USB_DFU_WAIT_DELAY_MS));
+        BOOT_LOG_INF("USB DFU wait time elapsed");
+
+        mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_TIMED_OUT);
     }
 #endif
 
