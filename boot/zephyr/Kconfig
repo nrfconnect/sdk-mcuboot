@@ -70,15 +70,20 @@ if BOOT_USE_PSA_CRYPTO
 
 config BOOT_PSA_IMG_HASH_ALG_SHA256_DEPENDENCIES
 	bool
-	default y if BOOT_IMG_HASH_ALG_SHA256
+	default y if BOOT_SOMETHING_USES_SHA256
 	select PSA_WANT_ALG_SHA_256
 	help
 	  Dependencies for hashing with SHA256
 
+config BOOT_PSA_IMG_HASH_ALG_SHA512_DEPENDENCIES
+	bool
+	default y if BOOT_SOMETHING_USES_SHA512
+	select PSA_WANT_ALG_SHA_512
+	help
+	  Dependencies for hashing with SHA512
+
 config BOOT_ED25519_PSA_DEPENDENCIES
 	bool
-	select PSA_WANT_ALG_SHA_256
-	select PSA_WANT_ALG_SHA_512
 	select PSA_WANT_ALG_PURE_EDDSA
 	# Seems that upstream mbedTLS does not have TE
 	#select PSA_WANT_ECC_TWISTED_EDWARDS_255
@@ -108,6 +113,14 @@ config BOOT_X25519_PSA_DEPENDENCIES
 
 endif # BOOT_ENCRYPT_IMAGE
 
+config BOOT_ECDSA_PSA_DEPENDENCIES
+	bool
+	select PSA_WANT_ALG_ECDSA
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
+	select PSA_WANT_ECC_SECP_R1_256
+	help
+	  Dependencies for ECDSA signature
+
 if MBEDTLS_ENABLE_HEAP
 
 config MBEDTLS_HEAP_SIZE
@@ -128,6 +141,30 @@ config SINGLE_APPLICATION_SLOT
 	  Single image area is used for application which means that
 	  uploading a new application overwrites the one that previously
 	  occupied the area.
+
+config BOOT_SOMETHING_USES_SHA256
+	bool
+	help
+	  Hidden option that should be selected when something requires
+	  SHA256 implementation in any form. It should be used by crypto
+	  backends to enable support for SHA256 in code and/or hardware
+	  drivers.
+
+config BOOT_SOMETHING_USES_SHA384
+	bool
+	help
+	  Hidden option that should be selected when something requires
+	  SHA384 implementation in any form. It should be used by crypto
+	  backends to enable support for SHA384 in code and/or hardware
+	  drivers.
+
+config BOOT_SOMETHING_USES_SHA512
+	bool
+	help
+	  Hidden option that should be selected when something requires
+	  SHA512 implementation in any form. It should be used by crypto
+	  backends to enable support for SHA512 in code and/or hardware
+	  drivers.
 
 config BOOT_IMG_HASH_ALG_SHA256_ALLOW
 	bool
@@ -173,18 +210,21 @@ choice BOOT_IMG_HASH_ALG
 config BOOT_IMG_HASH_ALG_SHA256
 	bool "SHA256"
 	depends on BOOT_IMG_HASH_ALG_SHA256_ALLOW
+	select BOOT_SOMETHING_USES_SHA256
 	help
 	  SHA256 algorithm
 
 config BOOT_IMG_HASH_ALG_SHA384
 	bool "SHA384"
 	depends on BOOT_IMG_HASH_ALG_SHA384_ALLOW
+	select BOOT_SOMETHING_USES_SHA384
 	help
 	  SHA384 algorithm
 
 config BOOT_IMG_HASH_ALG_SHA512
 	bool "SHA512"
 	depends on BOOT_IMG_HASH_ALG_SHA512_ALLOW
+	select BOOT_SOMETHING_USES_SHA512
 	help
 	  SHA512 algorithm
 
@@ -250,6 +290,16 @@ config BOOT_ECDSA_CC310
 	select NRF_CC310_BL
 	select NRFXLIB_CRYPTO
 	select BOOT_USE_CC310
+
+config BOOT_ECDSA_PSA
+	bool "Use psa cryptoo"
+	select BOOT_USE_PSA_CRYPTO
+	select PSA_CRYPTO_CLIENT
+	select PSA_CRYPTO_C
+	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
+	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
+	select BOOT_ECDSA_PSA_DEPENDENCIES
+
 endchoice # Ecdsa implementation
 endif
 
@@ -325,6 +375,19 @@ endif
 
 endchoice
 
+config BOOT_BYPASS_KEY_MATCH
+	bool "Do not match TLV key hash against built in key"
+	depends on !BOOT_SIGNATURE_TYPE_NONE
+	depends on !BOOT_HW_KEY
+	help
+	  MCUboot reads, from TLV, hash of a key that should be used to verify
+	  a signature and uses it to find a builtin key.
+	  This action is pointless when there is single key compiled in,
+	  as the signature verification process will just fail if that is not
+	  the right key.
+	  Enabling this option turns off key matching, slightly reducing
+	  MCUboot code and boot time.
+
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
 	default "root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
@@ -344,7 +407,7 @@ config BOOT_SIGNATURE_KEY_FILE
 
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
-	depends on CPU_CORTEX_M
+	depends on CPU_CORTEX_M || ARMV7_R
 	default y
 	help
 	  This option instructs MCUboot to perform a clean-up of a set of
@@ -363,6 +426,13 @@ config MCUBOOT_CLEANUP_RAM
 	depends on CPU_CORTEX_M4 || CPU_CORTEX_M33
 	help
 	  Sets contents of memory to 0 before jumping to application.
+
+config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
+	bool "Infinite loop after RAM cleanup"
+	depends on MCUBOOT_CLEANUP_RAM
+	help
+	  Verification option that keeps execution in infinite loop after
+	  RAM cleanup has been performed.
 
 config MBEDTLS_CFG_FILE
 	# It might be awkward to define an Mbed TLS header file when TinyCrypt
@@ -401,6 +471,7 @@ config BOOT_VALIDATE_SLOT0_ONCE
 
 config BOOT_PREFER_SWAP_OFFSET
 	bool "Prefer the newer swap offset algorithm"
+	default y if !$(dt_nodelabel_enabled,scratch_partition) && !SOC_FAMILY_STM32
 	help
 	  If y, the BOOT_IMAGE_UPGRADE_MODE will default to using "offset" instead of "scratch".
 	  This is a separate bool config option, because Kconfig doesn't allow defaults to be
@@ -408,7 +479,7 @@ config BOOT_PREFER_SWAP_OFFSET
 
 config BOOT_PREFER_SWAP_MOVE
 	bool "Prefer the newer swap move algorithm"
-	default y if SOC_FAMILY_NORDIC_NRF
+	depends on !BOOT_PREFER_SWAP_OFFSET
 	default y if !$(dt_nodelabel_enabled,scratch_partition)
 	help
 	  If y, the BOOT_IMAGE_UPGRADE_MODE will default to using
@@ -504,6 +575,17 @@ config BOOT_DIRECT_XIP_REVERT
 	  attempt to boot the previous image. The images can also be made permanent
 	  (marked as confirmed in advance) just like in swap mode.
 
+config BOOT_RAM_LOAD_REVERT
+	bool "Enable the revert mechanism in ram-load mode"
+	depends on BOOT_RAM_LOAD
+	help
+	  If y, enables the revert mechanism in ram-load similar to the one in
+	  swap mode. It requires the trailer magic to be added to the signed image.
+	  When a reboot happens without the image being confirmed at runtime, the
+	  bootloader considers the image faulty and erases it. After this it will
+	  attempt to boot the previous image. The images can also be made permanent
+	  (marked as confirmed in advance) just like in swap mode.
+
 config BOOT_BOOTSTRAP
 	bool "Bootstrap erased the primary slot from the secondary slot"
 	help
@@ -546,6 +628,14 @@ config BOOT_IMAGE_EXECUTABLE_RAM_SIZE
 	int "Boot image executable base size"
 	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_SRAM),0)
 endif
+
+config MULTIPLE_EXECUTABLE_RAM_REGIONS
+	bool "Platform RAM is split over multiple areas"
+	depends on BOOT_RAM_LOAD
+	help
+	  To be selected if MCUBoot should be aware of several executable RAM areas.
+	  When selected, boot_get_image_exec_ram_info() should be updated to provide
+	  the information about the areas.
 
 config FLASH_RUNTIME_SOURCES
 	bool "Images are read from flash partitions defined at runtime"
@@ -600,6 +690,51 @@ config BOOT_ENCRYPT_X25519
 	bool
 	help
 	  Hidden option selecting x25519 encryption.
+
+if BOOT_ENCRYPT_IMAGE
+
+choice BOOT_ENCRYPT_ALG
+	prompt "Algorithm used for image encryption"
+	default BOOT_ENCRYPT_ALG_AES_128
+
+config BOOT_ENCRYPT_ALG_AES_128
+	bool "Use AES-128 for image encryption"
+
+config BOOT_ENCRYPT_ALG_AES_256
+	bool "Use AES-256 for image encryption"
+
+endchoice # BOOT_ENCRYPT_ALG
+
+endif # BOOT_ENCRYPT_IMAGE
+
+if BOOT_ENCRYPT_X25519 && BOOT_USE_PSA_CRYPTO
+
+choice BOOT_HMAC_SHA
+	prompt "SHA used for HMAC and HKDF in encryption key exchange"
+	default BOOT_HMAC_SHA256
+	help
+	  HMAC/HKDF sha algorithm may be selected to synchronize sha
+	  usage with other places in code and reduce compiled in
+	  implementations.
+
+config BOOT_HMAC_SHA256
+	bool "Use SHA256 for HMAC/HKDF"
+	select BOOT_SOMETHING_USES_SHA256
+	help
+	  This is default for ED25519.
+
+config BOOT_HMAC_SHA512
+	bool "Use SHA512 for HMAC/HKDF"
+	depends on BOOT_ENCRYPT_X25519
+	depends on BOOT_USE_PSA_CRYPTO
+	select BOOT_SOMETHING_USES_SHA512
+	help
+	  With ED25519, this option is worth selecting when SHA512 is used
+	  for hashing of an image to reduce number of compiled sha algorithms.
+
+endchoice # BOOT_HMAC_SHA
+
+endif # BOOT_ENCRYPT_X25519 && BOOT_USE_PSA_CRYPTO
 
 config BOOT_ENCRYPTION_KEY_FILE
 	string "Encryption key file"
@@ -881,6 +1016,15 @@ config BOOT_VERSION_CMP_USE_BUILD_NUMBER
 	  minor and revision. Enable this option to take into account the build
 	  number as well.
 
+config BOOT_VERSION_CMP_USE_SLOT_NUMBER
+	bool "Use slot number while comparing image version"
+	depends on (UPDATEABLE_IMAGE_NUMBER > 1) || BOOT_DIRECT_XIP || \
+		   BOOT_RAM_LOAD || MCUBOOT_DOWNGRADE_PREVENTION
+	help
+	  By default, the image slot comparison relies only on active slot.
+	  Enable this option to take into account the specified slot number
+	  instead.
+
 choice BOOT_DOWNGRADE_PREVENTION_CHOICE
 	prompt "Downgrade prevention"
 	optional
@@ -914,7 +1058,30 @@ config MCUBOOT_HW_DOWNGRADE_PREVENTION
 	  Because of the acceptance of equal values it allows for software
 	  downgrade to some extent.
 
+config MCUBOOT_HW_DOWNGRADE_PREVENTION_COUNTER_LIMITED
+	bool "HW based downgrade prevention counter has limited number of updates"
+	depends on MCUBOOT_HW_DOWNGRADE_PREVENTION
+	help
+	  When this option is set, the hardware downgrade prevention counter
+	  has limited number of updates. This option will enable checking
+	  if it is possible to update the counter before performing
+	  the upgrade. If an update package contains a security counter
+	  value as a TLV but it is not possible to update the counter,
+	  the update will be rejected.
+
 endchoice
+
+config MCUBOOT_UUID_VID
+	bool "Expect vendor unique identifier in image's TLV"
+	help
+	  Provide a vendor identification scheme to prevent processing images
+	  generated by a different vendor.
+
+config MCUBOOT_UUID_CID
+	bool "Expect image class unique identifier in image's TLV"
+	help
+	  Provide an image class identification scheme to prevent processing
+	  images for a different CPU or device produced by the same vendor.
 
 config BOOT_WATCHDOG_FEED
 	bool "Feed the watchdog while doing swap"
@@ -968,6 +1135,13 @@ config MCUBOOT_ACTION_HOOKS
 	  'mcuboot_status_type_t' is listed in
 	  boot/bootutil/include/bootutil/mcuboot_status.h
 
+config FIND_NEXT_SLOT_HOOKS
+	bool "Enable hooks for finding the next active slot"
+	help
+	  Allow to provide procedures for override or extend the search policy
+	  for the best slot to boot in the Direct XIP mode.
+	  By default a slot with the highest version is selected.
+
 config BOOT_DISABLE_CACHES
 	bool "Disable I/D caches before chain-loading application"
 	depends on CPU_HAS_ICACHE || CPU_HAS_DCACHE
@@ -994,6 +1168,18 @@ config MCUBOOT_BOOT_BANNER
 
 config BOOT_BANNER_STRING
         default "Using Zephyr OS build" if MCUBOOT_BOOT_BANNER
+
+config MCUBOOT_USE_TLV_ALLOW_LIST
+	bool "Check unprotected TLVs against allow list"
+	default y
+	help
+	  Every unprotected TLV will be checked against list of allowed TLVs,
+	  which is compiled in and depends on configuration; an image that
+	  contain TLV not present on the list will be automaticaly rejected.
+	  This is additional check, as MCUboot will not be parsing TLVs it
+	  has not been compiled to parse in the first place.
+	  Disabling this option will cut down MCUboot size.
+	  The Kconfig controlls MCUboot configuration option MCUBOOT_USE_TLV_ALLOW_LIST.
 
 config BOOT_DECOMPRESSION_SUPPORT
 	bool

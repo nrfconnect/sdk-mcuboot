@@ -51,10 +51,12 @@ struct flash_area;
 
 #define BOOT_TMPBUF_SZ  256
 
-#define NO_ACTIVE_SLOT UINT32_MAX
-
 /** Number of image slots in flash; currently limited to two. */
+#if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) || defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
+#define BOOT_NUM_SLOTS                  1
+#else
 #define BOOT_NUM_SLOTS                  2
+#endif
 
 #if (defined(MCUBOOT_OVERWRITE_ONLY) + \
      defined(MCUBOOT_SWAP_USING_MOVE) + \
@@ -86,6 +88,12 @@ struct flash_area;
 #else
 #define BOOT_STATUS_OP_MOVE     1
 #define BOOT_STATUS_OP_SWAP     2
+#endif
+
+#if (BOOT_IMAGE_NUMBER > 1)
+#define IMAGES_ITER(x) for ((x) = 0; (x) < BOOT_IMAGE_NUMBER; ++(x))
+#else
+#define IMAGES_ITER(x)
 #endif
 
 /*
@@ -192,7 +200,7 @@ _Static_assert(sizeof(boot_img_magic) == BOOT_MAGIC_SZ, "Invalid size for image 
 
 #define BOOT_LOG_IMAGE_INFO(slot, hdr)                                    \
     BOOT_LOG_INF("%-9s slot: version=%u.%u.%u+%u",                        \
-                 ((slot) == BOOT_PRIMARY_SLOT) ? "Primary" : "Secondary", \
+                 ((slot) == BOOT_SLOT_PRIMARY) ? "Primary" : "Secondary", \
                  (hdr)->ih_ver.iv_major,                                  \
                  (hdr)->ih_ver.iv_minor,                                  \
                  (hdr)->ih_ver.iv_revision,                               \
@@ -211,9 +219,6 @@ _Static_assert(sizeof(boot_img_magic) == BOOT_MAGIC_SZ, "Invalid size for image 
 
 /** Maximum number of image sectors supported by the bootloader. */
 #define BOOT_STATUS_MAX_ENTRIES         BOOT_MAX_IMG_SECTORS
-
-#define BOOT_PRIMARY_SLOT               0
-#define BOOT_SECONDARY_SLOT             1
 
 #define BOOT_STATUS_SOURCE_NONE         0
 #define BOOT_STATUS_SOURCE_SCRATCH      1
@@ -275,12 +280,21 @@ struct boot_loader_state {
         /* Image destination and size for the active slot */
         uint32_t img_dst;
         uint32_t img_sz;
-#elif defined(MCUBOOT_DIRECT_XIP_REVERT)
+#endif
+#if defined(MCUBOOT_DIRECT_XIP_REVERT) || defined(MCUBOOT_RAM_LOAD_REVERT)
         /* Swap status for the active slot */
         struct boot_swap_state swap_state;
 #endif
     } slot_usage[BOOT_IMAGE_NUMBER];
 #endif /* MCUBOOT_DIRECT_XIP || MCUBOOT_RAM_LOAD */
+};
+
+struct boot_sector_buffer {
+    boot_sector_t primary[BOOT_IMAGE_NUMBER][BOOT_MAX_IMG_SECTORS];
+    boot_sector_t secondary[BOOT_IMAGE_NUMBER][BOOT_MAX_IMG_SECTORS];
+#if MCUBOOT_SWAP_USING_SCRATCH
+    boot_sector_t scratch[BOOT_MAX_IMG_SECTORS];
+#endif
 };
 
 /* The function is intended for verification of image hash against
@@ -363,18 +377,14 @@ int boot_read_enc_key(const struct flash_area *fap, uint8_t slot,
                       struct boot_status *bs);
 #endif
 
-#ifdef MCUBOOT_SWAP_USING_SCRATCH
-/**
- * Finds the first sector of a given slot that holds image trailer data.
- *
- * @param state      Current bootloader's state.
- * @param slot       The index of the slot to consider.
- * @param trailer_sz The size of the trailer, in bytes.
- *
- * @return The index of the first sector of the slot that holds image trailer data.
+#if MCUBOOT_SWAP_USING_SCRATCH
+/*
+ * Similar to `boot_trailer_sz` but this function returns the space used to
+ * store status in the scratch partition. The scratch partition only stores
+ * status during the swap of the last sector from primary/secondary (which
+ * is the first swap operation) and thus only requires space for one swap.
  */
-size_t
-boot_get_first_trailer_sector(struct boot_loader_state *state, size_t slot, size_t trailer_sz);
+uint32_t boot_scratch_trailer_sz(uint32_t min_write_sz);
 #endif
 
 /**
@@ -386,6 +396,37 @@ boot_get_first_trailer_sector(struct boot_loader_state *state, size_t slot, size
  */
 bool bootutil_buffer_is_erased(const struct flash_area *area,
                                const void *buffer, size_t len);
+
+/**
+ * Opens the flash areas of all images.
+ *
+ * @param state Bootloader state.
+ *
+ * @return 0 on success, another value otherwise.
+ */
+int boot_open_all_flash_areas(struct boot_loader_state *state);
+
+/**
+ * Closes the flash areas of all images.
+ *
+ * @param state Bootloader state.
+ */
+void boot_close_all_flash_areas(struct boot_loader_state *state);
+
+#if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
+/**
+ * Determines the sector layout of both image slots and the scratch area.
+ *
+ * This information is necessary for calculating the number of bytes to erase
+ * and copy during an image swap. The information collected during this
+ * function is used to populate the state.
+ *
+ * @param state   Bootloader state.
+ * @param sectors Buffers where to store the sector layout. If NULL, the statically-allocated
+ *                buffers in loader.c will be used.
+ */
+int boot_read_sectors(struct boot_loader_state *state, struct boot_sector_buffer *sectors);
+#endif
 
 /**
  * Safe (non-overflowing) uint32_t addition.  Returns true, and stores

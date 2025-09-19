@@ -30,7 +30,9 @@ from intelhex import IntelHex
 import hashlib
 import array
 import os.path
+import re
 import struct
+import uuid
 from enum import Enum
 
 import click
@@ -88,6 +90,7 @@ TLV_VALUES = {
         'ENCKW': 0x31,
         'ENCEC256': 0x32,
         'ENCX25519': 0x33,
+        'ENCX25519_SHA512': 0x34,
         'DEPENDENCY': 0x40,
         'SEC_CNT': 0x50,
         'BOOT_RECORD': 0x60,
@@ -95,6 +98,8 @@ TLV_VALUES = {
         'DECOMP_SHA': 0x71,
         'DECOMP_SIGNATURE': 0x72,
         'COMP_DEC_SIZE' : 0x73,
+        'UUID_VID': 0x74,
+        'UUID_CID': 0x75,
 }
 
 TLV_SIZE = 4
@@ -184,6 +189,7 @@ ALLOWED_KEY_SHA = {
     keys.ECDSA384P1         : ['384'],
     keys.ECDSA384P1Public   : ['384'],
     keys.ECDSA256P1         : ['256'],
+    keys.ECDSA256P1Public   : ['256', '512'],
     keys.RSA                : ['256'],
     keys.RSAPublic          : ['256'],
     # This two are set to 256 for compatibility, the right would be 512
@@ -252,6 +258,27 @@ def tlv_matches_key_type(tlv_type, key):
 
     return False
 
+def parse_uuid(namespace, value):
+    # Check if UUID is in the RAW format (12345678-1234-5678-1234-567812345678)
+    uuid_re = r'[0-9A-f]{8}-[0-9A-f]{4}-[0-9A-f]{4}-[0-9A-f]{4}-[0-9A-f]{12}'
+    if re.match(uuid_re, value):
+        uuid_bytes = bytes.fromhex(value.replace('-', ''))
+
+    # Check if UUID is in the RAW HEX format (12345678123456781234567812345678)
+    elif re.match(r'[0-9A-f]{32}', value):
+        uuid_bytes = bytes.fromhex(value)
+
+    # Check if UUID is in the string format
+    elif value.isprintable():
+        if namespace is not None:
+            uuid_bytes = uuid.uuid5(namespace, value).bytes
+        else:
+            raise ValueError(f"Unknown namespace for UUID: {value}")
+    else:
+        raise ValueError(f"Unknown UUID format: {value}")
+
+    return uuid_bytes
+
 
 class Image:
 
@@ -261,7 +288,7 @@ class Image:
                  overwrite_only=False, endian="little", load_addr=0,
                  rom_fixed=None, erased_val=None, save_enctlv=False,
                  security_counter=None, max_align=None,
-                 non_bootable=False):
+                 non_bootable=False, vid=None, cid=None):
 
         if load_addr and rom_fixed:
             raise click.UsageError("Can not set rom_fixed and load_addr at the same time")
@@ -290,6 +317,8 @@ class Image:
         self.enctlv_len = 0
         self.max_align = max(DEFAULT_MAX_ALIGN, align) if max_align is None else int(max_align)
         self.non_bootable = non_bootable
+        self.vid = vid
+        self.cid = cid
 
         if self.max_align == DEFAULT_MAX_ALIGN:
             self.boot_magic = bytes([
@@ -319,7 +348,7 @@ class Image:
         return "<Image version={}, header_size={}, security_counter={}, \
                 base_addr={}, load_addr={}, align={}, slot_size={}, \
                 max_sectors={}, overwrite_only={}, endian={} format={}, \
-                payloadlen=0x{:x}>".format(
+                payloadlen=0x{:x}, vid={}, cid={}>".format(
                     self.version,
                     self.header_size,
                     self.security_counter,
@@ -331,7 +360,9 @@ class Image:
                     self.overwrite_only,
                     self.endian,
                     self.__class__.__name__,
-                    len(self.payload))
+                    len(self.payload),
+                    self.vid,
+                    self.cid)
 
     def load(self, path):
         """Load an image from a given file"""
@@ -348,7 +379,6 @@ class Image:
                     self.payload = copy.copy(self.infile_data)
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
-        self.image_size = len(self.payload)
 
         # Add the image header if needed.
         if self.pad_header and self.header_size > 0:
@@ -357,6 +387,8 @@ class Image:
                 self.base_addr -= self.header_size
             self.payload = bytes([self.erased_val] * self.header_size) + \
                 self.payload
+
+        self.image_size = len(self.payload) - self.header_size
 
         self.check_header()
 
@@ -366,14 +398,19 @@ class Image:
         self.image_size = len(self.payload)
 
         # Add the image header if needed.
-        if self.pad_header and self.header_size > 0:
-            if self.base_addr:
-                # Adjust base_addr for new header
-                self.base_addr -= self.header_size
-            self.payload = bytes([self.erased_val] * self.header_size) + \
-                self.payload
-
-        self.check_header()
+        if self.header_size > 0:
+            if self.pad_header:
+                if self.base_addr:
+                    # Adjust base_addr for new header
+                    self.base_addr -= self.header_size
+                self.payload = bytes([self.erased_val] * self.header_size) + \
+                    self.payload
+            else:
+                # Fill header padding with zeros to align with what is expected
+                # for uncompressed images when no pad_header is requested
+                # (see self.check_header())
+                self.payload = bytes([0] * self.header_size) + \
+                    self.payload
 
     def save(self, path, hex_addr=None):
         """Save an image from a given file"""
@@ -429,21 +466,30 @@ class Image:
                           len(self.payload), tsize, self.slot_size)
                 raise click.UsageError(msg)
 
-    def ecies_hkdf(self, enckey, plainkey):
+    def ecies_hkdf(self, enckey, plainkey, hmac_sha_alg):
         if isinstance(enckey, ecdsa.ECDSA256P1Public):
             newpk = ec.generate_private_key(ec.SECP256R1(), default_backend())
             shared = newpk.exchange(ec.ECDH(), enckey._get_public())
         else:
             newpk = X25519PrivateKey.generate()
             shared = newpk.exchange(enckey._get_public())
+
+        # Detect AES key length from plainkey size
+        key_len = len(plainkey)  # 16 for AES-128, 32 for AES-256
+
+        # Generate derived key with appropriate length (key_len + 32 bytes for HMAC)
         derived_key = HKDF(
-            algorithm=hashes.SHA256(), length=48, salt=None,
+            algorithm=hmac_sha_alg, length=key_len + hmac_sha_alg.digest_size, salt=None,
             info=b'MCUBoot_ECIES_v1', backend=default_backend()).derive(shared)
-        encryptor = Cipher(algorithms.AES(derived_key[:16]),
+
+        # Use appropriate key length for AES encryption
+        encryptor = Cipher(algorithms.AES(derived_key[:key_len]),
                            modes.CTR(bytes([0] * 16)),
                            backend=default_backend()).encryptor()
         cipherkey = encryptor.update(plainkey) + encryptor.finalize()
-        mac = hmac.HMAC(derived_key[16:], hashes.SHA256(),
+
+        # Use remaining bytes for HMAC (after the AES key)
+        mac = hmac.HMAC(derived_key[key_len:], hmac_sha_alg,
                         backend=default_backend())
         mac.update(cipherkey)
         ciphermac = mac.finalize()
@@ -461,7 +507,8 @@ class Image:
                sw_type=None, custom_tlvs=None, compression_tlvs=None,
                compression_type=None, encrypt_keylen=128, clear=False,
                fixed_sig=None, pub_key=None, vector_to_sign=None,
-               user_sha='auto', is_pure=False, keep_comp_size=False, dont_encrypt=False):
+               user_sha='auto', hmac_sha='auto', is_pure=False, keep_comp_size=False,
+               dont_encrypt=False):
         self.enckey = enckey
 
         # key decides on sha, then pub_key; of both are none default is used
@@ -490,6 +537,16 @@ class Image:
             # Size of the security counter TLV: header ('HH') + payload ('I')
             #                                   = 4 + 4 = 8 Bytes
             protected_tlv_size += TLV_SIZE + 4
+
+        if self.vid is not None:
+            # Size of the VID TLV: header ('HH') + payload ('16s')
+            #                                   = 4 + 16 = 20 Bytes
+            protected_tlv_size += TLV_SIZE + 16
+
+        if self.cid is not None:
+            # Size of the CID TLV: header ('HH') + payload ('16s')
+            #                                   = 4 + 16 = 20 Bytes
+            protected_tlv_size += TLV_SIZE + 16
 
         if sw_type is not None:
             if len(sw_type) > MAX_SW_TYPE_LENGTH:
@@ -581,8 +638,9 @@ class Image:
             if dependencies is not None:
                 for i in range(dependencies_num):
                     payload = struct.pack(
-                        e + 'B3x' + 'BBHI',
+                        e + 'BB2x' + 'BBHI',
                         int(dependencies[DEP_IMAGES_KEY][i]),
+                        dependencies[DEP_VERSIONS_KEY][i].slot,
                         dependencies[DEP_VERSIONS_KEY][i].major,
                         dependencies[DEP_VERSIONS_KEY][i].minor,
                         dependencies[DEP_VERSIONS_KEY][i].revision,
@@ -593,6 +651,21 @@ class Image:
             if compression_tlvs is not None:
                 for tag, value in compression_tlvs.items():
                     prot_tlv.add(tag, value)
+
+            if self.vid is not None:
+                vid = parse_uuid(uuid.NAMESPACE_DNS, self.vid)
+                payload = struct.pack(e + '16s', vid)
+                prot_tlv.add('UUID_VID', payload)
+
+            if self.cid is not None:
+                if self.vid is not None:
+                    namespace = uuid.UUID(bytes=vid)
+                else:
+                    namespace = None
+                cid = parse_uuid(namespace, self.cid)
+                payload = struct.pack(e + '16s', cid)
+                prot_tlv.add('UUID_CID', payload)
+
             if custom_tlvs is not None:
                 for tag, value in custom_tlvs.items():
                     prot_tlv.add(tag, value)
@@ -668,6 +741,17 @@ class Image:
             else:
                 plainkey = os.urandom(16)
 
+            if not isinstance(enckey, rsa.RSAPublic):
+                if hmac_sha == 'auto' or hmac_sha == '256':
+                    hmac_sha = '256'
+                    hmac_sha_alg = hashes.SHA256()
+                elif hmac_sha == '512':
+                    if not isinstance(enckey, x25519.X25519Public):
+                        raise click.UsageError("Currently only ECIES-X25519 supports HMAC-SHA512")
+                    hmac_sha_alg = hashes.SHA512()
+                else:
+                    raise click.UsageError("Unsupported HMAC-SHA")
+
             if isinstance(enckey, rsa.RSAPublic):
                 cipherkey = enckey._get_public().encrypt(
                     plainkey, padding.OAEP(
@@ -676,15 +760,19 @@ class Image:
                         label=None))
                 self.enctlv_len = len(cipherkey)
                 tlv.add('ENCRSA2048', cipherkey)
-            elif isinstance(enckey, (ecdsa.ECDSA256P1Public,
-                                     x25519.X25519Public)):
-                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey)
+            elif isinstance(enckey, ecdsa.ECDSA256P1Public):
+                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey, hmac_sha_alg)
                 enctlv = pubk + mac + cipherkey
                 self.enctlv_len = len(enctlv)
-                if isinstance(enckey, ecdsa.ECDSA256P1Public):
-                    tlv.add('ENCEC256', enctlv)
-                else:
+                tlv.add('ENCEC256', enctlv)
+            elif isinstance(enckey, x25519.X25519Public):
+                cipherkey, mac, pubk = self.ecies_hkdf(enckey, plainkey, hmac_sha_alg)
+                enctlv = pubk + mac + cipherkey
+                self.enctlv_len = len(enctlv)
+                if (hmac_sha == '256'):
                     tlv.add('ENCX25519', enctlv)
+                else:
+                    tlv.add('ENCX25519_SHA512', enctlv)
 
             if not clear:
                 nonce = bytes([0] * 16)
