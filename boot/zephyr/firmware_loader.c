@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Copyright (c) 2020 Arm Limited
- * Copyright (c) 2020-2023 Nordic Semiconductor ASA
+ * Copyright (c) 2020-2025 Nordic Semiconductor ASA
  */
 
 #include <assert.h>
@@ -27,7 +27,30 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 static const struct flash_area *_fa_p;
 static struct image_header _hdr = { 0 };
 
-#if defined(MCUBOOT_VALIDATE_PRIMARY_SLOT) || defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
+#if DT_NODE_EXISTS(DT_NODELABEL(slot0_partition))
+#define SLOT0_PARTITION_ID DT_FIXED_PARTITION_ID(DT_NODELABEL(slot0_partition))
+#else
+#error "No slot0_partition found in DTS"
+#endif
+
+#if DT_NODE_EXISTS(DT_NODELABEL(slot2_partition))
+#define SLOT2_PARTITION_ID DT_FIXED_PARTITION_ID(DT_NODELABEL(slot2_partition))
+#endif
+
+#if DT_NODE_EXISTS(DT_NODELABEL(fw_loader_partition))
+#define FW_LOADER_PARTITION_ID DT_FIXED_PARTITION_ID(DT_NODELABEL(fw_loader_partition))
+#elif DT_NODE_EXISTS(DT_NODELABEL(slot1_partition))
+#define FW_LOADER_PARTITION_ID DT_FIXED_PARTITION_ID(DT_NODELABEL(slot1_partition))
+#else
+#error "No firmware loader partition found in DTS"
+#endif
+
+#if DT_NODE_EXISTS(DT_NODELABEL(fw_loader_aux_partition))
+#define FW_LOADER_AUX_PARTITION_ID DT_FIXED_PARTITION_ID(DT_NODELABEL(fw_loader_aux_partition))
+#elif DT_NODE_EXISTS(DT_NODELABEL(slot3_partition))
+#define FW_LOADER_AUX_PARTITION_ID DT_FIXED_PARTITION_ID(DT_NODELABEL(slot3_partition))
+#endif
+
 /**
  * Validate hash of a primary boot image.
  *
@@ -65,7 +88,6 @@ boot_image_validate(const struct flash_area *fa_p,
 
     FIH_RET(fih_rc);
 }
-#endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT || MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE*/
 
 #if defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
 inline static fih_ret
@@ -103,21 +125,21 @@ boot_image_validate_once(const struct flash_area *fa_p,
 #endif
 
 /**
- * Validates that an image in a slot is OK to boot.
+ * Validates that an image in a partition is OK to boot.
  *
- * @param[in]	slot	Slot number to check
+ * @param[in]	id	Fixed partition ID to check
  * @param[out]	rsp	Parameters for booting image, on success
  *
  * @return		FIH_SUCCESS on success; non-zero on failure.
  */
-static fih_ret validate_image_slot(int slot, struct boot_rsp *rsp)
+static fih_ret validate_image_id(int id, struct boot_rsp *rsp)
 {
     int rc = -1;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
-    BOOT_LOG_DBG("validate_image_slot: slot %d", slot);
+    BOOT_LOG_DBG("validate_image_id: id %d", id);
 
-    rc = flash_area_open(slot, &_fa_p);
+    rc = flash_area_open(id, &_fa_p);
     assert(rc == 0);
 
     rc = boot_image_load_header(_fa_p, &_hdr);
@@ -125,20 +147,35 @@ static fih_ret validate_image_slot(int slot, struct boot_rsp *rsp)
         goto other;
     }
 
+    switch (id) {
+    case SLOT0_PARTITION_ID:
+#ifdef SLOT2_PARTITION_ID
+    case SLOT2_PARTITION_ID:
+#endif /* SLOT2_PARTITION_ID */
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
-    FIH_CALL(boot_image_validate, fih_rc, _fa_p, &_hdr);
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        goto other;
-    }
+        FIH_CALL(boot_image_validate, fih_rc, _fa_p, &_hdr);
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            goto other;
+        }
 #elif defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
-    FIH_CALL(boot_image_validate_once, fih_rc, _fa_p, &_hdr);
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        goto other;
-    }
+        FIH_CALL(boot_image_validate_once, fih_rc, _fa_p, &_hdr);
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            goto other;
+        }
+        break;
 #else
-    fih_rc = FIH_SUCCESS;
-#endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
+        fih_rc = FIH_SUCCESS;
+        goto other;
+#endif  /* !MCUBOOT_VALIDATE_PRIMARY_SLOT */
+    default:
+        FIH_CALL(boot_image_validate, fih_rc, _fa_p, &_hdr);
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            goto other;
+        }
+        break;
+    }
 
+    BOOT_LOG_INF("validate_image_id: id %d is valid.", id);
     rsp->br_flash_dev_id = flash_area_get_device_id(_fa_p);
     rsp->br_image_off = flash_area_get_off(_fa_p);
     rsp->br_hdr = &_hdr;
@@ -168,46 +205,78 @@ boot_go(struct boot_rsp *rsp)
     BOOT_LOG_DBG("boot_go: firmware loader");
 
 #ifdef CONFIG_BOOT_FIRMWARE_LOADER_ENTRANCE_GPIO
-    if (io_detect_pin() &&
-            !io_boot_skip_serial_recovery()) {
+    if (io_detect_pin() && !io_boot_skip_serial_recovery()) {
+        BOOT_LOG_INF("Button press detected - enter firmware loader.");
         boot_firmware_loader = true;
     }
 #endif
 
 #ifdef CONFIG_BOOT_FIRMWARE_LOADER_PIN_RESET
     if (io_detect_pin_reset()) {
+        BOOT_LOG_INF("Pin reset detected - enter firmware loader.");
         boot_firmware_loader = true;
     }
 #endif
 
 #ifdef CONFIG_BOOT_FIRMWARE_LOADER_BOOT_MODE
     if (io_detect_boot_mode()) {
+        BOOT_LOG_INF("Boot mode detected - enter firmware loader.");
         boot_firmware_loader = true;
     }
 #endif
 
 #ifdef CONFIG_NRF_BOOT_FIRMWARE_LOADER_BOOT_REQ
     if (boot_request_detect_firmware_loader()) {
+        BOOT_LOG_INF("Boot request detected - enter firmware loader.");
         boot_firmware_loader = true;
     }
 #endif
 
+    while (boot_firmware_loader == false) {
+        BOOT_LOG_DBG("Validating main image(s)...");
+#ifdef SLOT2_PARTITION_ID
+        FIH_CALL(validate_image_id, fih_rc, SLOT2_PARTITION_ID, rsp);
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER_NO_APPLICATION
+            BOOT_LOG_WRN("Failed to validate slot2_partition. Enter firmware loader.");
+            boot_firmware_loader = true;
+            break;
+#else
+            BOOT_LOG_ERR("Failed to validate slot2_partition.");
+            FIH_RET(fih_rc);
+#endif
+        }
+#endif /* slot2_partition */
+
+        FIH_CALL(validate_image_id, fih_rc, SLOT0_PARTITION_ID, rsp);
+#ifdef CONFIG_BOOT_FIRMWARE_LOADER_NO_APPLICATION
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            BOOT_LOG_WRN("Failed to validate slot0_partition. Enter firmware loader.");
+            boot_firmware_loader = true;
+            break;
+        }
+#endif
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+                BOOT_LOG_ERR("Failed to validate slot0_partition.");
+        }
+        FIH_RET(fih_rc);
+    }
+
     /* Check if firmware loader button is pressed. TODO: check all entrance methods */
     if (boot_firmware_loader == true) {
-        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp);
-
-        if (FIH_EQ(fih_rc, FIH_SUCCESS)) {
+        BOOT_LOG_DBG("Validating firmware loader image(s)...");
+#ifdef FW_LOADER_AUX_PARTITION_ID
+        FIH_CALL(validate_image_id, fih_rc, FW_LOADER_AUX_PARTITION_ID, rsp);
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            BOOT_LOG_ERR("Failed to validate auxiliary firmware loader image.");
             FIH_RET(fih_rc);
         }
-    }
-
-    FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_PRIMARY(0), rsp);
-
-#ifdef CONFIG_BOOT_FIRMWARE_LOADER_NO_APPLICATION
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp);
-    }
 #endif
+        FIH_CALL(validate_image_id, fih_rc, FW_LOADER_PARTITION_ID, rsp);
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            BOOT_LOG_ERR("Failed to validate firmware loader image.");
+        }
+    }
 
     FIH_RET(fih_rc);
 }
