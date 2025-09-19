@@ -110,9 +110,9 @@ static size_t app_max_size_adjust_to_trailer(struct boot_loader_state *state, si
 
 
     size_t trailer_sector_primary_end_off =
-        get_first_trailer_sector_end_off(state, BOOT_PRIMARY_SLOT, slot_trailer_sz);
+        get_first_trailer_sector_end_off(state, BOOT_SLOT_PRIMARY, slot_trailer_sz);
     size_t trailer_sector_secondary_end_off =
-        get_first_trailer_sector_end_off(state, BOOT_SECONDARY_SLOT, slot_trailer_sz);
+        get_first_trailer_sector_end_off(state, BOOT_SLOT_SECONDARY, slot_trailer_sz);
 
     /* If slots have sectors of different sizes, we need to find the "common" sector
      * boundary (slot compatibility checks ensure that the larger sector contains a multiple
@@ -271,18 +271,6 @@ boot_status_internal_off(const struct boot_status *bs, int elem_sz)
 int
 boot_slots_compatible(struct boot_loader_state *state)
 {
-#ifdef PM_S1_ADDRESS
-    /* Patch needed for NCS. In this case, image 1 primary points to the other
-     * B1 slot (ie S0 or S1), and image 0 primary points to the app.
-     * With this configuration, image 0 and image 1 share the secondary slot.
-     * Hence, the primary slot of image 1 will be *smaller* than image 1's
-     * secondary slot. This is not allowed in upstream mcuboot, so we need
-     * this patch to allow it. Also, all of these checks are redundant when
-     * partition manager is in use, and since we have the same sector size
-     * in all of our flash.
-     */
-        return 1;
-#else
     size_t num_sectors_primary;
     size_t num_sectors_secondary;
     size_t sz0, sz1;
@@ -293,8 +281,30 @@ boot_slots_compatible(struct boot_loader_state *state)
     size_t i, j;
     int8_t smaller;
 
-    num_sectors_primary = boot_img_num_sectors(state, BOOT_PRIMARY_SLOT);
-    num_sectors_secondary = boot_img_num_sectors(state, BOOT_SECONDARY_SLOT);
+#ifdef PM_S1_ADDRESS
+    /* Patch needed for NCS. In this case, image 1 primary points to the other
+     * B1 slot (ie S0 or S1), and image 0 primary points to the app.
+     * With this configuration, image 0 and image 1 share the secondary slot.
+     * Hence, the primary slot of image 1 will be *smaller* than image 1's
+     * secondary slot. This is not allowed in upstream mcuboot, so we need
+     * this patch to allow it. Also, all of these checks are redundant when
+     * partition manager is in use, and since we have the same sector size
+     * in all of our flash.
+     */
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+        return 1;
+    }
+#endif
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+        return 1;
+    }
+#endif
+#endif
+
+    num_sectors_primary = boot_img_num_sectors(state, BOOT_SLOT_PRIMARY);
+    num_sectors_secondary = boot_img_num_sectors(state, BOOT_SLOT_SECONDARY);
     if ((num_sectors_primary > BOOT_MAX_IMG_SECTORS) ||
         (num_sectors_secondary > BOOT_MAX_IMG_SECTORS)) {
         BOOT_LOG_WRN("Cannot upgrade: more sectors than allowed");
@@ -317,12 +327,12 @@ boot_slots_compatible(struct boot_loader_state *state)
     smaller = 0;
     while (i < num_sectors_primary || j < num_sectors_secondary) {
         if (sz0 == sz1) {
-            sz0 += boot_img_sector_size(state, BOOT_PRIMARY_SLOT, i);
-            sz1 += boot_img_sector_size(state, BOOT_SECONDARY_SLOT, j);
+            sz0 += boot_img_sector_size(state, BOOT_SLOT_PRIMARY, i);
+            sz1 += boot_img_sector_size(state, BOOT_SLOT_SECONDARY, j);
             i++;
             j++;
         } else if (sz0 < sz1) {
-            sz0 += boot_img_sector_size(state, BOOT_PRIMARY_SLOT, i);
+            sz0 += boot_img_sector_size(state, BOOT_SLOT_PRIMARY, i);
             /* Guarantee that multiple sectors of the secondary slot
              * fit into the primary slot.
              */
@@ -333,7 +343,7 @@ boot_slots_compatible(struct boot_loader_state *state)
             smaller = 1;
             i++;
         } else {
-            size_t sector_size = boot_img_sector_size(state, BOOT_SECONDARY_SLOT, j);
+            size_t sector_size = boot_img_sector_size(state, BOOT_SLOT_SECONDARY, j);
 
 #ifdef MCUBOOT_DECOMPRESS_IMAGES
             if (sector_size == 0) {
@@ -380,7 +390,6 @@ boot_slots_compatible(struct boot_loader_state *state)
 #endif
 
     return 1;
-#endif /* PM_S1_ADDRESS */
 }
 
 #define BOOT_LOG_SWAP_STATE(area, state)                            \
@@ -499,7 +508,7 @@ swap_status_source(struct boot_loader_state *state)
 #endif
 
     image_index = BOOT_CURR_IMG(state);
-    rc = boot_read_swap_state(state->imgs[image_index][BOOT_PRIMARY_SLOT].area,
+    rc = boot_read_swap_state(state->imgs[image_index][BOOT_SLOT_PRIMARY].area,
                               &state_primary_slot);
     assert(rc == 0);
 
@@ -577,7 +586,7 @@ boot_copy_sz(const struct boot_loader_state *state, int last_sector_idx,
 
     scratch_sz = boot_scratch_area_size(state);
     for (i = last_sector_idx; i >= 0; i--) {
-        new_sz = sz + boot_img_sector_size(state, BOOT_PRIMARY_SLOT, i);
+        new_sz = sz + boot_img_sector_size(state, BOOT_SLOT_PRIMARY, i);
         /*
          * The secondary slot is not being checked here, because
          * `boot_slots_compatible` already provides assurance that the copy size
@@ -627,14 +636,14 @@ find_last_sector_idx(const struct boot_loader_state *state, uint32_t copy_size)
         if ((primary_slot_size < copy_size) ||
             (primary_slot_size < secondary_slot_size)) {
            primary_slot_size += boot_img_sector_size(state,
-                                                     BOOT_PRIMARY_SLOT,
+                                                     BOOT_SLOT_PRIMARY,
                                                      last_sector_idx_primary);
             ++last_sector_idx_primary;
         }
         if ((secondary_slot_size < copy_size) ||
             (secondary_slot_size < primary_slot_size)) {
            secondary_slot_size += boot_img_sector_size(state,
-                                                       BOOT_SECONDARY_SLOT,
+                                                       BOOT_SLOT_SECONDARY,
                                                        last_sector_idx_secondary);
             ++last_sector_idx_secondary;
         }
@@ -707,17 +716,17 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
     image_index = BOOT_CURR_IMG(state);
 
-    fap_primary_slot = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
+    fap_primary_slot = BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY);
     assert(fap_primary_slot != NULL);
 
-    fap_secondary_slot = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
+    fap_secondary_slot = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
     assert(fap_secondary_slot != NULL);
 
     fap_scratch = state->scratch.area;
     assert(fap_scratch != NULL);
 
     /* Calculate offset from start of image area. */
-    img_off = boot_img_sector_off(state, BOOT_PRIMARY_SLOT, idx);
+    img_off = boot_img_sector_off(state, BOOT_SLOT_PRIMARY, idx);
 
     copy_sz = sz;
     trailer_sz = boot_trailer_sz(BOOT_WRITE_SZ(state));
@@ -736,11 +745,11 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
      * controls if special handling is needed (swapping the first trailer sector).
      */
     first_trailer_sector_primary =
-        boot_get_first_trailer_sector(state, BOOT_PRIMARY_SLOT, trailer_sz);
+        boot_get_first_trailer_sector(state, BOOT_SLOT_PRIMARY, trailer_sz);
 
     /* Check if the currently swapped sector(s) contain the trailer or part of it */
     if ((img_off + sz) >
-        boot_img_sector_off(state, BOOT_PRIMARY_SLOT, first_trailer_sector_primary)) {
+        boot_img_sector_off(state, BOOT_SLOT_PRIMARY, first_trailer_sector_primary)) {
         copy_sz = flash_area_get_size(fap_primary_slot) - img_off - trailer_sz;
 
         /* Check if the computed copy size would cause the beginning of the trailer in the scratch
@@ -816,10 +825,10 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
                  * sector(s) containing the beginning of the trailer won't be erased again.
                  */
                 size_t trailer_sector_secondary =
-                    boot_get_first_trailer_sector(state, BOOT_SECONDARY_SLOT, trailer_sz);
+                    boot_get_first_trailer_sector(state, BOOT_SLOT_SECONDARY, trailer_sz);
 
                 uint32_t trailer_sector_offset =
-                    boot_img_sector_off(state, BOOT_SECONDARY_SLOT, trailer_sector_secondary);
+                    boot_img_sector_off(state, BOOT_SLOT_SECONDARY, trailer_sector_secondary);
 
                 erase_sz = trailer_sector_offset - img_off;
             }
@@ -853,7 +862,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
             /* Ensure the sector(s) containing the beginning of the trailer won't be erased twice */
             uint32_t trailer_sector_off =
-                boot_img_sector_off(state, BOOT_PRIMARY_SLOT, first_trailer_sector_primary);
+                boot_img_sector_off(state, BOOT_SLOT_PRIMARY, first_trailer_sector_primary);
 
             erase_sz = trailer_sector_off - img_off;
         }
@@ -971,8 +980,8 @@ int app_max_size(struct boot_loader_state *state)
     size_t i, j;
     int8_t smaller;
 
-    num_sectors_primary = boot_img_num_sectors(state, BOOT_PRIMARY_SLOT);
-    num_sectors_secondary = boot_img_num_sectors(state, BOOT_SECONDARY_SLOT);
+    num_sectors_primary = boot_img_num_sectors(state, BOOT_SLOT_PRIMARY);
+    num_sectors_secondary = boot_img_num_sectors(state, BOOT_SLOT_SECONDARY);
 
 #ifndef MCUBOOT_OVERWRITE_ONLY
     scratch_sz = boot_scratch_area_size(state);
@@ -993,12 +1002,12 @@ int app_max_size(struct boot_loader_state *state)
     smaller = 0;
     while (i < num_sectors_primary || j < num_sectors_secondary) {
         if (sz0 == sz1) {
-            sz0 += boot_img_sector_size(state, BOOT_PRIMARY_SLOT, i);
-            sz1 += boot_img_sector_size(state, BOOT_SECONDARY_SLOT, j);
+            sz0 += boot_img_sector_size(state, BOOT_SLOT_PRIMARY, i);
+            sz1 += boot_img_sector_size(state, BOOT_SLOT_SECONDARY, j);
             i++;
             j++;
         } else if (sz0 < sz1) {
-            sz0 += boot_img_sector_size(state, BOOT_PRIMARY_SLOT, i);
+            sz0 += boot_img_sector_size(state, BOOT_SLOT_PRIMARY, i);
             /* Guarantee that multiple sectors of the secondary slot
              * fit into the primary slot.
              */
@@ -1009,7 +1018,7 @@ int app_max_size(struct boot_loader_state *state)
             smaller = 1;
             i++;
         } else {
-            sz1 += boot_img_sector_size(state, BOOT_SECONDARY_SLOT, j);
+            sz1 += boot_img_sector_size(state, BOOT_SLOT_SECONDARY, j);
             /* Guarantee that multiple sectors of the primary slot
              * fit into the secondary slot.
              */
@@ -1056,10 +1065,10 @@ int app_max_size(struct boot_loader_state *state)
     assert(fap != NULL);
     primary_sz = flash_area_get_size(fap);
 
-    if (active_slot == BOOT_PRIMARY_SLOT) {
-        active_slot = BOOT_SECONDARY_SLOT;
+    if (active_slot == BOOT_SLOT_PRIMARY) {
+        active_slot = BOOT_SLOT_SECONDARY;
     } else {
-        active_slot = BOOT_PRIMARY_SLOT;
+        active_slot = BOOT_SLOT_PRIMARY;
     }
 
     fap = BOOT_IMG_AREA(state, active_slot);
@@ -1117,22 +1126,22 @@ boot_read_image_header(struct boot_loader_state *state, int slot,
 
         if (bs->idx - BOOT_STATUS_IDX_0 >= swap_count) {
             /* If all segments have been swapped, the header is located in the other slot */
-            hdr_slot = (slot == BOOT_PRIMARY_SLOT) ? BOOT_SECONDARY_SLOT : BOOT_PRIMARY_SLOT;
+            hdr_slot = (slot == BOOT_SLOT_PRIMARY) ? BOOT_SLOT_SECONDARY : BOOT_SLOT_PRIMARY;
         } else if (bs->idx - BOOT_STATUS_IDX_0 == swap_count - 1) {
             /* If the last swap operation is in progress, the headers are currently being swapped
              * since the first segment of each slot is the last to be processed.
              */
 
-            if (slot == BOOT_SECONDARY_SLOT && bs->state >= BOOT_STATUS_STATE_1) {
+            if (slot == BOOT_SLOT_SECONDARY && bs->state >= BOOT_STATUS_STATE_1) {
                 /* After BOOT_STATUS_STATE_1, the secondary image's header has been moved to the
                  * scratch area.
                  */
                 hdr_slot = BOOT_NUM_SLOTS;
-            } else if (slot == BOOT_PRIMARY_SLOT && bs->state >= BOOT_STATUS_STATE_2) {
+            } else if (slot == BOOT_SLOT_PRIMARY && bs->state >= BOOT_STATUS_STATE_2) {
                 /* After BOOT_STATUS_STATE_2, the primary image's header has been moved to the
                  * secondary slot.
                  */
-                hdr_slot = BOOT_SECONDARY_SLOT;
+                hdr_slot = BOOT_SLOT_SECONDARY;
             }
         }
     }
