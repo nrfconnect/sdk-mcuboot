@@ -31,6 +31,8 @@ BOOT_LOG_MODULE_DECLARE(mcuboot_psa_enc);
 static const uint8_t ec_pubkey_oid[] = MBEDTLS_OID_ISO_IDENTIFIED_ORG \
                                        MBEDTLS_OID_ORG_GOV X25519_OID;
 
+#define PRIV_KEY_LEN   32
+
 /* Partitioning of HKDF derived material, from the exchange derived key */
 /* AES key encryption key */
 #define HKDF_AES_KEY_INDEX  0
@@ -81,11 +83,11 @@ parse_x25519_enckey(uint8_t **p, uint8_t *end, uint8_t *private_key)
         return -7;
     }
 
-    if (len != EC_PRIVK_LEN) {
+    if (len != PRIV_KEY_LEN) {
         return -8;
     }
 
-    memcpy(private_key, *p, EC_PRIVK_LEN);
+    memcpy(private_key, *p, PRIV_KEY_LEN);
     return 0;
 }
 
@@ -115,7 +117,7 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
     uint8_t derived_key[HKDF_SIZE];
     uint8_t *cp;
     uint8_t *cpend;
-    uint8_t private_key[EC_PRIVK_LEN];
+    uint8_t private_key[PRIV_KEY_LEN];
     size_t len;
     psa_status_t psa_ret = PSA_ERROR_BAD_STATE;
     psa_status_t psa_cleanup_ret = PSA_ERROR_BAD_STATE;
