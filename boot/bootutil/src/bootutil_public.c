@@ -524,12 +524,10 @@ send_boot_request(uint8_t magic, uint8_t image_ok, bool confirm, int image_id,
             } else {
                 rc = 0;
             }
-        } else {
 #ifdef CONFIG_NCS_MCUBOOT_BOOT_REQUEST_TEST_SETS_BOOT_PREFERENCE
+        } else {
             BOOT_LOG_DBG("Set image preference: %d, %d", image_id, slot_id);
             rc = boot_request_set_preferred_slot(image_id, slot_id);
-#else
-            rc = 0;
 #endif /* CONFIG_NCS_MCUBOOT_BOOT_REQUEST_TEST_SETS_BOOT_PREFERENCE */
         }
         if (rc != 0) {
