@@ -74,14 +74,14 @@ if BOOT_USE_PSA_CRYPTO
 config BOOT_PSA_IMG_HASH_ALG_SHA256_DEPENDENCIES
 	bool
 	default y if BOOT_SOMETHING_USES_SHA256
-	select PSA_WANT_ALG_SHA_256
+	select PSA_WANT_ALG_SHA_256 if !PSA_CORE_LITE
 	help
 	  Dependencies for hashing with SHA256
 
 config BOOT_PSA_IMG_HASH_ALG_SHA512_DEPENDENCIES
 	bool
 	default y if BOOT_SOMETHING_USES_SHA512
-	select PSA_WANT_ALG_SHA_512
+	select PSA_WANT_ALG_SHA_512 if !PSA_CORE_LITE
 	help
 	  Dependencies for hashing with SHA512
 
