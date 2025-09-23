@@ -43,18 +43,11 @@
 #include <string.h>
 #include <flash_map_backend/flash_map_backend.h>
 #include <mcuboot_config/mcuboot_config.h>
+#include <bootutil/bootutil_macros.h>
 #include <bootutil/image.h>
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifndef ALIGN_UP
-#define ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
-#endif
-
-#ifndef ALIGN_DOWN
-#define ALIGN_DOWN(num, align)  ((num) & ~((align) - 1))
 #endif
 
 /** Attempt to boot the contents of the primary slot. */
@@ -136,6 +129,14 @@ _Static_assert(MCUBOOT_BOOT_MAX_ALIGN >= 8 && MCUBOOT_BOOT_MAX_ALIGN <= 32,
                                                     (swap_info) = (image) << 4 \
                                                                 | (type);      \
                                                     }
+
+enum boot_slot {
+    BOOT_SLOT_PRIMARY = 0,      /* Primary slot */
+    BOOT_SLOT_SECONDARY = 1,    /* Secondary slot */
+    BOOT_SLOT_COUNT = 2,        /* Number of slots */
+    BOOT_SLOT_NONE = UINT32_MAX /* special value representing no active slot */
+};
+
 #ifdef MCUBOOT_HAVE_ASSERT_H
 #include "mcuboot_config/mcuboot_assert.h"
 #else
@@ -301,6 +302,12 @@ boot_set_next(const struct flash_area *fa, bool active, bool confirm);
 
 /**
  * Attempts to load image header from flash; verifies flash header fields.
+ *
+ * The selected update method (i.e. swap move) may impose additional restrictions
+ * on the image size (i.e. due to the presence of the image trailer).
+ * Such restrictions are not verified by this function.
+ * These checks are implemented as part of the boot_image_validate(..) that uses
+ * sizes from the bootutil_max_image_size(..).
  *
  * @param[in]   fa_p    flash area pointer
  * @param[out]  hdr     buffer for image header

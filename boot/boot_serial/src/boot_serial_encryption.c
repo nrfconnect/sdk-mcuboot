@@ -19,29 +19,19 @@
 BOOT_LOG_MODULE_DECLARE(serial_encryption);
 
 fih_ret
-boot_image_validate_encrypted(const struct flash_area *fa_p,
+boot_image_validate_encrypted(struct boot_loader_state *state,
+                              const struct flash_area *fa_p,
                               struct image_header *hdr, uint8_t *buf,
-                              uint16_t buf_size
-#ifdef MCUBOOT_SWAP_USING_OFFSET
-                              , uint32_t start_off
-#endif
-                             )
+                              uint16_t buf_size)
 {
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
-    struct boot_loader_state boot_data;
-    struct boot_loader_state *state = &boot_data;
     struct boot_status _bs;
     struct boot_status *bs = &_bs;
     int rc;
 
-    memset(&boot_data, 0, sizeof(struct boot_loader_state));
-    if(IS_ENCRYPTED(hdr)) {
-#ifdef MCUBOOT_SWAP_USING_OFFSET
-        rc = boot_enc_load(state, 1, hdr, fa_p, bs, start_off);
-#else
+    if (MUST_DECRYPT(fa_p, BOOT_CURR_IMG(state), hdr)) {
         rc = boot_enc_load(state, 1, hdr, fa_p, bs);
-#endif
         if (rc < 0) {
             FIH_RET(fih_rc);
         }
@@ -51,13 +41,10 @@ boot_image_validate_encrypted(const struct flash_area *fa_p,
         }
     }
 
-#ifdef MCUBOOT_SWAP_USING_OFFSET
-    FIH_CALL(bootutil_img_validate, fih_rc, state,
-             hdr, fa_p, buf, buf_size, NULL, 0, NULL, start_off);
-#else
     FIH_CALL(bootutil_img_validate, fih_rc, state,
              hdr, fa_p, buf, buf_size, NULL, 0, NULL);
-#endif
+
+    boot_enc_zeroize(BOOT_CURR_ENC(state));
 
     FIH_RET(fih_rc);
 }
@@ -241,18 +228,14 @@ decrypt_image_inplace(const struct flash_area *fa_p,
 #if 0 //Skip this step?, the image will just not boot if it's not decrypted properly
         static uint8_t tmpbuf[BOOT_TMPBUF_SZ];
          /* First check if the encrypted image is a good image before decrypting */
-        FIH_CALL(boot_image_validate_encrypted,fih_rc,fa_p,&_hdr,tmpbuf,BOOT_TMPBUF_SZ);
+        FIH_CALL(boot_image_validate_encrypted, fih_rc, state, fa_p, &_hdr, tmpbuf, BOOT_TMPBUF_SZ);
         if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
              FIH_RET(fih_rc);
         }
 #endif
         memset(&boot_data, 0, sizeof(struct boot_loader_state));
         /* Load the encryption keys into cache */
-#ifdef MCUBOOT_SWAP_USING_OFFSET
-        rc = boot_enc_load(state, 0, hdr, fa_p, bs, 0);
-#else
         rc = boot_enc_load(state, 0, hdr, fa_p, bs);
-#endif
         if (rc < 0) {
             FIH_RET(fih_rc);
         }

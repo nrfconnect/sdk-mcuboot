@@ -42,11 +42,27 @@
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
+#if defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET) || \
+    defined(MCUBOOT_SWAP_USING_SCRATCH)
+#include "swap_priv.h"
+#endif
+
+#if defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO) || defined(MCUBOOT_SWAP_USING_SCRATCH)
+#include "swap_priv.h"
+#endif
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 /* Currently only used by imgmgr */
 int boot_current_slot;
+
+#if (!defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)) || \
+defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO)
+/* Used for holding static buffers in multiple functions to work around issues
+ * in older versions of gcc (e.g. 4.8.4)
+ */
+static struct boot_sector_buffer sector_buffers;
+#endif
 
 /**
  * @brief Determine if the data at two memory addresses is equal
@@ -99,12 +115,6 @@ out:
 static inline uint32_t
 boot_trailer_info_sz(void)
 {
-#if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) ||      \
-    defined(MCUBOOT_FIRMWARE_LOADER) ||              \
-    defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
-    /* Single image MCUboot modes do not have a trailer */
-    return 0;
-#else
     return (
 #ifdef MCUBOOT_ENC_IMAGES
            /* encryption keys */
@@ -118,7 +128,6 @@ boot_trailer_info_sz(void)
            BOOT_MAX_ALIGN * 4                     +
            BOOT_MAGIC_ALIGN_SIZE
            );
-#endif
 }
 
 /*
@@ -155,6 +164,9 @@ int boot_trailer_scramble_offset(const struct flash_area *fa, size_t alignment,
 {
     int ret = 0;
 
+    BOOT_LOG_DBG("boot_trailer_scramble_offset: flash_area %p, alignment %u",
+                 fa, (unsigned int)alignment);
+
     /* Not allowed to enforce alignment smaller than device allows */
     if (alignment < flash_area_align(fa)) {
         alignment = flash_area_align(fa);
@@ -176,6 +188,9 @@ int boot_trailer_scramble_offset(const struct flash_area *fa, size_t alignment,
         *off = flash_area_get_size(fa) - ALIGN_DOWN(boot_trailer_sz(alignment), alignment);
     }
 
+    BOOT_LOG_DBG("boot_trailer_scramble_offset: final alignment %u, offset %u",
+                 (unsigned int)alignment, (unsigned int)*off);
+
     return ret;
 }
 
@@ -187,12 +202,14 @@ int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *o
     size_t loff = 0;
     struct flash_sector sector;
 
+    BOOT_LOG_DBG("boot_header_scramble_off_sz: slot %d", slot);
+
     (void)slot;
 #if defined(MCUBOOT_SWAP_USING_OFFSET)
     /* In case of swap offset, header of secondary slot image is positioned
      * in second sector of slot.
      */
-    if (slot == BOOT_SECONDARY_SLOT) {
+    if (slot == BOOT_SLOT_SECONDARY) {
         ret = flash_area_get_sector(fa, 0, &sector);
         if (ret < 0) {
             return ret;
@@ -215,6 +232,8 @@ int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *o
     }
     *off = loff;
 
+    BOOT_LOG_DBG("boot_header_scramble_off_sz: size %u", (unsigned int)*size);
+
     return ret;
 }
 
@@ -225,8 +244,7 @@ int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *o
  * status during the swap of the last sector from primary/secondary (which
  * is the first swap operation) and thus only requires space for one swap.
  */
-static uint32_t
-boot_scratch_trailer_sz(uint32_t min_write_sz)
+uint32_t boot_scratch_trailer_sz(uint32_t min_write_sz)
 {
     return boot_status_entry_sz(min_write_sz) + boot_trailer_info_sz();
 }
@@ -298,7 +316,7 @@ boot_find_status(const struct boot_loader_state *state, int image_index)
 #if MCUBOOT_SWAP_USING_SCRATCH
         state->scratch.area,
 #endif
-        state->imgs[image_index][BOOT_PRIMARY_SLOT].area,
+        state->imgs[image_index][BOOT_SLOT_PRIMARY].area,
     };
     unsigned int i;
 
@@ -412,44 +430,6 @@ boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
 }
 #endif
 
-#ifdef MCUBOOT_SWAP_USING_SCRATCH
-size_t
-boot_get_first_trailer_sector(struct boot_loader_state *state, size_t slot, size_t trailer_sz)
-{
-    size_t first_trailer_sector = boot_img_num_sectors(state, slot) - 1;
-    size_t sector_sz = boot_img_sector_size(state, slot, first_trailer_sector);
-    size_t trailer_sector_sz = sector_sz;
-
-    while (trailer_sector_sz < trailer_sz) {
-        /* Consider that the image trailer may span across sectors of different sizes */
-        --first_trailer_sector;
-        sector_sz = boot_img_sector_size(state, slot, first_trailer_sector);
-
-        trailer_sector_sz += sector_sz;
-    }
-
-    return first_trailer_sector;
-}
-
-/**
- * Returns the offset to the end of the first sector of a given slot that holds image trailer data.
- *
- * @param state      Current bootloader's state.
- * @param slot       The index of the slot to consider.
- * @param trailer_sz The size of the trailer, in bytes.
- *
- * @return The offset to the end of the first sector of the slot that holds image trailer data.
- */
-static uint32_t
-get_first_trailer_sector_end_off(struct boot_loader_state *state, size_t slot, size_t trailer_sz)
-{
-    size_t first_trailer_sector = boot_get_first_trailer_sector(state, slot, trailer_sz);
-
-    return boot_img_sector_off(state, slot, first_trailer_sector) +
-           boot_img_sector_size(state, slot, first_trailer_sector);
-}
-#endif /* MCUBOOT_SWAP_USING_SCRATCH */
-
 uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct flash_area *fap)
 {
 #if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) ||      \
@@ -457,61 +437,10 @@ uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct f
     defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
     (void) state;
     return boot_status_off(fap);
-#elif defined(MCUBOOT_SWAP_USING_SCRATCH)
-    size_t slot_trailer_sz = boot_trailer_sz(BOOT_WRITE_SZ(state));
-    size_t slot_trailer_off = flash_area_get_size(fap) - slot_trailer_sz;
-
-    /* If the trailer doesn't fit in the last sector of the primary or secondary slot, some padding
-     * might have to be inserted between the end of the firmware image and the beginning of the
-     * trailer to ensure there is enough space for the trailer in the scratch area when the last
-     * sector of the secondary will be copied to the scratch area.
-     *
-     * The value of the padding depends on the amount of trailer data that is contained in the first
-     * trailer containing part of the trailer in the primary and secondary slot.
-     */
-    size_t trailer_sector_primary_end_off =
-        get_first_trailer_sector_end_off(state, BOOT_PRIMARY_SLOT, slot_trailer_sz);
-    size_t trailer_sector_secondary_end_off =
-        get_first_trailer_sector_end_off(state, BOOT_SECONDARY_SLOT, slot_trailer_sz);
-
-    size_t trailer_sz_in_first_sector;
-
-    if (trailer_sector_primary_end_off > trailer_sector_secondary_end_off) {
-        trailer_sz_in_first_sector = trailer_sector_primary_end_off - slot_trailer_off;
-    } else {
-        trailer_sz_in_first_sector = trailer_sector_secondary_end_off - slot_trailer_off;
-    }
-
-    size_t trailer_padding = 0;
-    size_t scratch_trailer_sz = boot_scratch_trailer_sz(BOOT_WRITE_SZ(state));
-
-    if (scratch_trailer_sz > trailer_sz_in_first_sector) {
-        trailer_padding = scratch_trailer_sz - trailer_sz_in_first_sector;
-    }
-
-    return slot_trailer_off - trailer_padding;
-#elif defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET)
+#elif defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET) \
+      || defined(MCUBOOT_SWAP_USING_SCRATCH)
     (void) fap;
-
-    /* The slot whose size is used to compute the maximum image size must be the one containing the
-     * padding required for the swap. */
-#ifdef MCUBOOT_SWAP_USING_MOVE
-    size_t slot = BOOT_PRIMARY_SLOT;
-#else
-    size_t slot = BOOT_SECONDARY_SLOT;
-#endif
-
-    const struct flash_area *fap_padded_slot = BOOT_IMG_AREA(state, slot);
-    assert(fap_padded_slot != NULL);
-
-    size_t trailer_sz = boot_trailer_sz(BOOT_WRITE_SZ(state));
-    size_t sector_sz = boot_img_sector_size(state, slot, 0);
-    size_t padding_sz = sector_sz;
-
-    /* The trailer size needs to be sector-aligned */
-    trailer_sz = ALIGN_UP(trailer_sz, sector_sz);
-
-    return flash_area_get_size(fap_padded_slot) - trailer_sz - padding_sz;
+    return app_max_size(state);
 #elif defined(MCUBOOT_OVERWRITE_ONLY)
     (void) state;
     return boot_swap_info_off(fap);
@@ -541,7 +470,7 @@ boot_read_image_size(struct boot_loader_state *state, int slot, uint32_t *size)
     uint32_t protect_tlv_size;
     int rc;
 
-    assert(slot == BOOT_PRIMARY_SLOT || slot == BOOT_SECONDARY_SLOT);
+    assert(slot == BOOT_SLOT_PRIMARY || slot == BOOT_SLOT_SECONDARY);
 
     fap = BOOT_IMG_AREA(state, slot);
     assert(fap != NULL);
@@ -601,12 +530,17 @@ boot_erase_region(const struct flash_area *fa, uint32_t off, uint32_t size, bool
 {
     int rc = 0;
 
+    BOOT_LOG_DBG("boot_erase_region: flash_area %p, offset %d, size %d, backwards == %d",
+                 fa, off, size, (int)backwards);
+
     if (off >= flash_area_get_size(fa) || (flash_area_get_size(fa) - off) < size) {
         rc = -1;
         goto end;
     } else if (device_requires_erase(fa)) {
         uint32_t end_offset = 0;
         struct flash_sector sector;
+
+        BOOT_LOG_DBG("boot_erase_region: device with erase");
 
         if (backwards) {
             /* Get the lowest page offset first */
@@ -681,8 +615,212 @@ boot_erase_region(const struct flash_area *fa, uint32_t off, uint32_t size, bool
                 off += 1;
             }
         }
+    } else {
+        BOOT_LOG_DBG("boot_erase_region: device without erase");
     }
 
 end:
     return rc;
+}
+
+#if (!defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)) || \
+defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO)
+int
+boot_initialize_area(struct boot_loader_state *state, int flash_area)
+{
+    uint32_t num_sectors = BOOT_MAX_IMG_SECTORS;
+    boot_sector_t *out_sectors;
+    uint32_t *out_num_sectors;
+    int rc;
+
+    num_sectors = BOOT_MAX_IMG_SECTORS;
+
+    if (flash_area == FLASH_AREA_IMAGE_PRIMARY(BOOT_CURR_IMG(state))) {
+        out_sectors = BOOT_IMG(state, BOOT_SLOT_PRIMARY).sectors;
+        out_num_sectors = &BOOT_IMG(state, BOOT_SLOT_PRIMARY).num_sectors;
+#if BOOT_NUM_SLOTS > 1
+    } else if (flash_area == FLASH_AREA_IMAGE_SECONDARY(BOOT_CURR_IMG(state))) {
+        out_sectors = BOOT_IMG(state, BOOT_SLOT_SECONDARY).sectors;
+        out_num_sectors = &BOOT_IMG(state, BOOT_SLOT_SECONDARY).num_sectors;
+#if MCUBOOT_SWAP_USING_SCRATCH
+    } else if (flash_area == FLASH_AREA_IMAGE_SCRATCH) {
+        out_sectors = state->scratch.sectors;
+        out_num_sectors = &state->scratch.num_sectors;
+#endif
+#endif
+    } else {
+        return BOOT_EFLASH;
+    }
+
+#ifdef MCUBOOT_USE_FLASH_AREA_GET_SECTORS
+    rc = flash_area_get_sectors(flash_area, &num_sectors, out_sectors);
+#else
+    _Static_assert(sizeof(int) <= sizeof(uint32_t), "Fix needed");
+    rc = flash_area_to_sectors(flash_area, (int *)&num_sectors, out_sectors);
+#endif /* defined(MCUBOOT_USE_FLASH_AREA_GET_SECTORS) */
+    if (rc != 0) {
+        return rc;
+    }
+    *out_num_sectors = num_sectors;
+    return 0;
+}
+
+static uint32_t
+boot_write_sz(struct boot_loader_state *state)
+{
+    uint32_t elem_sz;
+#if MCUBOOT_SWAP_USING_SCRATCH
+    uint32_t align;
+#endif
+
+    /* Figure out what size to write update status update as.  The size depends
+     * on what the minimum write size is for scratch area, active image slot.
+     * We need to use the bigger of those 2 values.
+     */
+    elem_sz = flash_area_align(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
+#if MCUBOOT_SWAP_USING_SCRATCH
+    align = flash_area_align(BOOT_SCRATCH_AREA(state));
+    if (align > elem_sz) {
+        elem_sz = align;
+    }
+#endif
+
+    return elem_sz;
+}
+
+int
+boot_read_sectors(struct boot_loader_state *state, struct boot_sector_buffer *sectors)
+{
+    uint8_t image_index;
+    int rc;
+
+    if (sectors == NULL) {
+        sectors = &sector_buffers;
+    }
+
+    image_index = BOOT_CURR_IMG(state);
+
+    BOOT_IMG(state, BOOT_SLOT_PRIMARY).sectors =
+        sectors->primary[image_index];
+#if BOOT_NUM_SLOTS > 1
+    BOOT_IMG(state, BOOT_SLOT_SECONDARY).sectors =
+        sectors->secondary[image_index];
+#if MCUBOOT_SWAP_USING_SCRATCH
+    state->scratch.sectors = sectors->scratch;
+#endif
+#endif
+
+    rc = boot_initialize_area(state, FLASH_AREA_IMAGE_PRIMARY(image_index));
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+#if BOOT_NUM_SLOTS > 1
+    rc = boot_initialize_area(state, FLASH_AREA_IMAGE_SECONDARY(image_index));
+    if (rc != 0) {
+        /* We need to differentiate from the primary image issue */
+        return BOOT_EFLASH_SEC;
+    }
+
+#if MCUBOOT_SWAP_USING_SCRATCH
+    rc = boot_initialize_area(state, FLASH_AREA_IMAGE_SCRATCH);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+#endif
+#endif
+
+    BOOT_WRITE_SZ(state) = boot_write_sz(state);
+
+    return 0;
+}
+#endif
+
+#if defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO)
+static int
+boot_read_sectors_recovery(struct boot_loader_state *state)
+{
+    uint8_t image_index;
+    int rc;
+
+    image_index = BOOT_CURR_IMG(state);
+
+    rc = boot_initialize_area(state, FLASH_AREA_IMAGE_PRIMARY(image_index));
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_initialize_area(state, FLASH_AREA_IMAGE_SECONDARY(image_index));
+    if (rc != 0) {
+        /* We need to differentiate from the primary image issue */
+        return BOOT_EFLASH_SEC;
+    }
+
+    return 0;
+}
+
+/**
+ * Reads image data to find out the maximum application sizes. Only needs to
+ * be called in serial recovery mode, as the state information is unpopulated
+ * at that time
+ */
+void boot_fetch_slot_state_sizes(void)
+{
+    int rc = -1;
+    int image_index;
+    struct boot_loader_state *state = boot_get_loader_state();
+
+    rc = boot_open_all_flash_areas(state);
+    if (rc != 0) {
+        BOOT_LOG_DBG("boot_fetch_slot_state_sizes: error %d while opening flash areas", rc);
+        goto finish;
+    }
+
+    IMAGES_ITER(BOOT_CURR_IMG(state)) {
+        int max_size = 0;
+
+        image_index = BOOT_CURR_IMG(state);
+
+        BOOT_IMG(state, BOOT_SLOT_PRIMARY).sectors = sector_buffers.primary[image_index];
+#if BOOT_NUM_SLOTS > 1
+        BOOT_IMG(state, BOOT_SLOT_SECONDARY).sectors = sector_buffers.secondary[image_index];
+#if MCUBOOT_SWAP_USING_SCRATCH
+        state->scratch.sectors = sector_buffers.scratch;
+#endif
+#endif
+
+        /* Determine the sector layout of the image slots and scratch area. */
+        rc = boot_read_sectors_recovery(state);
+
+        if (rc == 0) {
+            max_size = bootutil_max_image_size(state, BOOT_IMG_AREA(state, 0));
+
+            if (max_size > 0) {
+                boot_get_image_max_sizes()[image_index].calculated = true;
+                boot_get_image_max_sizes()[image_index].max_size = max_size;
+            }
+        }
+    }
+
+finish:
+    boot_close_all_flash_areas(state);
+    memset(state, 0, sizeof(struct boot_loader_state));
+}
+#endif
+
+/**
+ * Clears the boot state, so that previous operations have no effect on new
+ * ones.
+ *
+ * @param state                 The state that should be cleared. If the value
+ *                              is NULL, the default bootloader state will be
+ *                              cleared.
+ */
+void boot_state_clear(struct boot_loader_state *state)
+{
+    if (state != NULL) {
+        memset(state, 0, sizeof(struct boot_loader_state));
+    } else {
+        memset(boot_get_loader_state(), 0, sizeof(struct boot_loader_state));
+    }
 }
