@@ -93,9 +93,6 @@ bool io_detect_pin(void)
 
     nrf_gpio_cfg_input(BOARD_PIN_BTN_0, BM_BUTTONS_PIN_PULLUP);
 
-    /* Delay 5 us for pull-up to be applied */
-    k_busy_wait(5);
-
     pin_active = (bool)nrf_gpio_pin_read(BOARD_PIN_BTN_0);
 
     if (!pin_active) {
