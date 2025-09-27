@@ -388,6 +388,9 @@ class BasedIntParamType(click.ParamType):
 @click.option('--confirm', default=False, is_flag=True,
               help='When padding the image, mark it as confirmed (implies '
                    '--pad)')
+@click.option('--test', default=False, is_flag=True,
+              help='When padding the image, mark it for a test swap (implies '
+                   '--pad)')
 @click.option('--pad', default=False, is_flag=True,
               help='Pad image to --slot-size bytes, adding trailer magic')
 @click.option('-S', '--slot-size', type=BasedIntParamType(), required=True,
@@ -464,7 +467,7 @@ class BasedIntParamType(click.ParamType):
 @click.option('--compression-lzma-preset', type=int, default=9,
               help='LZMA - compression level preset', show_default=True)
 def sign(key, public_key_format, align, version, pad_sig, header_size,
-         pad_header, slot_size, pad, confirm, max_sectors, overwrite_only,
+         pad_header, slot_size, pad, confirm, test, max_sectors, overwrite_only,
          endian, encrypt_keylen, encrypt, compression, infile, outfile,
          dependencies, load_addr, hex_addr, erased_val, save_enctlv,
          security_counter, boot_record, custom_tlv, custom_tlv_file, rom_fixed, max_align,
@@ -472,13 +475,13 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
          vector_to_sign, non_bootable, vid, cid, edt_config, manifest,
          compression_lzma_dictsize, compression_lzma_pb, compression_lzma_lc, compression_lzma_lp, compression_lzma_preset):
 
-    if confirm:
+    if confirm or test:
         # Confirmed but non-padded images don't make much sense, because
         # otherwise there's no trailer area for writing the confirmed status.
         pad = True
     img = image.Image(version=decode_version(version), header_size=header_size,
                       pad_header=pad_header, pad=pad, confirm=confirm,
-                      align=int(align), slot_size=slot_size,
+                      test=test, align=int(align), slot_size=slot_size,
                       max_sectors=max_sectors, overwrite_only=overwrite_only,
                       endian=endian, load_addr=load_addr, rom_fixed=rom_fixed,
                       erased_val=erased_val, save_enctlv=save_enctlv,
