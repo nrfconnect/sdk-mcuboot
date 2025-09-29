@@ -511,7 +511,7 @@ boot_write_copy_done(const struct flash_area *fap)
 #ifdef SEND_BOOT_REQUEST
 static int
 send_boot_request(uint8_t magic, uint8_t image_ok, bool confirm, int image_id,
-                  uint32_t slot_id)
+                  enum boot_slot slot_id)
 {
     int rc = BOOT_EBADIMAGE;
 
