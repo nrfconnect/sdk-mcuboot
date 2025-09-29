@@ -52,9 +52,35 @@ static inline void nrf_cleanup_rtc(NRF_RTC_Type * rtc_reg)
 #endif
 
 #if defined(CONFIG_NRF_GRTC_TIMER)
+
+/**
+ * This function is temporary and should be removed once nrfx_grtc_uninit
+ * no longer resets the counter - see NRFX-8487.
+ */
+static inline void nrfx_grtc_uninit_no_counter_reset(void)
+{
+    uint32_t ch_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
+
+#if NRF_GRTC_HAS_RTCOUNTER
+    uint32_t grtc_all_int_mask = (NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK |
+                                  GRTC_NON_SYSCOMPARE_INT_MASK);
+#else
+    uint32_t grtc_all_int_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
+#endif
+
+    nrfy_grtc_int_disable(NRF_GRTC, grtc_all_int_mask);
+
+    for (uint8_t chan = 0; ch_mask; chan++, ch_mask >>= 1)
+    {
+        nrfx_grtc_syscounter_cc_disable(chan);
+        nrfx_grtc_channel_free(chan);
+    }
+    nrfy_grtc_int_uninit(NRF_GRTC);
+}
+
 static inline void nrf_cleanup_grtc(void)
 {
-    nrfx_grtc_uninit();
+    nrfx_grtc_uninit_no_counter_reset();
 }
 #endif
 
