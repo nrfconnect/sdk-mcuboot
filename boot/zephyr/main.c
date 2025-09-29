@@ -456,6 +456,8 @@ void zephyr_boot_log_stop(void)
 #include <zephyr/sys/reboot.h>
 #include <zephyr/usb/usbd.h>
 
+#define DFU_TIMEOUT_MS 5000
+
 static void on_upload_done(int slot, int status)
 {
     printk("Upload done. Status=%d, slot=%d\n", status, slot);
@@ -475,11 +477,47 @@ static void boot_serial_enter()
 
     mcuboot_status_change(MCUBOOT_STATUS_SERIAL_DFU_ENTERED);
 
-    BOOT_LOG_INF("Enter the serial recovery mode");
+    FIH_DECLARE(fih_rc_custom, FIH_FAILURE);
+
+    BOOT_LOG_INF("Entered the serial recovery mode");
     rc = boot_console_init();
     __ASSERT(rc == 0, "Error initializing boot console.\n");
-    boot_serial_start(&boot_funcs);
-    __ASSERT(0, "Bootloader serial process was terminated unexpectedly.\n");
+
+    uint32_t start = k_uptime_get_32();
+
+    while (true) {
+        int32_t elapsed = (int32_t)(k_uptime_get_32() - start);
+        int32_t remaining = DFU_TIMEOUT_MS - elapsed;
+
+        if (remaining <= 0) {
+            remaining = 1;
+        }
+
+        boot_serial_check_start(&boot_funcs, remaining);
+
+        if ((int32_t)(k_uptime_get_32() - start) >= DFU_TIMEOUT_MS) {
+            BOOT_LOG_INF("MCUboot: no DFU after %d ms ... normal boot\n", DFU_TIMEOUT_MS);
+            break;
+        }
+
+        k_msleep(10);
+    }
+
+    struct boot_rsp rsp;
+
+    FIH_CALL(boot_go, fih_rc_custom, &rsp);
+    
+    if (FIH_NOT_EQ(fih_rc_custom, FIH_SUCCESS)) {
+        BOOT_LOG_ERR("No valid image found, entering serial recovery mode");
+
+        boot_serial_start(&boot_funcs);
+        __ASSERT(0, "Bootloader serial process was terminated unexpectedly.\n");
+
+        sys_reboot(SYS_REBOOT_COLD);
+    }
+
+    BOOT_LOG_INF("Valid image found, booting...");
+    do_boot(&rsp);
 }
 #endif
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
@@ -489,22 +527,6 @@ int main(void)
 {
     struct boot_rsp rsp;
     int rc;
-
-    io_led_init();
-
-    BOOT_LOG_INF("MCUboot start: checking image BOOT_LOG_INF...");
-    k_sleep(K_MSEC(200));
-
-    rc = boot_go(&rsp);
-    if (rc != 0) {
-        BOOT_LOG_ERR("No valid image found, entering serial recovery mode");
-        boot_serial_enter();
-        /* Never returns if DFU starts. Otherwise, system will reboot. */
-        sys_reboot(SYS_REBOOT_COLD);
-    }
-
-    BOOT_LOG_INF("Valid image found, booting...");
-    do_boot(&rsp);
 
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 

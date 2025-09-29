@@ -1479,6 +1479,7 @@ void
 boot_serial_start(const struct boot_uart_funcs *f)
 {
     bs_entry = true;
+    BOOT_LOG_INF("Before reading console");
     boot_serial_read_console(f,0);
 }
 
