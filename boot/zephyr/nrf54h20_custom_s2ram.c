@@ -30,6 +30,20 @@ volatile struct mcuboot_resume_s mcuboot_resume;
      COND_CODE_0(DT_FIXED_PARTITION_EXISTS(DT_NODELABEL(node_label)), (0), \
         (DT_REG_ADDR(DT_GPARENT(DT_NODELABEL(node_label))))))
 
+#define S2RAM_SLOT_INFO_A 0x37
+#define S2RAM_SLOT_INFO_B 0xA4
+
+#ifdef CONFIG_BOOT_DIRECT_XIP
+/* Called by the image manager when setting the image as active for current boot. */
+void s2ram_designate_slot(uint8_t slot)
+{
+    if (slot == 0) {
+        mcuboot_resume.slot_info = S2RAM_SLOT_INFO_A;
+    } else {
+        mcuboot_resume.slot_info = S2RAM_SLOT_INFO_B;
+    }
+}
+#endif
 
 int soc_s2ram_suspend(pm_s2ram_system_off_fn_t system_off)
 {
@@ -72,8 +86,22 @@ bool pm_s2ram_mark_check_and_clear(void)
 
     /* s2ram boot */
     struct arm_vector_table *vt;
+
+#ifdef CONFIG_BOOT_DIRECT_XIP
+    if (mcuboot_resume.slot_info == S2RAM_SLOT_INFO_A) {
+        vt = (struct arm_vector_table *)
+                 (FIXED_PARTITION_ADDR(slot0_partition) + APP_EXE_START_OFFSET);
+    } else if (mcuboot_resume.slot_info == S2RAM_SLOT_INFO_B) {
+        vt = (struct arm_vector_table *)
+                 (FIXED_PARTITION_ADDR(slot1_partition) + APP_EXE_START_OFFSET);
+    }  else {
+        /* invalid slot info */
+        goto resume_failed;
+    }
+#else
     vt = (struct arm_vector_table *)
             (FIXED_PARTITION_ADDR(slot0_partition) + APP_EXE_START_OFFSET);
+#endif
 
     /* Jump to application */
     __asm__ volatile (
