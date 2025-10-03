@@ -563,6 +563,9 @@ static int flash_area_to_image_slot(const struct flash_area *fa, uint32_t *slot)
 
         ++i;
     }
+
+    /* Image not found */
+    *slot = UINT32_MAX;
 #else
     (void)fa;
     if (slot != NULL) {
