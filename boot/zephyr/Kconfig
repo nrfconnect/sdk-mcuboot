@@ -1373,6 +1373,10 @@ config MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
           When not selected reset vector, read from image, is used for
           the same purpose.
 
+config NRF_MCUBOOT_BOOT_REQUEST
+	bool
+	imply FIND_NEXT_SLOT_HOOKS if BOOT_DIRECT_XIP || BOOT_RAM_LOAD
+
 config MCUBOOT_VERIFY_IMG_ADDRESS
 	bool "Verify reset address of image in secondary slot [DEPRECATED]"
         select DEPRECATED
