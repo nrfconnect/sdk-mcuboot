@@ -35,7 +35,11 @@ function(${SYSBUILD_CURRENT_MODULE_NAME}_post_image_cmake)
       math(EXPR mcuboot_image_footer_size "${mcuboot_image_footer_size}" OUTPUT_FORMAT HEXADECIMAL)
       math(EXPR mcuboot_image_upgrade_footer_size "${mcuboot_image_upgrade_footer_size}" OUTPUT_FORMAT HEXADECIMAL)
 
-      set_property(TARGET ${image} APPEND_STRING PROPERTY CONFIG "CONFIG_ROM_END_OFFSET=${mcuboot_image_footer_size}\n")
+      # When merged binary is generated, the checks for header and trailer
+      # offsets are implemented in CMake, instead of linker scripts.
+      if(NOT SB_CONFIG_MCUBOOT_SIGN_MERGED_BINARY)
+        set_property(TARGET ${image} APPEND_STRING PROPERTY CONFIG "CONFIG_ROM_END_OFFSET=${mcuboot_image_footer_size}\n")
+      endif()
       set_property(TARGET ${image} APPEND_STRING PROPERTY CONFIG "CONFIG_MCUBOOT_UPDATE_FOOTER_SIZE=${mcuboot_image_upgrade_footer_size}\n")
       return()
     endif()
