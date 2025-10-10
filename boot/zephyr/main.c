@@ -150,9 +150,12 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
         * !defined(CONFIG_LOG_MODE_MINIMAL)
 	*/
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#endif
+
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
 #include <fprotect.h>
-#include <pm_config.h>
 #endif
 
 #if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
@@ -173,9 +176,48 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 
 #define RRAMC_REGION_RWX_LSB 0
 #define RRAMC_REGION_RWX_WIDTH 3
-#define RRAMC_REGION_TO_LOCK_ADDR NRF_RRAMC->REGION[4].CONFIG
-#define RRAMC_REGION_TO_LOCK_ADDR_H (((uint32_t)(&(RRAMC_REGION_TO_LOCK_ADDR))) >> 16)
-#define RRAMC_REGION_TO_LOCK_ADDR_L (((uint32_t)(&(RRAMC_REGION_TO_LOCK_ADDR))) & 0x0000fffful)
+
+#define RRAMC_REGION_NUMBER 4
+#define NRF_RRAM_REGION_SIZE_UNIT 0x400
+#define NRF_RRAM_REGION_ADDRESS_RESOLUTION 0x400
+
+#if defined(CONFIG_SOC_NRF54L15_CPUAPP) || defined(CONFIG_SOC_NRF54L05_CPUAPP) ||                  \
+	defined(CONFIG_SOC_NRF54L10_CPUAPP)
+#define MAX_PROTECTED_REGION_SIZE (31 * 1024)
+#elif defined(CONFIG_SOC_NRF54LV10A_ENGA_CPUAPP) || defined(CONFIG_SOC_NRF54LM20A_ENGA_CPUAPP)
+#define MAX_PROTECTED_REGION_SIZE (127 * 1024)
+#elif defined(CONFIG_SOC_NRF54LS05B_ENGA_CPUAPP)
+#define MAX_PROTECTED_REGION_SIZE (1023 * 1024)
+#endif
+
+#define RRAMC_REGION_CONFIG NRF_RRAMC->REGION[RRAMC_REGION_NUMBER].CONFIG
+#define RRAMC_REGION_CONFIG_H (((uint32_t)(&(RRAMC_REGION_CONFIG))) >> 16)
+#define RRAMC_REGION_CONFIG_L (((uint32_t)(&(RRAMC_REGION_CONFIG))) & 0x0000fffful)
+
+#define RRAMC_REGION_ADDRESS NRF_RRAMC->REGION[RRAMC_REGION_NUMBER].ADDRESS
+#define RRAMC_REGION_ADDRESS_H (((uint32_t)(&(RRAMC_REGION_ADDRESS))) >> 16)
+#define RRAMC_REGION_ADDRESS_L (((uint32_t)(&(RRAMC_REGION_ADDRESS))) & 0x0000fffful)
+
+#if (CONFIG_NCS_IS_VARIANT_IMAGE)
+#define PROTECTED_REGION_START PM_S1_IMAGE_ADDRESS
+#define PROTECTED_REGION_SIZE PM_S1_IMAGE_SIZE
+#else
+#define PROTECTED_REGION_START PM_MCUBOOT_ADDRESS
+#define PROTECTED_REGION_SIZE PM_MCUBOOT_SIZE
+#endif
+
+BUILD_ASSERT((PROTECTED_REGION_START % NRF_RRAM_REGION_ADDRESS_RESOLUTION) == 0,
+	"Start of protected region is not aligned - not possible to protect");
+
+BUILD_ASSERT((PROTECTED_REGION_SIZE % NRF_RRAM_REGION_SIZE_UNIT) == 0,
+	"Size of protected region is not aligned - not possible to protect");
+
+BUILD_ASSERT(PROTECTED_REGION_SIZE <= MAX_PROTECTED_REGION_SIZE,
+    "Size of protected region is too big for protection");
+
+#define PROTECTED_REGION_START_H ((PROTECTED_REGION_START) >> 16)
+#define PROTECTED_REGION_START_L ((PROTECTED_REGION_START) & 0x0000fffful)
+
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 
 BOOT_LOG_MODULE_REGISTER(mcuboot);
@@ -245,11 +287,20 @@ static void __ramfunc jump_in(uint32_t reset)
                 "   ldr  r2, [r1]\n"
                 /* Size of the region should be set at this point
                  * by NSIB's DISABLE_NEXT_W.
-                 * If not, set it according partition size.
+                 * If not, the region has not been configured yet.
+                 * Set the size and address to the partition size and address.
                  */
                 "   ands r4, r2, %12\n"
                 "   cbnz r4, clear_rwx\n"
+                /* Set the size of the protected region */
                 "   movt r2, %8\n"
+                /* Set the address of the protected region */
+                "   movw r5, %13\n"
+                "   movt r5, %14\n"
+                "   movw r6, %15\n"
+                "   movt r6, %16\n"
+                "   str  r6, [r5]\n"
+                "   dsb\n"
                 "clear_rwx:\n"
                 "   bfc  r2, %9, %10\n"
                 /* Disallow further modifications */
@@ -270,13 +321,17 @@ static void __ramfunc jump_in(uint32_t reset)
                   "r" (CLEANUP_RAM_GAP_SIZE),
                   "i" (0)
 #ifdef CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
-                  , "i" (RRAMC_REGION_TO_LOCK_ADDR_L),
-                  "i" (RRAMC_REGION_TO_LOCK_ADDR_H),
-                  "i" (CONFIG_PM_PARTITION_SIZE_B0_IMAGE / 1024),
+                  , "i" (RRAMC_REGION_CONFIG_L),
+                  "i" (RRAMC_REGION_CONFIG_H),
+                  "i" ((PROTECTED_REGION_SIZE) / (NRF_RRAM_REGION_SIZE_UNIT)),
                   "i" (RRAMC_REGION_RWX_LSB),
                   "i" (RRAMC_REGION_RWX_WIDTH),
                   "i" (RRAMC_REGION_CONFIG_LOCK_Msk),
-                  "i" (RRAMC_REGION_CONFIG_SIZE_Msk)
+                  "i" (RRAMC_REGION_CONFIG_SIZE_Msk),
+                  "i" (RRAMC_REGION_ADDRESS_L),
+                  "i" (RRAMC_REGION_ADDRESS_H),
+                  "i" (PROTECTED_REGION_START_L),
+                  "i" (PROTECTED_REGION_START_H)
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
                 : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "memory"
         );
