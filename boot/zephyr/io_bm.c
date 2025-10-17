@@ -29,7 +29,7 @@
 #include "bootutil/bootutil_log.h"
 
 #include <board-config.h>
-#include <bm_buttons.h>
+#include <bm/bm_buttons.h>
 
 #if defined(CONFIG_BOOT_SERIAL_PIN_RESET) || defined(CONFIG_BOOT_FIRMWARE_LOADER_PIN_RESET)
 #include <zephyr/drivers/hwinfo.h>
