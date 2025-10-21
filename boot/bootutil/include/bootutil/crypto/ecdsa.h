@@ -64,7 +64,7 @@
 #endif /* MCUBOOT_USE_NRF_OBERON_EXPERIMENT */
 
 /*TODO: remove this after cypress port mbedtls to abstract crypto api */
-#if defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_MBED_TLS)
+#if defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_MBED_TLS) || defined(MCUBOOT_USE_NRF_OBERON_EXPERIMENT)
 #define NUM_ECC_BYTES (256 / 8)
 #endif
 
@@ -88,7 +88,8 @@ extern "C" {
 #endif
 
 #if (defined(MCUBOOT_USE_TINYCRYPT) || defined(MCUBOOT_USE_MBED_TLS) || \
-     defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)) \
+     defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) || \
+     defined(MCUBOOT_USE_NRF_OBERON_EXPERIMENT)) \
      && !defined(MCUBOOT_USE_PSA_CRYPTO)
 /*
  * Declaring these like this adds NULL termination.
@@ -141,7 +142,7 @@ static int bootutil_import_key(uint8_t **cp, uint8_t *end)
 }
 #endif /* (MCUBOOT_USE_TINYCRYPT || MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310) && !MCUBOOT_USE_PSA_CRYPTO */
 
-#if !defined(MCUBOOT_USE_PSA_CRYPTO) && !defined(MCUBOOT_USE_NRF_OBERON_EXPERIMENT)
+#if !defined(MCUBOOT_USE_PSA_CRYPTO)
 /*
  * cp points to ASN1 string containing an integer.
  * Verify the tag, and that the length is 32 bytes. Helper function.
@@ -191,7 +192,7 @@ static int bootutil_decode_sig(uint8_t signature[NUM_ECC_BYTES * 2], uint8_t *cp
     }
     return 0;
 }
-#endif /* !defined(MCUBOOT_USE_PSA_CRYPTO) && !defined(MCUBOOT_USE_NRF_OBERON_EXPERIMENT) */
+#endif /* !defined(MCUBOOT_USE_PSA_CRYPTO) */
 
 #if defined(MCUBOOT_USE_TINYCRYPT)
 typedef uintptr_t bootutil_ecdsa_context;
@@ -746,16 +747,28 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
     return -1;
   }
 
-  return ocrypto_ecdsa_p256_verify_hash(sig, hash, pk);
+  uint8_t signature[2 * NUM_ECC_BYTES];
+  int rc = bootutil_decode_sig(signature, sig, sig + sig_len);
+  if (rc) {
+      return -1;
+  }
+
+  /* Only support uncompressed keys */
+  if (pk[0] != 0x04) {
+      return -1;
+  }
+  /* Skip the first byte holding key format */
+  pk++;
+
+  rc = ocrypto_ecdsa_p256_verify_hash(signature, hash, pk);
+  return rc;
 }
 
 static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
                                                   uint8_t **cp,uint8_t *end)
 {
-  /* NOTE: No corresponding funciton in ocrypto */
   (void)ctx;
-  (void)cp;
-  (void)end;
+  return bootutil_import_key(cp, end);
   return 0;
 }
 #endif /* MCUBOOT_USE_NRF_OBERON_EXPERIMENT */
