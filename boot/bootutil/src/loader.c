@@ -2909,7 +2909,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         if (!image_validated_by_nsib)
 #endif
         {
-            FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_SLOT_PRIMARY, NULL, 0);
+            FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_PRIMARY_SLOT, NULL, 0);
             /* Check for all possible values is redundant in normal operation it
              * is meant to prevent FI attack.
              */
