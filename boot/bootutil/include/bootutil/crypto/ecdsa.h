@@ -475,7 +475,7 @@ static int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
 }
 #endif /* !MCUBOOT_BUILTIN_KEY */
 
-#if !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
+#if !defined(CONFIG_NRF_BOOT_SIGNATURE_USING_ITS)
 /* Verify the signature against the provided hash. The signature gets parsed from
  * the encoding first, then PSA Crypto has a dedicated API for ECDSA verification
  */
@@ -494,7 +494,7 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
     return (int) psa_verify_hash(ctx->key_id, PSA_ALG_ECDSA(ctx->required_algorithm),
                                  hash, hlen, reformatted_signature, 2*ctx->curve_byte_count);
 }
-#else /* !CONFIG_NCS_BOOT_SIGNATURE_USING_ITS */
+#else /* !CONFIG_NRF_BOOT_SIGNATURE_USING_ITS */
 
 static const psa_key_id_t builtin_key_ids[] =  {
     0x40022100,
@@ -541,7 +541,7 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
     return status == PSA_SUCCESS ? 0 : 2;
 }
 
-#endif /* !CONFIG_NCS_BOOT_SIGNATURE_USING_ITS */
+#endif /* !CONFIG_NRF_BOOT_SIGNATURE_USING_ITS */
 
 #elif defined(MCUBOOT_USE_MBED_TLS)
 
