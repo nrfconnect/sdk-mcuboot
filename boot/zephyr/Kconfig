@@ -421,17 +421,6 @@ config BOOT_SIGNATURE_KMU_SLOTS
 	  Selects the number of KMU key slots (also known as generations) to use when verifying
 	  an image.
 
-config NCS_BOOT_SIGNATURE_KMU_UROT_MAPPING
-	bool "Use original mapping [DEPRECATED]"
-	depends on SOC_SERIES_NRF54LX
-	depends on MCUBOOT_MCUBOOT_IMAGE_NUMBER = -1
-	select DEPRECATED
-	help
-	  When this option is enabled, it will use the UROT_PUBKEY key slot IDs for the MCUboot
-	  image which are assigned for the non-immutable bootloader IDs, otherwise it will use
-	  the key set for the mode that MCUboot is used in (non-immutable slots when b0 is
-	  enabled, or immutable slots when b0 is not enabled).
-
 endif
 
 config BOOT_KEYS_REVOCATION
