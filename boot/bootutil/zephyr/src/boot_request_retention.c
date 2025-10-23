@@ -155,7 +155,7 @@ int boot_request_clear(void)
 	return retention_clear(bootloader_request_dev);
 }
 
-int boot_request_confirm_slot(uint8_t image, enum boot_slot slot)
+int boot_request_confirm_slot(uint8_t image, uint32_t slot)
 {
 	uint8_t value = BOOT_REQUEST_SLOT_INVALID;
 	size_t req_entry;
@@ -167,10 +167,10 @@ int boot_request_confirm_slot(uint8_t image, enum boot_slot slot)
 	}
 
 	switch (slot) {
-	case BOOT_SLOT_PRIMARY:
+	case 0:
 		value = BOOT_REQUEST_SLOT_PRIMARY;
 		break;
-	case BOOT_SLOT_SECONDARY:
+	case 1:
 		value = BOOT_REQUEST_SLOT_SECONDARY;
 		break;
 	default:
@@ -181,7 +181,7 @@ int boot_request_confirm_slot(uint8_t image, enum boot_slot slot)
 			       sizeof(value));
 }
 
-bool boot_request_check_confirmed_slot(uint8_t image, enum boot_slot slot)
+bool boot_request_check_confirmed_slot(uint8_t image, uint32_t slot)
 {
 	uint8_t value = BOOT_REQUEST_SLOT_INVALID;
 	size_t req_entry;
@@ -200,9 +200,9 @@ bool boot_request_check_confirmed_slot(uint8_t image, enum boot_slot slot)
 
 	switch (value) {
 	case BOOT_REQUEST_SLOT_PRIMARY:
-		return (slot == BOOT_SLOT_PRIMARY);
+		return (slot == 0);
 	case BOOT_REQUEST_SLOT_SECONDARY:
-		return (slot == BOOT_SLOT_SECONDARY);
+		return (slot == 1);
 	default:
 		break;
 	}
@@ -210,7 +210,7 @@ bool boot_request_check_confirmed_slot(uint8_t image, enum boot_slot slot)
 	return false;
 }
 
-int boot_request_set_preferred_slot(uint8_t image, enum boot_slot slot)
+int boot_request_set_preferred_slot(uint8_t image, uint32_t slot)
 {
 	uint8_t value = BOOT_REQUEST_SLOT_INVALID;
 	size_t req_entry;
@@ -222,10 +222,10 @@ int boot_request_set_preferred_slot(uint8_t image, enum boot_slot slot)
 	}
 
 	switch (slot) {
-	case BOOT_SLOT_PRIMARY:
+	case 0:
 		value = BOOT_REQUEST_SLOT_PRIMARY;
 		break;
-	case BOOT_SLOT_SECONDARY:
+	case 1:
 		value = BOOT_REQUEST_SLOT_SECONDARY;
 		break;
 	default:
@@ -237,7 +237,7 @@ int boot_request_set_preferred_slot(uint8_t image, enum boot_slot slot)
 }
 
 #ifdef CONFIG_FIND_NEXT_SLOT_HOOKS
-enum boot_slot boot_request_get_preferred_slot(uint8_t image)
+uint32_t boot_request_get_preferred_slot(uint8_t image)
 {
 	uint8_t value = BOOT_REQUEST_SLOT_INVALID;
 	size_t req_entry;
@@ -245,25 +245,25 @@ enum boot_slot boot_request_get_preferred_slot(uint8_t image)
 
 	ret = boot_request_entry_find(BOOT_REQUEST_IMG_PREFERENCE, image, &req_entry);
 	if (ret != 0) {
-		return BOOT_SLOT_NONE;
+		return BOOT_REQUEST_NO_PREFERRED_SLOT;
 	}
 
 	ret = retention_read(bootloader_request_dev, req_entry * sizeof(value), (void *)&value,
 			     sizeof(value));
 	if (ret != 0) {
-		return BOOT_SLOT_NONE;
+		return BOOT_REQUEST_NO_PREFERRED_SLOT;
 	}
 
 	switch (value) {
 	case BOOT_REQUEST_SLOT_PRIMARY:
-		return BOOT_SLOT_PRIMARY;
+		return 0;
 	case BOOT_REQUEST_SLOT_SECONDARY:
-		return BOOT_SLOT_SECONDARY;
+		return 1;
 	default:
 		break;
 	}
 
-	return BOOT_SLOT_NONE;
+	return BOOT_REQUEST_NO_PREFERRED_SLOT;
 }
 #endif /* CONFIG_FIND_NEXT_SLOT_HOOKS */
 

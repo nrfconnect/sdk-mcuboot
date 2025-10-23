@@ -619,7 +619,7 @@ static int boot_prevalidate(void)
 {
 #ifdef CONFIG_NRF_MCUBOOT_BOOT_REQUEST
     uint8_t image_index;
-    enum boot_slot slot;
+    uint32_t slot;
     uint32_t area_id;
     const struct flash_area *fap;
     int rc = boot_request_init();
@@ -629,7 +629,7 @@ static int boot_prevalidate(void)
     }
 
     for (image_index = 0; image_index < BOOT_IMAGE_NUMBER; ++image_index) {
-        for (slot = BOOT_SLOT_PRIMARY; slot < BOOT_SLOT_COUNT; slot++) {
+        for (slot = 0; slot < BOOT_REQUEST_NUM_SLOTS; slot++) {
             if (boot_request_check_confirmed_slot(image_index, slot)) {
                 BOOT_LOG_DBG("Confirm image: %d slot: %d due to bootloader request.",
                     image_index, slot);
