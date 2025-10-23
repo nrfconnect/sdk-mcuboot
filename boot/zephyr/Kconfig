@@ -435,14 +435,7 @@ config BOOT_KMU_KEYS_REVOCATION
 	help
 	  Enabling KMU key revocation backend.
 
-config NRF_BOOT_SIGNATURE_USING_ITS
-	bool "Use ITS stored keys for signature verification"
-	depends on NRF_SECURITY
-	help
-	  MCUboot will use keys provisioned to the internal trusted storage for signature
-	  verification instead of compiling in key data from a file.
-
-if !BOOT_SIGNATURE_USING_KMU && !NRF_BOOT_SIGNATURE_USING_ITS
+if !BOOT_SIGNATURE_USING_KMU
 
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
