@@ -373,13 +373,6 @@ if(NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
   endif()
   message("MCUBoot bootloader key file: ${KEY_FILE}")
 
-  set_property(
-	GLOBAL
-	PROPERTY
-	KEY_FILE
-	${KEY_FILE}
-	)
-
   set(mcuboot_default_signature_files
       ${MCUBOOT_DIR}/root-ec-p256-pkcs8.pem
       ${MCUBOOT_DIR}/root-ec-p384.pem
