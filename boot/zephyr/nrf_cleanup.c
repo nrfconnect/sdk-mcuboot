@@ -131,7 +131,7 @@ void nrf_cleanup_peripheral(void)
 
         for (int j = 0; j < 4; j++) {
             if (pin[j] != NRF_UARTE_PSEL_DISCONNECTED) {
-                nrfy_gpio_cfg_default(pin[j]);
+                nrfy_gpio_cfg_default(pin[i]);
             }
         }
 #endif
