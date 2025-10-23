@@ -1781,7 +1781,7 @@ boot_copy_region(struct boot_loader_state *state,
 #endif
 
 #ifdef MCUBOOT_DECOMPRESS_IMAGES
-    hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
+    hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
 
     if (MUST_DECOMPRESS(fap_src, BOOT_CURR_IMG(state), hdr)) {
         /* Use alternative function for compressed images */
