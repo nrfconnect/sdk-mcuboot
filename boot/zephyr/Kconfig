@@ -496,15 +496,9 @@ config MCUBOOT_CLEANUP_RAM
 	help
 	  Sets contents of memory to 0 before jumping to application.
 
-config NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED
-	bool
-	default y if SOC_NRF54L15_CPUAPP || SOC_NRF54L10_CPUAPP || SOC_NRF54L05_CPUAPP
-	default y if SOC_NRF54LV10A_ENGA_CPUAPP
-	default y if SOC_NRF54LM20A_ENGA_CPUAPP
-
 config NCS_MCUBOOT_DISABLE_SELF_RWX
 	bool "Disable read and execution on self NVM"
-	depends on NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED && !FPROTECT
+	depends on (SOC_NRF54L15_CPUAPP || SOC_NRF54L10_CPUAPP || SOC_NRF54L05_CPUAPP) && !FPROTECT
 	help
 	  Sets RRAMC's region no.4 protection before jumping to application.
 	  It disables reads writes and execution memory area which holds MCUBOOT.
