@@ -40,15 +40,6 @@ extern "C" {
 fih_ret boot_nv_security_counter_init(void);
 
 /**
- * Checks if the specified image should have a security counter present on it or not
- *
- * @param image_index   Index of the image to check (from 0).
- *
- * @return              FIH_SUCCESS if security counter should be present; FIH_FAILURE if otherwise
- */
-fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index);
-
-/**
  * Reads the stored value of a given image's security counter.
  *
  * @param image_id          Index of the image (from 0).
