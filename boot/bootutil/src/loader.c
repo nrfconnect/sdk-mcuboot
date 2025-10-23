@@ -52,9 +52,6 @@
 
 #ifdef __ZEPHYR__
 #include <zephyr/sys/reboot.h>
-#if defined(CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS)
-#include <zephyr/kernel.h>
-#endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS */
 #endif
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
@@ -708,42 +705,9 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
     }
 #endif
 
-    for (int i = 1; i <= CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT; i++ ) {
-#if CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
-      BOOT_LOG_DBG("Image validation attempt %d/%d", i, CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT);
-#endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
+    FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
+             NULL, 0, NULL);
 
-#if defined(MCUBOOT_SWAP_USING_OFFSET) && defined(MCUBOOT_SERIAL_RECOVERY)
-        FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
-                NULL, 0, NULL, 0);
-#else
-        FIH_CALL(bootutil_img_validate, fih_rc, state, hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
-                NULL, 0, NULL);
-#endif
-
-        if (FIH_EQ(fih_rc, FIH_SUCCESS)) {
-#if CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
-          BOOT_LOG_DBG("Image validation attempt %d/%d success", i, CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT);
-#endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
-          break;
-        } else {
-#if CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
-          BOOT_LOG_WRN("Image validation attempt %d/%d failure: %d",
-                       i,
-                       CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT, fih_rc);
-#endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
-
-          if (i < CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT) {
-#if defined(CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS)
-#if CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1
-            BOOT_LOG_DBG("Waiting %d ms before next attempt",
-                         CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS);
-#endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_COUNT > 1 */
-            k_busy_wait(CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS * 1000);
-#endif /* CONFIG_NRF_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS */
-          }
-        }
-    }
     FIH_RET(fih_rc);
 }
 
