@@ -475,7 +475,6 @@ static int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
 }
 #endif /* !MCUBOOT_BUILTIN_KEY */
 
-#if !defined(CONFIG_NRF_BOOT_SIGNATURE_USING_ITS)
 /* Verify the signature against the provided hash. The signature gets parsed from
  * the encoding first, then PSA Crypto has a dedicated API for ECDSA verification
  */
@@ -494,55 +493,6 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
     return (int) psa_verify_hash(ctx->key_id, PSA_ALG_ECDSA(ctx->required_algorithm),
                                  hash, hlen, reformatted_signature, 2*ctx->curve_byte_count);
 }
-#else /* !CONFIG_NRF_BOOT_SIGNATURE_USING_ITS */
-
-static const psa_key_id_t builtin_key_ids[] =  {
-    0x40022100,
-    0x40022101,
-    0x40022102,
-    0x40022103
-};
-
-#define BOOT_SIGNATURE_BUILTIN_KEY_SLOTS ARRAY_SIZE(builtin_key_ids)
-
-static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
-                                        uint8_t *pk, size_t pk_len,
-                                        uint8_t *hash, size_t hlen,
-                                        uint8_t *sig, size_t slen)
-{
-    (void)pk;
-    (void)pk_len;
-    (void)slen;
-    psa_status_t status = PSA_ERROR_BAD_STATE;
-
-    /* Initialize PSA Crypto */
-    status = psa_crypto_init();
-    if (status != PSA_SUCCESS) {
-        BOOT_LOG_ERR("PSA crypto init failed %d", status);
-        return 1;
-    }
-
-    uint8_t reformatted_signature[96] = {0}; /* Enough for P-384 signature sizes */
-    parse_signature_from_rfc5480_encoding(sig, ctx->curve_byte_count, reformatted_signature);
-
-    status = PSA_ERROR_BAD_STATE;
-
-    for (int i = 0; i < BOOT_SIGNATURE_BUILTIN_KEY_SLOTS; ++i) {
-        psa_key_id_t kid = builtin_key_ids[i];
-
-        status = psa_verify_hash(kid, PSA_ALG_ECDSA(ctx->required_algorithm),
-                                 hash, hlen, reformatted_signature, 2*ctx->curve_byte_count);
-        if (status == PSA_SUCCESS) {
-            break;
-        }
-        BOOT_LOG_ERR("ECDSA signature verification failed %d", status);
-    }
-
-    return status == PSA_SUCCESS ? 0 : 2;
-}
-
-#endif /* !CONFIG_NRF_BOOT_SIGNATURE_USING_ITS */
-
 #elif defined(MCUBOOT_USE_MBED_TLS)
 
 typedef mbedtls_ecdsa_context bootutil_ecdsa_context;
