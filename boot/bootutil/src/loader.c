@@ -1410,7 +1410,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
 #if defined(PM_S1_ADDRESS) || defined(PM_CPUNET_B0N_ADDRESS)
     const struct flash_area *secondary_fa =
-        BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
+        BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
     uint32_t reset_addr = 0;
     int rc = 0;
