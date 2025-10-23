@@ -36,7 +36,6 @@ extern int ED25519_verify(const uint8_t *message, size_t message_len,
 
 #if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 #if !defined(MCUBOOT_KEY_IMPORT_BYPASS_ASN)
-#if !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
 /*
  * Parse the public key used for signing.
  */
@@ -79,7 +78,6 @@ bootutil_import_key(uint8_t **cp, uint8_t *end)
 }
 #endif /* !defined(MCUBOOT_KEY_IMPORT_BYPASS_ASN) */
 #endif
-#endif
 
 /* Signature verification base function.
  * The function takes buffer of specified length and tries to verify
@@ -95,7 +93,7 @@ bootutil_verify(uint8_t *buf, uint32_t blen,
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     uint8_t *pubkey = NULL;
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
     uint8_t *end;
 #endif
 
@@ -108,7 +106,7 @@ bootutil_verify(uint8_t *buf, uint32_t blen,
         goto out;
     }
 
-#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
+#if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
     pubkey = (uint8_t *)bootutil_keys[key_id].key;
     end = pubkey + *bootutil_keys[key_id].len;
 
