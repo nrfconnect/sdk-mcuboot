@@ -84,7 +84,7 @@ int pcd_version_cmp_net(const struct flash_area *fap, struct image_header *hdr);
 #include "bootutil/key_revocation.h"
 #endif
 
-#ifdef CONFIG_SOC_EARLY_RESET_HOOK
+#ifdef CONFIG_SOC_NRF54H20_PM_S2RAM_OVERRIDE
 void s2ram_designate_slot(uint8_t slot);
 #endif
 
@@ -3453,7 +3453,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
     }
 
-#ifdef CONFIG_SOC_EARLY_RESET_HOOK
+#ifdef CONFIG_SOC_NRF54H20_PM_S2RAM_OVERRIDE
     /* Designate the slot to be used by the PM_S2RAM resume module */
     s2ram_designate_slot((uint8_t)state->slot_usage[0].active_slot);
 #endif
