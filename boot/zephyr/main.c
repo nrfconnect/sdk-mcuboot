@@ -754,11 +754,7 @@ int main(void)
     }
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
-#if defined(PM_TFM_SECURE_ADDRESS)
-    pcd_lock_ram(false);
-#else
-    pcd_lock_ram(true);
-#endif
+    pcd_lock_ram();
 #endif
 #endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
 
