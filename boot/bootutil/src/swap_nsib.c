@@ -40,7 +40,7 @@ void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs)
 
     BOOT_LOG_INF("Starting swap using nsib algorithm.");
 
-    sector_sz = boot_img_sector_size(state, BOOT_SLOT_SECONDARY, 0);
+    sector_sz = boot_img_sector_size(state, BOOT_SECONDARY_SLOT, 0);
 
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
     rc = flash_area_open(PM_S0_ID, &fap_pri);
