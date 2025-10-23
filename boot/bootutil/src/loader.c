@@ -984,7 +984,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
 #endif
         }
 #endif
-
+/* this is a simple test for the OSS history checker */
         /* No bootable image in slot; continue booting from the primary slot. */
         fih_rc = FIH_NO_BOOTABLE_IMAGE;
         goto out;
