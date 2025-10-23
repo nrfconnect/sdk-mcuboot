@@ -101,12 +101,6 @@ if(DEFINED CONFIG_BOOT_SHARE_BACKEND_RETENTION)
     )
 endif()
 
-if(DEFINED CONFIG_BOOT_KEYS_REVOCATION)
-  zephyr_library_sources(
-    ${BOOT_DIR}/bootutil/src/key_revocation.c
-)
-endif()
-
 # Generic bootutil sources and includes.
 zephyr_library_include_directories(${BOOT_DIR}/bootutil/include)
 zephyr_library_sources(
