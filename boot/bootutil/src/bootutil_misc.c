@@ -108,149 +108,6 @@ out:
 }
 #endif
 
-/*
- * Amount of space used to save information required when doing a swap,
- * or while a swap is under progress, but not the status of sector swap
- * progress itself.
- */
-static inline uint32_t
-boot_trailer_info_sz(void)
-{
-    return (
-#ifdef MCUBOOT_ENC_IMAGES
-           /* encryption keys */
-#  if MCUBOOT_SWAP_SAVE_ENCTLV
-           BOOT_ENC_TLV_ALIGN_SIZE * 2            +
-#  else
-           BOOT_ENC_KEY_ALIGN_SIZE * 2            +
-#  endif
-#endif
-           /* swap_type + copy_done + image_ok + swap_size */
-           BOOT_MAX_ALIGN * 4                     +
-           BOOT_MAGIC_ALIGN_SIZE
-           );
-}
-
-/*
- * Amount of space used to maintain progress information for a single swap
- * operation.
- */
-static inline uint32_t
-boot_status_entry_sz(uint32_t min_write_sz)
-{
-#if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) ||      \
-    defined(MCUBOOT_FIRMWARE_LOADER) ||              \
-    defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
-    /* Single image MCUboot modes do not have a swap status fields */
-    return 0;
-#else
-    return BOOT_STATUS_STATE_COUNT * min_write_sz;
-#endif
-}
-
-uint32_t
-boot_status_sz(uint32_t min_write_sz)
-{
-    return BOOT_STATUS_MAX_ENTRIES * boot_status_entry_sz(min_write_sz);
-}
-
-uint32_t
-boot_trailer_sz(uint32_t min_write_sz)
-{
-    return boot_status_sz(min_write_sz) + boot_trailer_info_sz();
-}
-
-int boot_trailer_scramble_offset(const struct flash_area *fa, size_t alignment,
-                                 size_t *off)
-{
-    int ret = 0;
-
-    BOOT_LOG_DBG("boot_trailer_scramble_offset: flash_area %p, alignment %u",
-                 fa, (unsigned int)alignment);
-
-    /* Not allowed to enforce alignment smaller than device allows */
-    if (alignment < flash_area_align(fa)) {
-        alignment = flash_area_align(fa);
-    }
-
-    if (device_requires_erase(fa)) {
-        /* For device requiring erase align to erase unit */
-        struct flash_sector sector;
-
-        ret = flash_area_get_sector(fa, flash_area_get_size(fa) - boot_trailer_sz(alignment),
-                                    &sector);
-        if (ret < 0) {
-            return ret;
-        }
-
-        *off = flash_sector_get_off(&sector);
-    } else {
-        /* For device not requiring erase align to write block */
-        *off = flash_area_get_size(fa) - ALIGN_DOWN(boot_trailer_sz(alignment), alignment);
-    }
-
-    BOOT_LOG_DBG("boot_trailer_scramble_offset: final alignment %u, offset %u",
-                 (unsigned int)alignment, (unsigned int)*off);
-
-    return ret;
-}
-
-int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *off,
-                                size_t *size)
-{
-    int ret = 0;
-    const size_t write_block = flash_area_align(fa);
-    size_t loff = 0;
-    struct flash_sector sector;
-
-    BOOT_LOG_DBG("boot_header_scramble_off_sz: slot %d", slot);
-
-    (void)slot;
-#if defined(MCUBOOT_SWAP_USING_OFFSET)
-    /* In case of swap offset, header of secondary slot image is positioned
-     * in second sector of slot.
-     */
-    if (slot == BOOT_SLOT_SECONDARY) {
-        ret = flash_area_get_sector(fa, 0, &sector);
-        if (ret < 0) {
-            return ret;
-        }
-        loff = flash_sector_get_off(&sector);
-    }
-#endif
-
-    if (device_requires_erase(fa)) {
-        /* For device requiring erase align to erase unit */
-        ret = flash_area_get_sector(fa, loff, &sector);
-        if (ret < 0) {
-            return ret;
-        }
-
-        *size = flash_sector_get_size(&sector);
-    } else {
-        /* For device not requiring erase align to write block */
-        *size = ALIGN_UP(sizeof(((struct image_header *)0)->ih_magic), write_block);
-    }
-    *off = loff;
-
-    BOOT_LOG_DBG("boot_header_scramble_off_sz: size %u", (unsigned int)*size);
-
-    return ret;
-}
-
-#if MCUBOOT_SWAP_USING_SCRATCH
-/*
- * Similar to `boot_trailer_sz` but this function returns the space used to
- * store status in the scratch partition. The scratch partition only stores
- * status during the swap of the last sector from primary/secondary (which
- * is the first swap operation) and thus only requires space for one swap.
- */
-uint32_t boot_scratch_trailer_sz(uint32_t min_write_sz)
-{
-    return boot_status_entry_sz(min_write_sz) + boot_trailer_info_sz();
-}
-#endif
-
 int
 boot_status_entries(int image_index, const struct flash_area *fap)
 {
@@ -362,6 +219,27 @@ boot_read_swap_size(const struct flash_area *fap, uint32_t *swap_size)
     return rc;
 }
 
+#ifdef MCUBOOT_SWAP_USING_OFFSET
+int
+boot_read_unprotected_tlv_sizes(const struct flash_area *fap, uint16_t *tlv_size_primary,
+                                uint16_t *tlv_size_secondary)
+{
+    uint32_t off;
+    uint32_t combined_tlv_sizes = 0;
+    int rc;
+
+    off = boot_unprotected_tlv_sizes_off(fap);
+    rc = flash_area_read(fap, off, &combined_tlv_sizes, sizeof(combined_tlv_sizes));
+
+    if (rc == 0) {
+        *tlv_size_primary = (uint16_t)(combined_tlv_sizes & 0xffff);
+        *tlv_size_secondary = (uint16_t)((combined_tlv_sizes & 0xffff0000) >> 16);
+    }
+
+    return rc;
+}
+#endif
+
 #ifdef MCUBOOT_ENC_IMAGES
 int
 boot_read_enc_key(const struct flash_area *fap, uint8_t slot, struct boot_status *bs)
@@ -406,25 +284,46 @@ boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size)
     return boot_write_trailer(fap, off, (const uint8_t *) &swap_size, 4);
 }
 
-#ifdef MCUBOOT_ENC_IMAGES
+#if defined(MCUBOOT_SWAP_USING_OFFSET)
 int
-boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
-        const struct boot_status *bs)
+boot_write_unprotected_tlv_sizes(const struct flash_area *fap, uint16_t tlv_size_primary,
+                                 uint16_t tlv_size_secondary)
 {
     uint32_t off;
-    int rc;
+    uint32_t tlv_sizes_combined;
 
-    off = boot_enc_key_off(fap, slot);
-    BOOT_LOG_DBG("writing enc_key; fa_id=%d off=0x%lx (0x%lx)",
+    off = boot_unprotected_tlv_sizes_off(fap);
+    tlv_sizes_combined = ((uint32_t)tlv_size_secondary << 16) | (uint32_t)tlv_size_primary;
+    BOOT_LOG_DBG("writing unprotected_tlv_sizes; fa_id=%d off=0x%lx (0x%lx) vals=0x%x,0x%x (0x%lx)",
                  flash_area_get_id(fap), (unsigned long)off,
-                 (unsigned long)flash_area_get_off(fap) + off);
-#if MCUBOOT_SWAP_SAVE_ENCTLV
-    rc = flash_area_write(fap, off, bs->enctlv[slot], BOOT_ENC_TLV_ALIGN_SIZE);
-#else
-    rc = flash_area_write(fap, off, bs->enckey[slot], BOOT_ENC_KEY_ALIGN_SIZE);
+                 ((unsigned long)flash_area_get_off(fap) + off), tlv_size_primary,
+                 tlv_size_secondary, (unsigned long)tlv_sizes_combined);
+    return boot_write_trailer(fap, off, (const uint8_t *)&tlv_sizes_combined,
+                              sizeof(tlv_sizes_combined));
+}
 #endif
-    if (rc != 0) {
-        return BOOT_EFLASH;
+
+#ifdef MCUBOOT_ENC_IMAGES
+int
+boot_write_enc_keys(const struct flash_area *fap, const struct boot_status *bs)
+{
+    int slot;
+
+    for (slot = 0; slot < BOOT_NUM_SLOTS; ++slot) {
+        uint32_t off = boot_enc_key_off(fap, slot);
+        int rc;
+
+        BOOT_LOG_DBG("writing enc_key; fa_id=%d off=0x%lx (0x%lx)",
+                     flash_area_get_id(fap), (unsigned long)off,
+                     (unsigned long)flash_area_get_off(fap) + off);
+#if MCUBOOT_SWAP_SAVE_ENCTLV
+        rc = flash_area_write(fap, off, bs->enctlv[slot], BOOT_ENC_TLV_ALIGN_SIZE);
+#else
+        rc = flash_area_write(fap, off, bs->enckey[slot], BOOT_ENC_KEY_ALIGN_SIZE);
+#endif
+        if (rc != 0) {
+            return BOOT_EFLASH;
+        }
     }
 
     return 0;
@@ -564,118 +463,6 @@ done:
     return rc;
 }
 #endif /* !MCUBOOT_OVERWRITE_ONLY */
-
-/**
- * Erases a region of device that requires erase prior to write; does
- * nothing on devices without erase.
- *
- * @param fa                    The flash_area containing the region to erase.
- * @param off                   The offset within the flash area to start the
- *                              erase.
- * @param size                  The number of bytes to erase.
- * @param backwards             If set to true will erase from end to start
- *                              addresses, otherwise erases from start to end
- *                              addresses.
- *
- * @return                      0 on success; nonzero on failure.
- */
-int
-boot_erase_region(const struct flash_area *fa, uint32_t off, uint32_t size, bool backwards)
-{
-    int rc = 0;
-
-    BOOT_LOG_DBG("boot_erase_region: flash_area %p, offset %d, size %d, backwards == %d",
-                 fa, off, size, (int)backwards);
-
-    if (off >= flash_area_get_size(fa) || (flash_area_get_size(fa) - off) < size) {
-        rc = -1;
-        goto end;
-    } else if (device_requires_erase(fa)) {
-        uint32_t end_offset = 0;
-        struct flash_sector sector;
-
-        BOOT_LOG_DBG("boot_erase_region: device with erase");
-
-        if (backwards) {
-            /* Get the lowest page offset first */
-            rc = flash_area_get_sector(fa, off, &sector);
-
-            if (rc < 0) {
-                goto end;
-            }
-
-            end_offset = flash_sector_get_off(&sector);
-
-            /* Set boundary condition, the highest probable offset to erase, within
-             * last sector to erase
-             */
-            off += size - 1;
-        } else {
-            /* Get the highest page offset first */
-            rc = flash_area_get_sector(fa, (off + size - 1), &sector);
-
-            if (rc < 0) {
-                goto end;
-            }
-
-            end_offset = flash_sector_get_off(&sector);
-        }
-
-        while (true) {
-            /* Size to read in this iteration */
-            size_t csize;
-
-            /* Get current sector and, also, correct offset */
-            rc = flash_area_get_sector(fa, off, &sector);
-
-            if (rc < 0) {
-                goto end;
-            }
-
-            /* Corrected offset and size of current sector to erase */
-            off = flash_sector_get_off(&sector);
-            csize = flash_sector_get_size(&sector);
-
-            rc = flash_area_erase(fa, off, csize);
-
-            if (rc < 0) {
-                goto end;
-            }
-
-            MCUBOOT_WATCHDOG_FEED();
-
-            if (backwards) {
-                if (end_offset >= off) {
-                    /* Reached the first offset in range and already erased it */
-                    break;
-                }
-
-                /* Move down to previous sector, the flash_area_get_sector will
-                 * correct the value to real page offset
-                 */
-                off -= 1;
-            } else {
-                /* Move up to next sector */
-                off += csize;
-
-                if (off > end_offset) {
-                    /* Reached the end offset in range and already erased it */
-                    break;
-                }
-
-                /* Workaround for flash_sector_get_off() being broken in mynewt, hangs with
-                 * infinite loop if this is not present, should be removed if bug is fixed.
-                 */
-                off += 1;
-            }
-        }
-    } else {
-        BOOT_LOG_DBG("boot_erase_region: device without erase");
-    }
-
-end:
-    return rc;
-}
 
 #if (!defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)) || \
 defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO)
@@ -859,6 +646,31 @@ void boot_fetch_slot_state_sizes(void)
 finish:
     boot_close_all_flash_areas(state);
     memset(state, 0, sizeof(struct boot_loader_state));
+}
+#endif
+#if defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO) || defined(MCUBOOT_DATA_SHARING)
+const struct image_max_size *boot_get_max_app_size(void)
+{
+    const struct image_max_size *image_max_sizes = boot_get_image_max_sizes();
+
+#if defined(MCUBOOT_SERIAL_IMG_GRP_SLOT_INFO)
+    uint8_t i = 0;
+
+    while (i < BOOT_IMAGE_NUMBER) {
+        if (image_max_sizes[i].calculated == true) {
+            break;
+        }
+
+        ++i;
+    }
+
+    if (i == BOOT_IMAGE_NUMBER) {
+        /* Information not available, need to fetch it */
+        boot_fetch_slot_state_sizes();
+    }
+#endif
+
+    return image_max_sizes;
 }
 #endif
 

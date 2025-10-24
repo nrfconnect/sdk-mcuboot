@@ -37,11 +37,16 @@
 #include "bootutil/bootutil.h"
 #include "bootutil/image.h"
 #include "bootutil/fault_injection_hardening.h"
+#include "bootutil_area.h"
 #include "mcuboot_config/mcuboot_config.h"
 
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
+
+#ifdef MCUBOOT_MANIFEST_UPDATES
+#include "bootutil/mcuboot_manifest.h"
+#endif /* MCUBOOT_MANIFEST_UPDATES */
 
 #ifdef __cplusplus
 extern "C" {
@@ -196,8 +201,6 @@ _Static_assert(sizeof(boot_img_magic) == BOOT_MAGIC_SZ, "Invalid size for image 
 #endif /* MCUBOOT_DIRECT_XIP && MCUBOOT_ENC_IMAGES */
 #endif /* MCUBOOT_DIRECT_XIP || MCUBOOT_RAM_LOAD */
 
-#define BOOT_MAX_IMG_SECTORS       MCUBOOT_MAX_IMG_SECTORS
-
 #define BOOT_LOG_IMAGE_INFO(slot, hdr)                                    \
     BOOT_LOG_INF("%-9s slot: version=%u.%u.%u+%u",                        \
                  ((slot) == BOOT_SLOT_PRIMARY) ? "Primary" : "Secondary", \
@@ -205,24 +208,6 @@ _Static_assert(sizeof(boot_img_magic) == BOOT_MAGIC_SZ, "Invalid size for image 
                  (hdr)->ih_ver.iv_minor,                                  \
                  (hdr)->ih_ver.iv_revision,                               \
                  (hdr)->ih_ver.iv_build_num)
-
-#if MCUBOOT_SWAP_USING_MOVE
-#define BOOT_STATUS_MOVE_STATE_COUNT    1
-#define BOOT_STATUS_SWAP_STATE_COUNT    2
-#define BOOT_STATUS_STATE_COUNT         (BOOT_STATUS_MOVE_STATE_COUNT + BOOT_STATUS_SWAP_STATE_COUNT)
-#elif MCUBOOT_SWAP_USING_OFFSET
-#define BOOT_STATUS_SWAP_STATE_COUNT    2
-#define BOOT_STATUS_STATE_COUNT         BOOT_STATUS_SWAP_STATE_COUNT
-#else
-#define BOOT_STATUS_STATE_COUNT         3
-#endif
-
-/** Maximum number of image sectors supported by the bootloader. */
-#define BOOT_STATUS_MAX_ENTRIES         BOOT_MAX_IMG_SECTORS
-
-#define BOOT_STATUS_SOURCE_NONE         0
-#define BOOT_STATUS_SOURCE_SCRATCH      1
-#define BOOT_STATUS_SOURCE_PRIMARY_SLOT 2
 
 /**
  * Compatibility shim for flash sector type.
@@ -242,6 +227,9 @@ struct boot_loader_state {
         const struct flash_area *area;
         boot_sector_t *sectors;
         uint32_t num_sectors;
+#if defined(MCUBOOT_SWAP_USING_OFFSET)
+        uint16_t unprotected_tlv_size;
+#endif
     } imgs[BOOT_IMAGE_NUMBER][BOOT_NUM_SLOTS];
 
 #if MCUBOOT_SWAP_USING_SCRATCH
@@ -287,6 +275,14 @@ struct boot_loader_state {
 #endif
     } slot_usage[BOOT_IMAGE_NUMBER];
 #endif /* MCUBOOT_DIRECT_XIP || MCUBOOT_RAM_LOAD */
+
+#if defined(MCUBOOT_MANIFEST_UPDATES)
+    struct mcuboot_manifest manifest[BOOT_NUM_SLOTS];
+    bool manifest_valid[BOOT_NUM_SLOTS];
+#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE) || defined(MCUBOOT_SWAP_USING_OFFSET)
+    enum boot_slot matching_manifest[BOOT_IMAGE_NUMBER][BOOT_NUM_SLOTS];
+#endif
+#endif
 };
 
 struct boot_sector_buffer {
@@ -314,18 +310,6 @@ fih_ret boot_fih_memequal(const void *s1, const void *s2, size_t n);
 const struct flash_area *boot_find_status(const struct boot_loader_state *state,
                                           int image_index);
 int boot_magic_compatible_check(uint8_t tbl_val, uint8_t val);
-uint32_t boot_status_sz(uint32_t min_write_sz);
-uint32_t boot_trailer_sz(uint32_t min_write_sz);
-/* Get offset of trailer aligned to either device erase unit or alignment
- * depending on whether device has erase or not.
- */
-int boot_trailer_scramble_offset(const struct flash_area *fa, size_t alignment,
-                                 size_t *off);
-/* Get size of header aligned to device erase unit or write block,
- * depending on whether device has erase or not.
- */
-int boot_header_scramble_off_sz(const struct flash_area *fa, int slot, size_t *off,
-                                size_t *size);
 int boot_status_entries(int image_index, const struct flash_area *fap);
 uint32_t boot_status_off(const struct flash_area *fap);
 int boot_read_swap_state(const struct flash_area *fap,
@@ -342,6 +326,12 @@ int boot_write_trailer(const struct flash_area *fap, uint32_t off,
 int boot_write_trailer_flag(const struct flash_area *fap, uint32_t off,
                             uint8_t flag_val);
 int boot_read_swap_size(const struct flash_area *fap, uint32_t *swap_size);
+#if defined(MCUBOOT_SWAP_USING_OFFSET)
+int boot_write_unprotected_tlv_sizes(const struct flash_area *fap, uint16_t tlv_size_primary,
+                                     uint16_t tlv_size_secondary);
+int boot_read_unprotected_tlv_sizes(const struct flash_area *fap, uint16_t *tlv_size_primary,
+                                    uint16_t *tlv_size_secondary);
+#endif
 int boot_slots_compatible(struct boot_loader_state *state);
 uint32_t boot_status_internal_off(const struct boot_status *bs, int elem_sz);
 int boot_read_image_header(struct boot_loader_state *state, int slot,
@@ -357,34 +347,12 @@ int boot_copy_region(struct boot_loader_state *state,
                      const struct flash_area *fap_dst,
                      uint32_t off_src, uint32_t off_dst, uint32_t sz);
 #endif
-/* Prepare for write device that requires erase prior to write. This will
- * do nothing on devices without erase requirement.
- */
-int boot_erase_region(const struct flash_area *fap, uint32_t off, uint32_t sz, bool backwards);
-/* Similar to boot_erase_region but will always remove data */
-int boot_scramble_region(const struct flash_area *fap, uint32_t off, uint32_t sz, bool backwards);
-/* Makes slot unbootable, either by scrambling header magic, header sector
- * or entire slot, depending on settings.
- * Note: slot is passed here becuase at this point there is no function
- * matching flash_area object to slot */
-int boot_scramble_slot(const struct flash_area *fap, int slot);
 bool boot_status_is_reset(const struct boot_status *bs);
 
 #ifdef MCUBOOT_ENC_IMAGES
-int boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
-                       const struct boot_status *bs);
+int boot_write_enc_keys(const struct flash_area *fap, const struct boot_status *bs);
 int boot_read_enc_key(const struct flash_area *fap, uint8_t slot,
                       struct boot_status *bs);
-#endif
-
-#if MCUBOOT_SWAP_USING_SCRATCH
-/*
- * Similar to `boot_trailer_sz` but this function returns the space used to
- * store status in the scratch partition. The scratch partition only stores
- * status during the swap of the last sector from primary/secondary (which
- * is the first swap operation) and thus only requires space for one swap.
- */
-uint32_t boot_scratch_trailer_sz(uint32_t min_write_sz);
 #endif
 
 /**
@@ -475,11 +443,14 @@ static inline bool boot_u16_safe_add(uint16_t *dest, uint16_t a, uint16_t b)
 #endif
 #ifdef MCUBOOT_ENC_IMAGES
 #define BOOT_CURR_ENC(state) ((state)->enc[BOOT_CURR_IMG(state)])
+#define BOOT_CURR_ENC_SLOT(state, slot) (&((state)->enc[BOOT_CURR_IMG(state)][slot]))
 #else
 #define BOOT_CURR_ENC(state) NULL
+#define BOOT_CURR_ENC_SLOT(state, slot) NULL
 #endif
 #define BOOT_IMG(state, slot) ((state)->imgs[BOOT_CURR_IMG(state)][(slot)])
 #define BOOT_IMG_AREA(state, slot) (BOOT_IMG(state, slot).area)
+#define BOOT_IMG_UNPROTECTED_TLV_SIZE(state, slot) (BOOT_IMG(state, slot).unprotected_tlv_size)
 #define BOOT_WRITE_SZ(state) ((state)->write_sz[BOOT_CURR_IMG(state)])
 #define BOOT_SWAP_TYPE(state) ((state)->swap_type[BOOT_CURR_IMG(state)])
 #define BOOT_TLV_OFF(hdr) ((hdr)->ih_hdr_size + (hdr)->ih_img_size)
@@ -589,20 +560,6 @@ uint32_t bootutil_max_image_size(struct boot_loader_state *state, const struct f
 
 int boot_read_image_size(struct boot_loader_state *state, int slot,
                          uint32_t *size);
-
-/* Helper macro to avoid compile errors with systems that do not
- * provide function to check device type.
- * Note: it used to be inline, but somehow compiler would not
- * optimize out branches that were impossible when this evaluated to
- * just "true".
- */
-#if defined(MCUBOOT_SUPPORT_DEV_WITHOUT_ERASE) && defined(MCUBOOT_SUPPORT_DEV_WITH_ERASE)
-#define device_requires_erase(fa) (flash_area_erase_required(fa))
-#elif defined(MCUBOOT_SUPPORT_DEV_WITHOUT_ERASE)
-#define device_requires_erase(fa) (false)
-#else
-#define device_requires_erase(fa) (true)
-#endif
 
 #ifdef __cplusplus
 }

@@ -120,6 +120,8 @@ zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/image_ecdsa.c
   ${BOOT_DIR}/bootutil/src/image_ed25519.c
   ${BOOT_DIR}/bootutil/src/bootutil_misc.c
+  ${BOOT_DIR}/bootutil/src/bootutil_area.c
+  ${BOOT_DIR}/bootutil/src/bootutil_loader.c
   ${BOOT_DIR}/bootutil/src/fault_injection_hardening.c
   )
 
@@ -172,6 +174,26 @@ elseif(CONFIG_BOOT_FIRMWARE_LOADER)
       )
   endif()
   zephyr_library_include_directories(${BOOT_DIR}/bootutil/src)
+elseif(CONFIG_MCUBOOT_MANIFEST_UPDATES)
+  zephyr_library_sources(
+    ${BOOT_DIR}/bootutil/src/loader_manifest_xip.c
+    ${BOOT_DIR}/bootutil/src/swap_misc.c
+    ${BOOT_DIR}/bootutil/src/caps.c
+    )
+
+  if(CONFIG_BOOT_SWAP_USING_MOVE)
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/swap_move.c
+      )
+  elseif(CONFIG_BOOT_SWAP_USING_OFFSET)
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/swap_offset.c
+      )
+  else()
+    zephyr_library_sources(
+      ${BOOT_DIR}/bootutil/src/swap_scratch.c
+      )
+  endif()
 else()
   zephyr_library_sources(
     ${BOOT_DIR}/bootutil/src/loader.c

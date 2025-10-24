@@ -115,12 +115,12 @@ bool boot_is_compressed_header_valid(const struct image_header *hdr, const struc
 
 static bool is_compression_object_valid(struct nrf_compress_implementation *compression)
 {
-	if (compression == NULL || compression->init == NULL || compression->deinit == NULL ||
-	    compression->decompress_bytes_needed == NULL || compression->decompress == NULL) {
-		return false;
-	}
+    if (compression == NULL || compression->init == NULL || compression->deinit == NULL ||
+        compression->decompress_bytes_needed == NULL || compression->decompress == NULL) {
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 #ifdef MCUBOOT_ENC_IMAGES
@@ -206,13 +206,12 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
         enc_state = NULL;
         image_index = 0;
     } else {
-        enc_state = BOOT_CURR_ENC(state);
+        enc_state = BOOT_CURR_ENC_SLOT(state, BOOT_SLOT_SECONDARY);
         image_index = BOOT_CURR_IMG(state);
     }
 
     /* Encrypted images only exist in the secondary slot */
-    if (MUST_DECRYPT(fap, image_index, hdr) &&
-            !boot_enc_valid(enc_state, 1)) {
+    if (MUST_DECRYPT(fap, image_index, hdr) && !boot_enc_valid(enc_state)) {
         return -1;
     }
 
@@ -249,7 +248,7 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
     compression_arm_thumb = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_ARM_THUMB);
 
     if (!is_compression_object_valid(compression_lzma) ||
-	!is_compression_object_valid(compression_arm_thumb)) {
+        !is_compression_object_valid(compression_arm_thumb)) {
         /* Compression library missing or missing required function pointer */
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
@@ -359,7 +358,7 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
                 memset(&tmp_buf[copy_size], 0x00, dummy_bytes);
             }
 
-            boot_enc_decrypt(enc_state, 1, read_pos, (copy_size + dummy_bytes), (read_pos & 0xf),
+            boot_enc_decrypt(enc_state, read_pos, (copy_size + dummy_bytes), (read_pos & 0xf),
                              tmp_buf);
         }
 #endif
@@ -389,7 +388,7 @@ int bootutil_img_hash_decompress(struct boot_loader_state *state, struct image_h
             }
 
             rc = compression_lzma->decompress(NULL, &tmp_buf[tmp_off], chunk_size, last_packet,
-					      &offset, &output, &output_size);
+                                              &offset, &output, &output_size);
 
             if (rc) {
                 BOOT_LOG_ERR("Decompression error: %d", rc);
@@ -1138,7 +1137,7 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     compression_arm_thumb = nrf_compress_implementation_find(NRF_COMPRESS_TYPE_ARM_THUMB);
 
     if (!is_compression_object_valid(compression_lzma) ||
-	!is_compression_object_valid(compression_arm_thumb)) {
+        !is_compression_object_valid(compression_arm_thumb)) {
         /* Compression library missing or missing required function pointer */
         BOOT_LOG_ERR("Decompression library fatal error");
         rc = BOOT_EBADSTATUS;
@@ -1239,7 +1238,8 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
                 memset(&buf[copy_size], 0x00, dummy_bytes);
             }
 
-            boot_enc_decrypt(BOOT_CURR_ENC(state), 1, pos, (copy_size + dummy_bytes), (pos & 0xf), buf);
+            boot_enc_decrypt(BOOT_CURR_ENC_SLOT(state, BOOT_SLOT_SECONDARY), pos,
+                             (copy_size + dummy_bytes), (pos & 0xf), buf);
         }
 #endif
 

@@ -1156,6 +1156,34 @@ config MCUBOOT_HW_DOWNGRADE_PREVENTION_COUNTER_LIMITED
 
 endchoice
 
+config MCUBOOT_MANIFEST_UPDATES
+	bool "Enable transactional updates"
+	select EXPERIMENTAL
+	help
+	  If y, enables support for transactional updates using manifests.
+	  This allows multiple images to be updated atomically. The manifest
+	  is a separate TLV which contains a list of images to update and
+	  their expected hash values. The manifest TLV is a part of an image
+	  that is signed to prevent tampering.
+	  The manifest must be transferred as part of the image with index 0.
+	  It can be a dedicated image, or part of an existing image.
+	  If the second option is selected, all updates must contain an update
+	  for image 0.
+
+if MCUBOOT_MANIFEST_UPDATES
+
+config MCUBOOT_MANIFEST_IMAGE_NUMBER
+	int "Number of image that must include manifest"
+	default 0
+	range 0 UPDATEABLE_IMAGE_NUMBER
+	help
+	  Specifies the index of the image that must include the manifest.
+	  If MCUBOOT_MANIFEST_USE_DEDICATED_IMAGE is selected, this index
+	  specifies the index of the dedicated image that contains only
+	  the manifest.
+
+endif # MCUBOOT_MANIFEST_UPDATES
+
 config MCUBOOT_UUID_VID
 	bool "Expect vendor unique identifier in image's TLV"
 	help
@@ -1402,17 +1430,28 @@ config USB_DEVICE_PRODUCT
 config MCUBOOT_BOOTUTIL_LIB_OWN_LOG
 	bool
 
+config MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
+        bool "Use load address to verify application is in proper slot"
+        help
+          The bootloader will use the load address, from the image header,
+          to verify that binary is in slot designated for its execution.
+          When not selected reset vector, read from image, is used for
+          the same purpose.
+
 config NRF_MCUBOOT_BOOT_REQUEST
 	bool
 	imply FIND_NEXT_SLOT_HOOKS if BOOT_DIRECT_XIP || BOOT_RAM_LOAD
 
 config MCUBOOT_VERIFY_IMG_ADDRESS
-	bool "Verify reset address of image in secondary slot"
+	bool "Verify reset address of image in secondary slot [DEPRECATED]"
+        select DEPRECATED
 	depends on UPDATEABLE_IMAGE_NUMBER > 1
 	depends on !BOOT_ENCRYPT_IMAGE
 	depends on ARM
 	default y if BOOT_UPGRADE_ONLY
 	help
+          This option is deprecated, please use MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
+          instead.
 	  Verify that the reset address in the image located in the secondary slot
 	  is contained within the corresponding primary slot. This is recommended
 	  if swapping is not used (that is, BOOT_UPGRADE_ONLY is set). If a user

@@ -21,6 +21,8 @@ target_sources(bootutil
         src/bootutil_img_hash.c
         src/bootutil_img_security_cnt.c
         src/bootutil_misc.c
+        src/bootutil_area.c
+        src/bootutil_loader.c
         src/bootutil_public.c
         src/caps.c
         src/encrypted.c
@@ -31,6 +33,7 @@ target_sources(bootutil
         src/image_rsa.c
         src/image_validate.c
         src/loader.c
+        src/loader_manifest_xip.c
         src/swap_misc.c
         src/swap_move.c
         src/swap_scratch.c
