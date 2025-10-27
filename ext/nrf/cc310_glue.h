@@ -18,7 +18,7 @@
 #ifndef NRF_CC310_GLUE_H__
 #define NRF_CC310_GLUE_H__
 
-#include <nrf.h>
+#include <nrfx.h>
 #include <nrf_cc310_bl_init.h>
 #include <nrf_cc310_bl_hash_sha256.h>
 #include <nrf_cc310_bl_ecdsa_verify_secp256r1.h>
