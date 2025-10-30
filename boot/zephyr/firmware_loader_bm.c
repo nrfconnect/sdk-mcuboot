@@ -15,6 +15,7 @@
 #include "bootutil/bootutil_public.h"
 #include "bootutil/fault_injection_hardening.h"
 #include <bm_installs.h>
+#include "bootutil/key_revocation.h"
 
 #include "io/io.h"
 #include "mcuboot_config/mcuboot_config.h"
@@ -248,6 +249,15 @@ invalid_firmware_loader:
         boot_firmware_loader = true;
     }
 #endif
+
+#if defined(CONFIG_BOOT_KEYS_REVOCATION)
+    if (softdevice_image_valid == true && firmware_loader_image_valid == true) {
+        allow_revoke();
+        if (revoke() != BOOT_KEY_REVOKE_OK) {
+            return -1;
+        }
+    }
+#endif /*CONFIG_BOOT_KEYS_REVOCATION*/
 
     if (app_installer_image_valid == true && app_installer_is_installer_image == true) {
         /* Installer image is present, this gets priority */
