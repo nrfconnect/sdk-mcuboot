@@ -45,7 +45,8 @@ static psa_key_id_t key_ids[] =  {
 
 #if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
 #include <bootutil/key_revocation.h>
-static psa_key_id_t *validated_with = NULL;
+#define VALIDATED_WITH_UNINITIALIZED INT32_MAX
+static int32_t validated_with = VALIDATED_WITH_UNINITIALIZED;
 #endif
 
 BUILD_ASSERT(CONFIG_BOOT_SIGNATURE_KMU_SLOTS <= ARRAY_SIZE(key_ids),
@@ -142,7 +143,9 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
                                     EDDSA_SIGNAGURE_LENGTH);
         if (status == PSA_SUCCESS) {
 #if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
-            validated_with = key_ids + i;
+            if(i < validated_with) {
+                validated_with = i;
+            }
 #endif
             return 1;
         }
@@ -159,7 +162,7 @@ int exec_revoke(void)
     int ret = BOOT_KEY_REVOKE_OK;
     psa_status_t status = psa_crypto_init();
 
-    if (!validated_with) {
+    if (validated_with == VALIDATED_WITH_UNINITIALIZED) {
         ret = BOOT_KEY_REVOKE_INVALID;
         goto out;
     }
@@ -170,7 +173,7 @@ int exec_revoke(void)
             goto out;
     }
     for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; i++) {
-        if ((key_ids + i) == validated_with) {
+        if ( i == validated_with) {
             break;
         }
         BOOT_LOG_DBG("Invalidating key ID %d", i);
@@ -179,7 +182,7 @@ int exec_revoke(void)
         if (status == PSA_SUCCESS) {
             BOOT_LOG_DBG("Success on key ID %d", i);
         } else {
-            BOOT_LOG_ERR("Key invalidation failed with: %d", status);
+            BOOT_LOG_DBG("Key invalidation failed with: %d", status);
         }
     }
 out:
