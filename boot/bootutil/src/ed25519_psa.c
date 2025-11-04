@@ -187,7 +187,6 @@ out:
 }
 #endif /* CONFIG_BOOT_KMU_KEYS_REVOCATION */
 
-#if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 void nrf_crypto_keys_housekeeping(void)
 {
     psa_status_t status;
@@ -213,6 +212,5 @@ void nrf_crypto_keys_housekeeping(void)
                      key_ids[i], i, status);
     }
 }
-#endif
 
 #endif
