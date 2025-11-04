@@ -398,59 +398,9 @@ boot_write_image_ok(const struct flash_area *fap)
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
 }
 
-#if defined(SEND_BOOT_REQUEST) || (!defined(MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP))
-static int flash_area_to_image_slot(const struct flash_area *fa, uint32_t *slot)
-{
-    int id = flash_area_get_id(fa);
-#if BOOT_IMAGE_NUMBER > 1
-    uint8_t i = 0;
-
-    for (i = 0; i < BOOT_IMAGE_NUMBER; i++) {
-        if (FLASH_AREA_IMAGE_PRIMARY(i) == id) {
-            if (slot != NULL) {
-                *slot = 0;
-            }
-            return i;
-        } else if (FLASH_AREA_IMAGE_SECONDARY(i) == id) {
-            if (slot != NULL) {
-                *slot = 1;
-            }
-            return i;
-        }
-    }
-
-    /* Image not found */
-    *slot = UINT32_MAX;
-#else
-    (void)fa;
-    if (slot != NULL) {
-        if (FLASH_AREA_IMAGE_PRIMARY(0) == id) {
-            *slot = 0;
-        } else if (FLASH_AREA_IMAGE_SECONDARY(0) == id) {
-            *slot = 1;
-        } else {
-            *slot = UINT32_MAX;
-        }
-    }
-#endif
-    return 0;
-}
-#endif /* SEND_BOOT_REQUEST || !MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP */
-
 int
 boot_read_image_ok(const struct flash_area *fap, uint8_t *image_ok)
 {
-#ifdef SEND_BOOT_REQUEST
-    enum boot_slot slot_id = BOOT_SLOT_NONE;
-    int image_id = flash_area_to_image_slot(fap, &slot_id);
-    bool confirm_pending = boot_request_check_confirmed_slot(image_id, slot_id);
-
-    if (confirm_pending) {
-        BOOT_LOG_DBG("Image confirmation pending for image %d slot %d", image_id, slot_id);
-        *image_ok = BOOT_FLAG_SET;
-        return 0;
-    }
-#endif /* SEND_BOOT_REQUEST */
     return boot_read_flag(fap, image_ok, boot_image_ok_off(fap));
 }
 
@@ -590,6 +540,47 @@ send_boot_request(uint8_t magic, uint8_t image_ok, bool confirm, int image_id,
     return rc;
 }
 #endif /* SEND_BOOT_REQUEST */
+
+#if defined(SEND_BOOT_REQUEST) || (!defined(MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP))
+static int flash_area_to_image_slot(const struct flash_area *fa, uint32_t *slot)
+{
+    int id = flash_area_get_id(fa);
+#if BOOT_IMAGE_NUMBER > 1
+    uint8_t i = 0;
+
+    while (i < BOOT_IMAGE_NUMBER) {
+        if (FLASH_AREA_IMAGE_PRIMARY(i) == id) {
+            if (slot != NULL) {
+                *slot = 0;
+            }
+            return i;
+        } else if (FLASH_AREA_IMAGE_SECONDARY(i) == id) {
+            if (slot != NULL) {
+                *slot = 1;
+            }
+            return i;
+        }
+
+        ++i;
+    }
+
+    /* Image not found */
+    *slot = UINT32_MAX;
+#else
+    (void)fa;
+    if (slot != NULL) {
+        if (FLASH_AREA_IMAGE_PRIMARY(0) == id) {
+            *slot = 0;
+        } else if (FLASH_AREA_IMAGE_SECONDARY(0) == id) {
+            *slot = 1;
+        } else {
+            *slot = UINT32_MAX;
+        }
+    }
+#endif
+    return 0;
+}
+#endif /* defined(SEND_BOOT_REQUEST) || (!defined(MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP)) */
 
 #ifndef MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP
 int

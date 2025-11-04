@@ -236,6 +236,7 @@ int boot_request_set_preferred_slot(uint8_t image, enum boot_slot slot)
 			       sizeof(value));
 }
 
+#ifdef CONFIG_FIND_NEXT_SLOT_HOOKS
 enum boot_slot boot_request_get_preferred_slot(uint8_t image)
 {
 	uint8_t value = BOOT_REQUEST_SLOT_INVALID;
@@ -264,6 +265,7 @@ enum boot_slot boot_request_get_preferred_slot(uint8_t image)
 
 	return BOOT_SLOT_NONE;
 }
+#endif /* CONFIG_FIND_NEXT_SLOT_HOOKS */
 
 int boot_request_enter_recovery(void)
 {
