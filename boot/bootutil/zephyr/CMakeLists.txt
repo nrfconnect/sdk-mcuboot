@@ -21,6 +21,9 @@ if(CONFIG_NRF_MCUBOOT_BOOT_REQUEST)
     src/boot_request_retention.c
   )
 endif()
+zephyr_library_sources_ifdef(CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES
+  ../src/mcuboot_manifest.c
+)
 
 # Sensitivity to the TEST_BOOT_IMAGE_ACCESS_HOOKS define is implemented for
 # allowing the test-build with the hooks feature enabled.

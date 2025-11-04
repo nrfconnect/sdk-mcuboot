@@ -15,7 +15,21 @@
 
 #include <stdint.h>
 #include "bootutil/bootutil.h"
+#ifdef CONFIG_MCUBOOT
 #include "bootutil/crypto/sha.h"
+#elif defined(CONFIG_MCUBOOT_BOOTLOADER_USES_SHA512)
+    #define IMAGE_HASH_SIZE (64)
+#else
+    #define IMAGE_HASH_SIZE (32)
+#endif
+
+#ifndef MCUBOOT_IMAGE_NUMBER
+#ifdef CONFIG_UPDATEABLE_IMAGE_NUMBER
+#define MCUBOOT_IMAGE_NUMBER CONFIG_UPDATEABLE_IMAGE_NUMBER
+#else
+#error "MCUBOOT_IMAGE_NUMBER must be defined when MCUBOOT_MANIFEST_UPDATES is enabled"
+#endif
+#endif
 
 #ifndef __packed
 #define __packed __attribute__((__packed__))

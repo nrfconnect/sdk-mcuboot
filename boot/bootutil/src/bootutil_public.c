@@ -56,6 +56,10 @@
 #define SEND_BOOT_REQUEST
 #endif /* CONFIG_NRF_MCUBOOT_BOOT_REQUEST && !CONFIG_MCUBOOT */
 
+#ifdef CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES
+#include <bootutil/mcuboot_manifest.h>
+#endif /* CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES */
+
 #ifdef CONFIG_MCUBOOT
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 #else
@@ -243,6 +247,45 @@ boot_read_copy_done(const struct flash_area *fap, uint8_t *copy_done)
     return boot_read_flag(fap, copy_done, boot_copy_done_off(fap));
 }
 
+#if defined(SEND_BOOT_REQUEST) || (!defined(MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP)) || \
+    defined(CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES)
+static int flash_area_to_image_slot(const struct flash_area *fa, uint32_t *slot)
+{
+    int id = flash_area_get_id(fa);
+#if BOOT_IMAGE_NUMBER > 1
+    uint8_t i = 0;
+
+    for (i = 0; i < BOOT_IMAGE_NUMBER; i++) {
+        if (FLASH_AREA_IMAGE_PRIMARY(i) == id) {
+            if (slot != NULL) {
+                *slot = 0;
+            }
+            return i;
+        } else if (FLASH_AREA_IMAGE_SECONDARY(i) == id) {
+            if (slot != NULL) {
+                *slot = 1;
+            }
+            return i;
+        }
+    }
+
+    /* Image not found */
+    *slot = UINT32_MAX;
+#else
+    (void)fa;
+    if (slot != NULL) {
+        if (FLASH_AREA_IMAGE_PRIMARY(0) == id) {
+            *slot = 0;
+        } else if (FLASH_AREA_IMAGE_SECONDARY(0) == id) {
+            *slot = 1;
+        } else {
+            *slot = UINT32_MAX;
+        }
+    }
+#endif
+    return 0;
+}
+#endif /* SEND_BOOT_REQUEST || !MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP || CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES */
 
 int
 boot_read_swap_state(const struct flash_area *fap,
@@ -251,7 +294,23 @@ boot_read_swap_state(const struct flash_area *fap,
     uint8_t magic[BOOT_MAGIC_SZ];
     uint32_t off;
     uint8_t swap_info;
-    int rc;
+    int rc = -1;
+#ifdef CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES
+    enum boot_slot slot_id = BOOT_SLOT_NONE;
+    int image_id = flash_area_to_image_slot(fap, &slot_id);
+
+    /* If manifest-based updates are used, only the manifest image is considered. */
+    image_id = CONFIG_NCS_MCUBOOT_MANIFEST_IMAGE_INDEX;
+    if (slot_id == BOOT_SLOT_PRIMARY) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_id), &fap);
+    } else if (slot_id == BOOT_SLOT_SECONDARY) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_id), &fap);
+    }
+
+    if (rc != 0) {
+        return rc;
+    }
+#endif /* CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES */
 
     off = boot_magic_off(fap);
     rc = flash_area_read(fap, off, magic, BOOT_MAGIC_SZ);
@@ -397,45 +456,6 @@ boot_write_image_ok(const struct flash_area *fap)
                  (unsigned long)(flash_area_get_off(fap) + off));
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
 }
-
-#if defined(SEND_BOOT_REQUEST) || (!defined(MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP))
-static int flash_area_to_image_slot(const struct flash_area *fa, uint32_t *slot)
-{
-    int id = flash_area_get_id(fa);
-#if BOOT_IMAGE_NUMBER > 1
-    uint8_t i = 0;
-
-    for (i = 0; i < BOOT_IMAGE_NUMBER; i++) {
-        if (FLASH_AREA_IMAGE_PRIMARY(i) == id) {
-            if (slot != NULL) {
-                *slot = 0;
-            }
-            return i;
-        } else if (FLASH_AREA_IMAGE_SECONDARY(i) == id) {
-            if (slot != NULL) {
-                *slot = 1;
-            }
-            return i;
-        }
-    }
-
-    /* Image not found */
-    *slot = UINT32_MAX;
-#else
-    (void)fa;
-    if (slot != NULL) {
-        if (FLASH_AREA_IMAGE_PRIMARY(0) == id) {
-            *slot = 0;
-        } else if (FLASH_AREA_IMAGE_SECONDARY(0) == id) {
-            *slot = 1;
-        } else {
-            *slot = UINT32_MAX;
-        }
-    }
-#endif
-    return 0;
-}
-#endif /* SEND_BOOT_REQUEST || !MCUBOOT_BOOTUTIL_LIB_FOR_DIRECT_XIP */
 
 int
 boot_read_image_ok(const struct flash_area *fap, uint8_t *image_ok)

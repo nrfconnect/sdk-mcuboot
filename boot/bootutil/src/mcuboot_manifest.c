@@ -6,7 +6,15 @@
 
 #include <bootutil/mcuboot_manifest.h>
 
-#ifdef MCUBOOT_MANIFEST_UPDATES
+#if defined(MCUBOOT_MANIFEST_UPDATES) || defined(CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES)
+
+#ifndef MCUBOOT_MANIFEST_IMAGE_INDEX
+#ifdef CONFIG_NCS_MCUBOOT_MANIFEST_IMAGE_INDEX
+#define MCUBOOT_MANIFEST_IMAGE_INDEX CONFIG_NCS_MCUBOOT_MANIFEST_IMAGE_INDEX
+#else
+#error "MCUBOOT_MANIFEST_IMAGE_INDEX must be defined when MCUBOOT_MANIFEST_UPDATES is enabled"
+#endif
+#endif
 
 bool bootutil_verify_manifest(const struct mcuboot_manifest *manifest)
 {
@@ -50,4 +58,4 @@ bool bootutil_verify_manifest_image_hash(const struct mcuboot_manifest *manifest
     return false;
 }
 
-#endif /* MCUBOOT_MANIFEST_UPDATES */
+#endif /* MCUBOOT_MANIFEST_UPDATES || CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES */
