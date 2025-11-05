@@ -33,10 +33,10 @@ from imgtool.version import decode_version
 
 from .keys import ECDSAUsageError, Ed25519UsageError, RSAUsageError, X25519UsageError
 
-comp_default_dictsize=131072
+comp_default_dictsize=4*1024
 comp_default_pb=2
-comp_default_lc=3
-comp_default_lp=1
+comp_default_lc=0
+comp_default_lp=0
 comp_default_preset=9
 
 
