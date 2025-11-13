@@ -54,6 +54,9 @@ endif()
 # Include the UUID generation code
 add_subdirectory(uuid)
 
+# Include the IronSide-based HW counters implementation
+add_subdirectory_ifdef(CONFIG_NRF_MCUBOOT_IRONSIDE_COUNTERS ironside_counters)
+
 zephyr_library_include_directories(
   include
   )
