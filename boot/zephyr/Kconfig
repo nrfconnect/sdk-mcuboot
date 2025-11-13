@@ -1167,6 +1167,8 @@ config MCUBOOT_HW_DOWNGRADE_PREVENTION_LOCK
 	  This prevents the application from accidental updates of the counter,
 	  that may invalidate the currently running image.
 
+rsource "ironside_counters/Kconfig"
+
 config MCUBOOT_MANIFEST_UPDATES
 	bool "Enable transactional updates"
 	select EXPERIMENTAL
