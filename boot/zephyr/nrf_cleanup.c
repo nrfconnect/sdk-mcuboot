@@ -1,8 +1,10 @@
 /*
- * Copyright (c) 2020 Nordic Semiconductor ASA
+ * Copyright (c) 2020-2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
+#include <zephyr/kernel.h>
 
 #if defined(CONFIG_NRFX_CLOCK)
 #include <hal/nrf_clock.h>
@@ -130,6 +132,21 @@ void nrf_cleanup_peripheral(void)
 #if defined(NRF_UARTE_CLEANUP)
     for (int i = 0; i < sizeof(nrf_uarte_to_clean) / sizeof(nrf_uarte_to_clean[0]); ++i) {
         NRF_UARTE_Type *current = nrf_uarte_to_clean[i];
+
+        /* Ensured that RX is stopped */
+        if (nrfy_uarte_event_check(current, NRF_UARTE_EVENT_RXSTARTED)) {
+            nrfy_uarte_task_trigger(current, NRF_UARTE_TASK_STOPRX);
+            /* Wait up to 100ms for task to stop */
+            for (int i = 0; i < 1000; i++) {
+                if (nrfy_uarte_event_check(current, NRF_UARTE_EVENT_RXTO) ||
+                    nrfy_uarte_event_check(current, NRF_UARTE_EVENT_ERROR)) {
+                    /* RX terminated, break*/
+                    break;
+                }
+                /* Wait before next check */
+                k_busy_wait(100);
+            }
+        }
 
         nrfy_uarte_int_disable(current, 0xFFFFFFFF);
         nrfy_uarte_int_uninit(current);
