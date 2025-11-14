@@ -93,7 +93,10 @@ bool boot_request_detect_firmware_loader(void);
 int boot_request_init(void);
 
 /**
- * @brief Clear/drop all requests.
+ * @brief Clear boot requests.
+ *
+ * @details If the CONFIG_NRF_MCUBOOT_BOOT_REQUEST_PREFERENCE_KEEP option is
+ *          enabled, all requests, except the preferred slot requests, are cleared.
  *
  * @return 0 if successful, negative error code otherwise.
  */

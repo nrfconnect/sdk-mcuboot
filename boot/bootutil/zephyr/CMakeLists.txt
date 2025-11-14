@@ -17,8 +17,14 @@ zephyr_library_sources(
   ../src/bootutil_public.c
     )
 if(CONFIG_NRF_MCUBOOT_BOOT_REQUEST)
+  zephyr_library_sources(
+    src/boot_request.c
+  )
   zephyr_library_sources_ifdef(CONFIG_NRF_MCUBOOT_BOOT_REQUEST_IMPL_RETENTION
     src/boot_request_retention.c
+  )
+  zephyr_library_sources_ifdef(CONFIG_NRF_MCUBOOT_BOOT_REQUEST_IMPL_FLASH
+    src/boot_request_flash.c
   )
 endif()
 zephyr_library_sources_ifdef(CONFIG_NCS_MCUBOOT_MANIFEST_UPDATES
