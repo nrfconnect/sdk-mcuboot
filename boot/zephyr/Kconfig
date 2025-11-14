@@ -1417,10 +1417,18 @@ config NRF_MCUBOOT_BOOT_REQUEST
 	bool
 	imply FIND_NEXT_SLOT_HOOKS if BOOT_DIRECT_XIP || BOOT_RAM_LOAD
 
+config MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
+	bool "Use load address to verify application is in proper slot"
+	help
+	  The bootloader will use the load address, from the image header,
+	  to verify that binary is in slot designated for its execution.
+	  When not selected reset vector, read from image, is used for
+	  the same purpose.
+
 config MCUBOOT_VERIFY_IMG_ADDRESS
 	bool "Verify reset address of image in secondary slot"
 	depends on UPDATEABLE_IMAGE_NUMBER > 1
-	depends on !BOOT_ENCRYPT_IMAGE
+	depends on !BOOT_ENCRYPT_IMAGE || MCUBOOT_USE_CHECK_LOAD_ADDRESS
 	depends on ARM
 	default y if BOOT_UPGRADE_ONLY
 	help
