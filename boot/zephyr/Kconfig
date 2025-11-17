@@ -706,17 +706,30 @@ config SINGLE_APPLICATION_SLOT_RAM_LOAD
 	  image is copied to is specified using the load-addr argument to the
 	  imgtool.py script which writes it to the image header.
 
+if BOOT_RAM_LOAD || SINGLE_APPLICATION_SLOT_RAM_LOAD
+
 # Workaround for not being able to have commas in macro arguments
 DT_CHOSEN_Z_SRAM := zephyr,sram
+DT_CHOSEN_Z_CODE_SRAM := zephyr,code-sram
 
-if BOOT_RAM_LOAD || SINGLE_APPLICATION_SLOT_RAM_LOAD
+config BOOT_IMAGE_EXECUTABLE_RAM_USE_CODE_SRAM_LABEL
+	bool "Use the code-sram DTS label for the executable RAM"
+	help
+	  If enabled, the executable RAM start and size will be taken from the code-sram
+	  label in the devicetree. Otherwise, the sram label will be used.
+
 config BOOT_IMAGE_EXECUTABLE_RAM_START
 	hex "Boot image executable ram start"
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_CODE_SRAM)) if \
+		BOOT_IMAGE_EXECUTABLE_RAM_USE_CODE_SRAM_LABEL
 	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_SRAM))
 
 config BOOT_IMAGE_EXECUTABLE_RAM_SIZE
 	int "Boot image executable base size"
+	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_CODE_SRAM),0) if \
+		BOOT_IMAGE_EXECUTABLE_RAM_USE_CODE_SRAM_LABEL
 	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_SRAM),0)
+
 endif
 
 config MULTIPLE_EXECUTABLE_RAM_REGIONS
