@@ -446,15 +446,6 @@ config BOOT_KMU_KEYS_REVOCATION
 	help
 	  Enabling KMU key revocation backend.
 
-config NCS_BOOT_SIGNATURE_KMU_BASE_SLOT
-	int
-	depends on BOOT_SIGNATURE_USING_KMU
-	default 226 if NCS_BOOT_SIGNATURE_KMU_UROT_MAPPING
-	default 226 if MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
-	default 242
-	help
-	  Base key identifier for KMU.
-
 config NCS_BOOT_SIGNATURE_USING_ITS
 	bool "Use ITS stored keys for signature verification"
 	depends on NRF_SECURITY
