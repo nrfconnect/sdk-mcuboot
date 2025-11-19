@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <mcuboot_config/mcuboot_config.h>
 #include "bootutil/bootutil_log.h"
@@ -74,10 +75,12 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
     }
 
     status = PSA_ERROR_BAD_STATE;
+    BOOT_LOG_DBG("ED25519_verify: total key count %d", KEY_SLOTS_COUNT);
 
     for (int i = 0; i < KEY_SLOTS_COUNT; ++i) {
         psa_key_id_t kid = key_ids[i];
 
+        BOOT_LOG_DBG("ED25519_verify: trying key ID 0x%" PRIx32, (uint32_t)kid);
         status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message,
                                     message_len, signature,
                                     EDDSA_SIGNAGURE_LENGTH);
