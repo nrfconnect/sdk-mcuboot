@@ -903,13 +903,24 @@ int main(void)
 
 #if USE_PARTITION_MANAGER && CONFIG_FPROTECT
 
+/* Round up to next CONFIG_FPROTECT_BLOCK_SIZE boundary.
+ * This is used for backwards compatibility, as some applications
+ * use MCUBoot size unaligned to CONFIG_FPROTECT_BLOCK_SIZE.
+ * However, even in these cases, the start of the next area
+ * was still aligned to CONFIG_FPROTECT_BLOCK_SIZE and the
+ * remaining space was filled by an EMPTY section by partition manager.
+ */
+#define FPROTECT_ALIGN_UP(x) \
+    ((((x) + CONFIG_FPROTECT_BLOCK_SIZE - 1) / CONFIG_FPROTECT_BLOCK_SIZE) * \
+     CONFIG_FPROTECT_BLOCK_SIZE)
+
 #ifdef PM_S1_ADDRESS
 /* MCUBoot is stored in either S0 or S1, protect both */
 #define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_S0_ADDRESS)
 #define PROTECT_ADDR PM_S0_ADDRESS
 #else
 /* There is only one instance of MCUBoot */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_MCUBOOT_ADDRESS)
+#define PROTECT_SIZE FPROTECT_ALIGN_UP(PM_MCUBOOT_SIZE)
 #define PROTECT_ADDR PM_MCUBOOT_ADDRESS
 #endif
 
