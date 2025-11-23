@@ -48,6 +48,11 @@ if(CONFIG_BOOT_USE_PSA_CRYPTO)
   )
 endif()
 
+if(CONFIG_BOOT_USE_NRF_OBERON_EXPERIMENT)
+  target_include_directories(MCUBOOT_BOOTUTIL INTERFACE ${OBERON_BASE}/include)
+  zephyr_link_libraries(nrfxlib_crypto)
+endif()
+
 if(CONFIG_BOOT_USE_MBEDTLS OR CONFIG_BOOT_USE_PSA_CRYPTO AND NOT CONFIG_NRF_SECURITY)
   zephyr_link_libraries(mbedTLS)
 endif()
