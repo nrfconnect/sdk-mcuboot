@@ -202,6 +202,20 @@ out:
     FIH_RET(fih_rc);
 }
 
+#ifdef MCUBOOT_HW_ROLLBACK_PROT
+/**
+ * Checks if the specified image should have a security counter present on it or not
+ *
+ * @param image_index   Index of the image to check.
+ *
+ * @return              true if security counter should be present; false if otherwise
+ */
+fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index)
+{
+    return FIH_SUCCESS;
+}
+#endif /* MCUBOOT_HW_ROLLBACK_PROT */
+
 /**
  * Opens all flash areas and checks which contain an image with a valid header.
  *
