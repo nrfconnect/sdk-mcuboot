@@ -30,7 +30,7 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 		FIH_RET(FIH_FAILURE);
 	}
 
-	if (image_id > IRONSIDE_COUNTER_MAX) {
+	if (image_id > IRONSIDE_COUNTER_NUM) {
 		FIH_RET(FIH_FAILURE);
 	}
 
@@ -49,7 +49,7 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 		}
 	}
 
-	if (cur_sec_cnt[0] > IRONSIDE_COUNTER_MAX_VALUE) {
+	if (cur_sec_cnt[0] <= IRONSIDE_COUNTER_MAX_VALUE) {
 		*security_cnt = fih_int_encode(cur_sec_cnt[0]);
 		FIH_RET(FIH_SUCCESS);
 	}
@@ -59,7 +59,7 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 
 int32_t boot_nv_security_counter_update(uint32_t image_id, uint32_t img_security_cnt)
 {
-	if ((img_security_cnt > IRONSIDE_COUNTER_MAX_VALUE) || (image_id > IRONSIDE_COUNTER_MAX)) {
+	if ((img_security_cnt > IRONSIDE_COUNTER_MAX_VALUE) || (image_id > IRONSIDE_COUNTER_NUM)) {
 		return -BOOT_EBADARGS;
 	}
 
@@ -72,7 +72,7 @@ int32_t boot_nv_security_counter_update(uint32_t image_id, uint32_t img_security
 
 fih_int boot_nv_security_counter_is_update_possible(uint32_t image_id, uint32_t img_security_cnt)
 {
-	fih_int security_cnt;
+	fih_int security_cnt = FIH_FAILURE;
 	fih_int fih_err;
 
 	FIH_CALL(boot_nv_security_counter_get, fih_err, image_id, &security_cnt);
@@ -89,7 +89,7 @@ fih_int boot_nv_security_counter_is_update_possible(uint32_t image_id, uint32_t 
 
 int32_t boot_nv_security_counter_lock(uint32_t image_id)
 {
-	if (image_id > IRONSIDE_COUNTER_MAX) {
+	if (image_id > IRONSIDE_COUNTER_NUM) {
 		return -BOOT_EBADARGS;
 	}
 
