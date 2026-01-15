@@ -300,11 +300,31 @@ class Manifest:
             n_images = len(self.config.get('images', []))
             self.data += struct.pack(e + 'I', n_images)
 
+            # Sort images, based on the image index
+            images = self.config.get('images', [])
+            images.sort(key=lambda img: img.get('index', 0))
+
+            # Verify that all indexes are present
+            last_index = -1
+            if 'manifest_index' in self.config:
+                manifest_index = int(self.config['manifest_index'])
+            else:
+                manifest_index = -1
+
             # Encode each image hash
             exp_hash_len = None
-            for image in self.config.get('images', []):
+            for image in images:
+                if 'index' in image:
+                    # Skip manifest index
+                    if last_index + 1 == manifest_index:
+                        last_index += 1
+
+                    index = int(image['index'])
+                    if index != last_index + 1:
+                        raise click.BadParameter(f"Manifest image indexes must be consecutive. Missing index: {last_index + 1}")
+                    last_index = index
                 if 'path' not in image and 'hash' not in image:
-                    raise click.UsageError(
+                    raise click.BadParameter(
                         "Manifest image entry must contain either 'path' or 'hash'")
 
                 # Encode hash, based on the signed image path
@@ -316,7 +336,7 @@ class Manifest:
                     if exp_hash_len is None:
                         exp_hash_len = len(digest)
                     elif exp_hash_len != len(digest):
-                        raise click.UsageError("All image hashes must have the same length")
+                        raise click.BadParameter("All image hashes must have the same length")
                     self.data += struct.pack(e + f'{exp_hash_len}s', digest)
 
                 # Encode RAW image hash
@@ -324,8 +344,14 @@ class Manifest:
                     if exp_hash_len is None:
                         exp_hash_len = len(bytes.fromhex(image['hash']))
                     elif exp_hash_len != len(bytes.fromhex(image['hash'])):
-                        raise click.UsageError("All image hashes must have the same length")
+                        raise click.BadParameter("All image hashes must have the same length")
                     self.data += struct.pack(e + f'{exp_hash_len}s', bytes.fromhex(image['hash']))
+
+            # Add manifest index if needed
+            if last_index + 1 == manifest_index:
+                last_index += 1
+            if last_index != -1 and last_index != n_images:
+                raise click.BadParameter(f"Manifest image indexes must be consecutive. Missing index: {last_index + 1}")
 
         except FileNotFoundError:
             raise click.UsageError(f"Manifest file {self.path} not found") from None
