@@ -248,8 +248,8 @@ choice BOOT_SIGNATURE_TYPE
 
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
-	select BOOT_USE_TINYCRYPT if !SOC_SERIES_NRF54LX
-	select BOOT_USE_PSA_CRYPTO if SOC_SERIES_NRF54LX
+	select BOOT_USE_TINYCRYPT if !SOC_SERIES_NRF54L
+	select BOOT_USE_PSA_CRYPTO if SOC_SERIES_NRF54L
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 
 config BOOT_SIGNATURE_TYPE_RSA
@@ -423,7 +423,7 @@ config BOOT_SIGNATURE_KMU_SLOTS
 
 config NCS_BOOT_SIGNATURE_KMU_UROT_MAPPING
 	bool "Use original mapping [DEPRECATED]"
-	depends on SOC_SERIES_NRF54LX
+	depends on SOC_SERIES_NRF54L
 	depends on MCUBOOT_MCUBOOT_IMAGE_NUMBER = -1
 	select DEPRECATED
 	help
@@ -810,7 +810,7 @@ if BOOT_ENCRYPT_X25519 && BOOT_USE_PSA_CRYPTO
 
 choice BOOT_HMAC_SHA
 	prompt "SHA used for HMAC and HKDF in encryption key exchange"
-	default BOOT_HMAC_SHA512 if BOOT_ENCRYPT_X25519 && SOC_SERIES_NRF54LX
+	default BOOT_HMAC_SHA512 if BOOT_ENCRYPT_X25519 && SOC_SERIES_NRF54L
 	default BOOT_HMAC_SHA256
 	help
 	  HMAC/HKDF sha algorithm may be selected to synchronize sha
@@ -1156,7 +1156,7 @@ config MCUBOOT_DOWNGRADE_PREVENTION_SECURITY_COUNTER
 config MCUBOOT_HW_DOWNGRADE_PREVENTION_COUNTER_LIMITED
 	bool "HW based downgrade prevention counter has limited number of updates"
 	depends on MCUBOOT_HW_DOWNGRADE_PREVENTION
-	default y if SOC_NRF5340_CPUAPP || SOC_SERIES_NRF91X || SOC_SERIES_NRF54LX
+	default y if SOC_NRF5340_CPUAPP || SOC_SERIES_NRF91 || SOC_SERIES_NRF54L
 	help
 	  When this option is set, the hardware downgrade prevention counter
 	  has limited number of updates. This option will enable checking

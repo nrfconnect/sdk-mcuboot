@@ -140,7 +140,7 @@ void nrf_cleanup_peripheral(void)
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXTO);
         nrfy_uarte_disable(current);
 
-#ifndef CONFIG_SOC_SERIES_NRF54LX
+#ifndef CONFIG_SOC_SERIES_NRF54L
         /* Disconnect pins UARTE pins
          * causes issues on nRF54l SoCs,
          * could be enabled once fix to NCSDK-33039 will be implemented.
