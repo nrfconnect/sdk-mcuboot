@@ -7,7 +7,7 @@
 if UPDATEABLE_IMAGE_NUMBER > $(image)
 
 config NCS_MCUBOOT_UUID_CID_IMAGE_$(image)_VALUE
-	string "Image class name (image $(image))"
+	string "Image or primary slot class name (image $(image))"
 	default ""
 	help
 	  The image class unique identifier.
@@ -19,11 +19,25 @@ config NCS_MCUBOOT_UUID_CID_IMAGE_$(image)_VALUE
 	   - Raw UUID (i.e. 12345678-1234-5678-1234-567812345678)
 	   - Raw HEX UUID (i.e. 12345678123456781234567812345678)
 
+config NCS_MCUBOOT_UUID_CID_IMAGE_$(image)_SECONDARY_VALUE
+	string "Secondary slot class name (image $(image))"
+	default ""
+	depends on NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID
+	help
+	  The secondary slot-specific class unique identifier.
+	  The following formats are supported:
+	   - Image class name (i.e. nRF5340_door_lock_btperipheral_secondary).
+	     This format requires NCS_MCUBOOT_UUID_VID_VALUE to be defined
+	     as the VID UUID is used as the namespace for generating RFC 9562
+	     UUID5 identifier.
+	   - Raw UUID (i.e. 12345678-1234-5678-1234-567812345678)
+	   - Raw HEX UUID (i.e. 12345678123456781234567812345678)
+
 config NCS_MCUBOOT_UUID_CID_IMAGE_$(image)
 	bool
 	default y
 	depends on NCS_MCUBOOT_UUID_CID_IMAGE_$(image)_VALUE != ""
 	help
-	  Helper symbol to simplify the active CId list generation.
+	  Helper symbol to simplify the active CID list generation.
 
 endif # UPDATEABLE_IMAGE_NUMBER > $(image)

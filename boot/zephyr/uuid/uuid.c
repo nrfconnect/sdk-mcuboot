@@ -7,21 +7,43 @@
 #include <bootutil/mcuboot_uuid.h>
 
 #define IMAGE_ID_COUNT CONFIG_UPDATEABLE_IMAGE_NUMBER
+#ifdef CONFIG_NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID
+#define CID_INIT(index, label) \
+	static const struct image_uuid label = {{ \
+		NCS_MCUBOOT_UUID_CID_IMAGE_## index ##_VALUE \
+	}}; \
+	static const struct image_uuid label ## _SECONDARY = {{ \
+		NCS_MCUBOOT_UUID_CID_IMAGE_## index ##_SECONDARY_VALUE \
+	}}
+#else
 #define CID_INIT(index, label) \
 	static const struct image_uuid label = {{ \
 		NCS_MCUBOOT_UUID_CID_IMAGE_## index ##_VALUE \
 	}}
+#endif
 #define CID_CONFIG(index) UTIL_CAT(CONFIG_NCS_MCUBOOT_UUID_CID_IMAGE_, index)
 #define CID_DEFINE(index, prefix) \
 	IF_ENABLED(CID_CONFIG(index), (CID_INIT(index, prefix##index)))
 
-#define CID_CONDITION(index, label) \
+#ifdef CONFIG_NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID
+#define CID_CONDITION(index, slot, label) \
+	if ((image_id == index) && (slot == 0)) { \
+		*uuid_cid = &label; \
+		FIH_RET(FIH_SUCCESS); \
+	} \
+	else if ((image_id == index) && (slot == 1)) { \
+		*uuid_cid = &label ## _SECONDARY; \
+		FIH_RET(FIH_SUCCESS); \
+	}
+#else
+#define CID_CONDITION(index, slot, label) \
 	if (image_id == index) { \
 		*uuid_cid = &label; \
 		FIH_RET(FIH_SUCCESS); \
 	}
-#define CID_CHECK(index, prefix) \
-	IF_ENABLED(CID_CONFIG(index), (CID_CONDITION(index, prefix##index)))
+#endif
+#define CID_CHECK(index, prefix, slot) \
+	IF_ENABLED(CID_CONFIG(index), (CID_CONDITION(index, slot, prefix##index)))
 
 static fih_ret boot_uuid_compare(const struct image_uuid *uuid1, const struct image_uuid *uuid2)
 {
@@ -32,10 +54,10 @@ static fih_ret boot_uuid_compare(const struct image_uuid *uuid1, const struct im
 #ifdef CONFIG_MCUBOOT_UUID_CID
 LISTIFY(IMAGE_ID_COUNT, CID_DEFINE, (;), uuid_cid_image_);
 
-static fih_ret boot_uuid_cid_get(uint32_t image_id, const struct image_uuid **uuid_cid)
+static fih_ret boot_uuid_cid_get(uint32_t image_id, uint8_t slot, const struct image_uuid **uuid_cid)
 {
 	if (uuid_cid != NULL) {
-		LISTIFY(IMAGE_ID_COUNT, CID_CHECK, (), uuid_cid_image_)
+		LISTIFY(IMAGE_ID_COUNT, CID_CHECK, (), uuid_cid_image_, slot)
 	}
 
 	FIH_RET(FIH_FAILURE);
@@ -48,7 +70,7 @@ fih_ret boot_uuid_init(void)
 }
 
 #ifdef CONFIG_MCUBOOT_UUID_VID
-fih_ret boot_uuid_vid_match(uint32_t image_id, const struct image_uuid *uuid_vid)
+fih_ret boot_uuid_vid_match(uint32_t image_id, uint8_t slot, const struct image_uuid *uuid_vid)
 {
 	const struct image_uuid uuid_vid_c = {{
 		NCS_MCUBOOT_UUID_VID_VALUE
@@ -59,12 +81,12 @@ fih_ret boot_uuid_vid_match(uint32_t image_id, const struct image_uuid *uuid_vid
 #endif /* CONFIG_MCUBOOT_UUID_VID */
 
 #ifdef CONFIG_MCUBOOT_UUID_CID
-fih_ret boot_uuid_cid_match(uint32_t image_id, const struct image_uuid *uuid_cid)
+fih_ret boot_uuid_cid_match(uint32_t image_id, uint8_t slot, const struct image_uuid *uuid_cid)
 {
 	FIH_DECLARE(ret_code, FIH_FAILURE);
 	const struct image_uuid *exp_uuid_cid = NULL;
 
-	FIH_CALL(boot_uuid_cid_get, ret_code, image_id, &exp_uuid_cid);
+	FIH_CALL(boot_uuid_cid_get, ret_code, image_id, slot, &exp_uuid_cid);
 	if (FIH_NOT_EQ(ret_code, FIH_SUCCESS) && FIH_NOT_EQ(ret_code, FIH_FAILURE)) {
 		FIH_RET(FIH_FAILURE);
 	}
