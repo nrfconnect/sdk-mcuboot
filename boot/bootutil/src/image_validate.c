@@ -263,10 +263,12 @@ bootutil_img_validate(struct boot_loader_state *state,
         goto out;
     }
 #endif
+#if defined(MCUBOOT_MANIFEST_UPDATES) || defined(MCUBOOT_UUID_VID) || defined(MCUBOOT_UUID_CID)
+    uint8_t slot = (flash_area_get_id(fap) == FLASH_AREA_IMAGE_SECONDARY(image_index) ? 1 : 0);
+#endif
 #ifdef MCUBOOT_MANIFEST_UPDATES
     bool manifest_found = false;
     bool manifest_valid = false;
-    uint8_t slot = (flash_area_get_id(fap) == FLASH_AREA_IMAGE_SECONDARY(image_index) ? 1 : 0);
 #endif
 #ifdef MCUBOOT_UUID_VID
     struct image_uuid img_uuid_vid = {0x00};
@@ -696,7 +698,7 @@ skip_security_counter_read:
                 goto out;
             }
 
-            FIH_CALL(boot_uuid_vid_match, fih_rc, image_index, &img_uuid_vid);
+            FIH_CALL(boot_uuid_vid_match, fih_rc, image_index, slot, &img_uuid_vid);
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
                 FIH_SET(uuid_vid_valid, FIH_FAILURE);
                 goto out;
@@ -725,7 +727,7 @@ skip_security_counter_read:
                 goto out;
             }
 
-            FIH_CALL(boot_uuid_cid_match, fih_rc, image_index, &img_uuid_cid);
+            FIH_CALL(boot_uuid_cid_match, fih_rc, image_index, slot, &img_uuid_cid);
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
                 FIH_SET(uuid_cid_valid, FIH_FAILURE);
                 goto out;
