@@ -968,20 +968,16 @@ static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
  * This function is supposed to be called after boot_validated_swap_type()
  * iterates over all the images in context_boot_go().
  */
-static void sec_slot_cleanup_if_unusable(void)
+static void sec_slot_cleanup_if_unusable(struct boot_loader_state *state)
 {
     uint8_t idx;
 
     for (idx = 0; idx < MCUBOOT_IMAGE_NUMBER; idx++) {
         if (SEC_SLOT_TOUCHED == sec_slot_assignment[idx]) {
-            const struct flash_area *secondary_fa;
+            const struct flash_area *secondary_fa = state->imgs[idx][BOOT_SLOT_SECONDARY].area;
             int rc;
 
-            rc = flash_area_open(flash_area_id_from_multi_image_slot(idx, BOOT_SLOT_SECONDARY),
-                                 &secondary_fa);
-            if (!rc) {
-                rc = flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
-            }
+            rc = flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
 
             BOOT_LOG_ERR("Erase secondary: img %d: %d", idx, rc);
         }
@@ -997,8 +993,9 @@ static inline void sec_slot_touch(struct boot_loader_state *state)
 static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
 {
 }
-static inline void sec_slot_cleanup_if_unusable(void)
+static inline void sec_slot_cleanup_if_unusable(struct boot_loader_state *state)
 {
+    (void)state;
 }
 #endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
           defined(PM_S1_ADDRESS) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
@@ -1050,14 +1047,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
         if(!(reset_addr >= PM_CPUNET_APP_ADDRESS && reset_addr < PM_CPUNET_APP_END_ADDRESS))
 #endif
         {
-            const struct flash_area *primary_fa;
-            rc = flash_area_open(flash_area_id_from_multi_image_slot(
-                    BOOT_CURR_IMG(state),
-                    BOOT_SLOT_PRIMARY),
-                &primary_fa);
-            if (rc != 0) {
-                return BOOT_SWAP_TYPE_FAIL;
-            }
+            const struct flash_area *primary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY);
+
             /* Check start and end of primary slot for current image */
 #if (CONFIG_NCS_IS_VARIANT_IMAGE)
             if (reset_addr >= PM_S0_ADDRESS && reset_addr <= (PM_S0_ADDRESS + PM_S0_SIZE)) {
@@ -2220,7 +2211,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     }
 
     /* cleanup secondary slots which were recognized unusable*/
-    sec_slot_cleanup_if_unusable();
+    sec_slot_cleanup_if_unusable(state);
 
 #if (BOOT_IMAGE_NUMBER > 1)
     if (has_upgrade) {
