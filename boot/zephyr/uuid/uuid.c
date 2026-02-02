@@ -1,46 +1,20 @@
 /*
- * Copyright (c) 2018 Nordic Semiconductor ASA
+ * Copyright (c) 2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <bootutil/mcuboot_uuid.h>
+#include <bootutil/mcuboot_uuid_generated.h>
 
-#define IMAGE_ID_COUNT CONFIG_UPDATEABLE_IMAGE_NUMBER
-#define CID_INIT(index, label) \
-	static const struct image_uuid label = {{ \
-		NCS_MCUBOOT_UUID_CID_IMAGE_## index ##_VALUE \
-	}}
-#define CID_CONFIG(index) UTIL_CAT(CONFIG_NCS_MCUBOOT_UUID_CID_IMAGE_, index)
-#define CID_DEFINE(index, prefix) \
-	IF_ENABLED(CID_CONFIG(index), (CID_INIT(index, prefix##index)))
-
-#define CID_CONDITION(index, label) \
-	if (image_id == index) { \
-		*uuid_cid = &label; \
-		FIH_RET(FIH_SUCCESS); \
-	}
-#define CID_CHECK(index, prefix) \
-	IF_ENABLED(CID_CONFIG(index), (CID_CONDITION(index, prefix##index)))
-
-static fih_ret boot_uuid_compare(const struct image_uuid *uuid1, const struct image_uuid *uuid2)
+static bool boot_uuid_compare(const struct image_uuid *uuid1, const struct image_uuid *uuid2)
 {
-	return fih_ret_encode_zero_equality(memcmp(uuid1->raw, uuid2->raw,
-					    ARRAY_SIZE(uuid1->raw)));
-}
-
-#ifdef CONFIG_MCUBOOT_UUID_CID
-LISTIFY(IMAGE_ID_COUNT, CID_DEFINE, (;), uuid_cid_image_);
-
-static fih_ret boot_uuid_cid_get(uint32_t image_id, const struct image_uuid **uuid_cid)
-{
-	if (uuid_cid != NULL) {
-		LISTIFY(IMAGE_ID_COUNT, CID_CHECK, (), uuid_cid_image_)
+	if ((uuid1 == NULL) || (uuid2 == NULL)) {
+		return false;
 	}
 
-	FIH_RET(FIH_FAILURE);
+	return memcmp(uuid1->raw, uuid2->raw, ARRAY_SIZE(uuid1->raw)) == 0;
 }
-#endif /* CONFIG_MCUBOOT_UUID_CID */
 
 fih_ret boot_uuid_init(void)
 {
@@ -48,27 +22,67 @@ fih_ret boot_uuid_init(void)
 }
 
 #ifdef CONFIG_MCUBOOT_UUID_VID
-fih_ret boot_uuid_vid_match(uint32_t image_id, const struct image_uuid *uuid_vid)
+fih_ret boot_uuid_vid_match(const struct flash_area *fap, const struct image_uuid *uuid_vid)
 {
-	const struct image_uuid uuid_vid_c = {{
-		NCS_MCUBOOT_UUID_VID_VALUE
-	}};
+	const struct uuid_map_entry *map = NULL;
+	size_t n_uuids = boot_uuid_vid_map_get(&map);
+	int fa_ret;
+	uintptr_t base;
 
-	return boot_uuid_compare(uuid_vid, &uuid_vid_c);
+	if (uuid_vid == NULL) {
+		FIH_RET(FIH_FAILURE);
+	}
+
+	/* The memory map contains absolute addresses - fetch the base address for the area
+	 * in question.
+	 */
+	fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
+	if (fa_ret != 0) {
+		base = 0;
+	}
+
+	for (size_t i = 0; i < n_uuids; i++) {
+		if ((map[i].dev == fap->fa_dev) && (fap->fa_off + base >= map[i].off) &&
+		    ((fap->fa_off + base + fap->fa_size) <= map[i].off + map[i].size)) {
+			if (boot_uuid_compare(uuid_vid, &map[i].uuid)) {
+				FIH_RET(FIH_SUCCESS);
+			}
+		}
+	}
+
+	FIH_RET(FIH_FAILURE);
 }
 #endif /* CONFIG_MCUBOOT_UUID_VID */
 
 #ifdef CONFIG_MCUBOOT_UUID_CID
-fih_ret boot_uuid_cid_match(uint32_t image_id, const struct image_uuid *uuid_cid)
+fih_ret boot_uuid_cid_match(const struct flash_area *fap, const struct image_uuid *uuid_cid)
 {
-	FIH_DECLARE(ret_code, FIH_FAILURE);
-	const struct image_uuid *exp_uuid_cid = NULL;
+	const struct uuid_map_entry *map = NULL;
+	size_t n_uuids = boot_uuid_cid_map_get(&map);
+	int fa_ret;
+	uintptr_t base;
 
-	FIH_CALL(boot_uuid_cid_get, ret_code, image_id, &exp_uuid_cid);
-	if (FIH_NOT_EQ(ret_code, FIH_SUCCESS) && FIH_NOT_EQ(ret_code, FIH_FAILURE)) {
+	if (uuid_cid == NULL) {
 		FIH_RET(FIH_FAILURE);
 	}
 
-	return boot_uuid_compare(uuid_cid, exp_uuid_cid);
+	/* The memory map contains absolute addresses - fetch the base address for the area
+	 * in question.
+	 */
+	fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
+	if (fa_ret != 0) {
+		base = 0;
+	}
+
+	for (size_t i = 0; i < n_uuids; i++) {
+		if ((map[i].dev == fap->fa_dev) && (fap->fa_off + base >= map[i].off) &&
+		    ((fap->fa_off + base + fap->fa_size) <= map[i].off + map[i].size)) {
+			if (boot_uuid_compare(uuid_cid, &map[i].uuid)) {
+				FIH_RET(FIH_SUCCESS);
+			}
+		}
+	}
+
+	FIH_RET(FIH_FAILURE);
 }
 #endif /* CONFIG_MCUBOOT_UUID_CID */
