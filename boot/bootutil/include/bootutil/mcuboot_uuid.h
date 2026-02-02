@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include "bootutil/fault_injection_hardening.h"
+#include <flash_map_backend/flash_map_backend.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,22 +40,22 @@ fih_ret boot_uuid_init(void);
 /**
  * @brief Check if the specified vendor UUID is allowed for a given image.
  *
- * @param[in] image_id  Index of the image (from 0).
+ * @param[in] fap       Pointer to the flash area structure.
  * @param[in] uuid_vid  The reference to the image's vendor ID value.
  *
  * @return FIH_SUCCESS on success.
  */
-fih_ret boot_uuid_vid_match(uint32_t image_id, const struct image_uuid *uuid_vid);
+fih_ret boot_uuid_vid_match(const struct flash_area *fap, const struct image_uuid *uuid_vid);
 
 /**
  * @brief Check if the specified image class UUID is allowed for a given image.
  *
- * @param[in] image_id  Index of the image (from 0).
+ * @param[in] fap       Pointer to the flash area structure.
  * @param[in] uuid_cid  The reference to the image's class ID value.
  *
  * @return FIH_SUCCESS on success
  */
-fih_ret boot_uuid_cid_match(uint32_t image_id, const struct image_uuid *uuid_cid);
+fih_ret boot_uuid_cid_match(const struct flash_area *fap, const struct image_uuid *uuid_cid);
 
 #ifdef __cplusplus
 }
