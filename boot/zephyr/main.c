@@ -46,6 +46,7 @@
 #include "bootutil/boot_hooks.h"
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/mcuboot_status.h"
+#include "sysflash/sysflash.h"
 #include "flash_map_backend/flash_map_backend.h"
 #ifdef CONFIG_NRF_MCUBOOT_BOOT_REQUEST
 #include <bootutil/boot_request.h>
@@ -150,11 +151,7 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
         * !defined(CONFIG_LOG_MODE_MINIMAL)
 	*/
 
-#if USE_PARTITION_MANAGER
-#include <pm_config.h>
-#endif
-
-#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
+#if CONFIG_FPROTECT
 #include <fprotect.h>
 #endif
 
@@ -402,7 +399,7 @@ static void do_boot(struct boot_rsp *rsp)
     const struct fw_info *firmware_info = fw_info_find(fw_start_addr);
     bool provided = fw_info_ext_api_provide(firmware_info, true);
 
-#ifdef PM_S0_ADDRESS
+#if MCUBOOT_IS_SECOND_STAGE
     /* Only fail if the immutable bootloader is present. */
     if (!provided) {
 	if (firmware_info == NULL) {
@@ -411,6 +408,7 @@ static void do_boot(struct boot_rsp *rsp)
         BOOT_LOG_ERR("Failed to provide EXT_APIs to %p", vt);
     }
 #endif
+
 #endif
 #if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
     nrf_cleanup_peripheral();
@@ -929,30 +927,11 @@ int main(void)
      */
     nrf_crypto_keys_housekeeping();
 
-#if USE_PARTITION_MANAGER && CONFIG_FPROTECT
-
-/* Round up to next CONFIG_FPROTECT_BLOCK_SIZE boundary.
- * This is used for backwards compatibility, as some applications
- * use MCUBoot size unaligned to CONFIG_FPROTECT_BLOCK_SIZE.
- * However, even in these cases, the start of the next area
- * was still aligned to CONFIG_FPROTECT_BLOCK_SIZE and the
- * remaining space was filled by an EMPTY section by partition manager.
- */
-#define FPROTECT_ALIGN_UP(x) \
-    ((((x) + CONFIG_FPROTECT_BLOCK_SIZE - 1) / CONFIG_FPROTECT_BLOCK_SIZE) * \
-     CONFIG_FPROTECT_BLOCK_SIZE)
-
-#ifdef PM_S1_ADDRESS
-/* MCUBoot is stored in either S0 or S1, protect both */
-#define PROTECT_SIZE (PM_MCUBOOT_PRIMARY_ADDRESS - PM_S0_ADDRESS)
-#define PROTECT_ADDR PM_S0_ADDRESS
-#else
-/* There is only one instance of MCUBoot */
-#define PROTECT_SIZE FPROTECT_ALIGN_UP(PM_MCUBOOT_SIZE)
-#define PROTECT_ADDR PM_MCUBOOT_ADDRESS
+#ifdef CONFIG_FPROTECT
+#ifdef CONFIG_SOC_SERIES_NRF54L
+    BUILD_ASSERT(FPROTECT_REGION_SIZE <= (62 * 1024), "Can not FPROTECT region that big");
 #endif
-
-    rc = fprotect_area(PROTECT_ADDR, PROTECT_SIZE);
+    rc = fprotect_area(FPROTECT_REGION_OFFSET, FPROTECT_REGION_SIZE);
 
     if (rc != 0) {
         BOOT_LOG_ERR("Protect mcuboot flash failed, cancel startup.");
@@ -967,7 +946,7 @@ int main(void)
     pcd_lock_ram(true);
 #endif
 #endif
-#endif /* USE_PARTITION_MANAGER && CONFIG_FPROTECT */
+#endif /* CONFIG_FPROTECT */
 
     ZEPHYR_BOOT_LOG_STOP();
 
