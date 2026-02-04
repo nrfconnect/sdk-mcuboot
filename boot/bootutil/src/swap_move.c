@@ -236,7 +236,7 @@ boot_slots_compatible(struct boot_loader_state *state)
     size_t sector_sz_sec = 0;
     size_t i;
 
-#ifdef PM_S1_ADDRESS
+#if MCUBOOT_IS_SECOND_STAGE
     /* Patch needed for NCS. In this case, image 1 primary points to the other
      * B1 slot (ie S0 or S1), and image 0 primary points to the app.
      * With this configuration, image 0 and image 1 share the secondary slot.
@@ -251,11 +251,9 @@ boot_slots_compatible(struct boot_loader_state *state)
         return 1;
     }
 #endif
-#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
-    if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) {
+    if (IMAGE_IS_SECOND_STAGE_MCUBOOT(state)) {
         return 1;
     }
-#endif
 #endif
 
     num_sectors_pri = boot_img_num_sectors(state, BOOT_SLOT_PRIMARY);
