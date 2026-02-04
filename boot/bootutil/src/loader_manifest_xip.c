@@ -60,6 +60,10 @@
 #include "bootutil/enc_key.h"
 #endif
 
+#if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
+#include <load_ironside_se_conf.h>
+#endif
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
@@ -613,6 +617,15 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             FIH_SET(fih_rc, FIH_FAILURE);
             goto close;
         }
+
+#if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
+        rc = nrf_add_custom_tlv_data(state,
+                                     state->slot_usage[BOOT_CURR_IMG(state)].active_slot);
+        if (rc != 0) {
+            FIH_SET(fih_rc, FIH_FAILURE);
+            goto close;
+        }
+#endif
     }
 
     /* All image loaded successfully. */

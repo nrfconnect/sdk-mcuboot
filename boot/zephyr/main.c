@@ -162,6 +162,10 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #include <nrf_cleanup.h>
 #endif
 
+#if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
+#include <load_ironside_se_conf.h>
+#endif
+
 #include <zephyr/linker/linker-defs.h>
 #define CLEANUP_RAM_GAP_START ((int)__ramfunc_region_start)
 #define CLEANUP_RAM_GAP_SIZE ((int) (__ramfunc_end - __ramfunc_region_start))
@@ -245,6 +249,19 @@ struct arm_vector_table {
     uint32_t fiq;
 #endif
 };
+
+#ifdef CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF
+static void handle_late_fatal_error(void)
+{
+    if (IS_ENABLED(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF_RESET_ON_ERROR)) {
+        NVIC_SystemReset();
+    } else {
+        /* Loop forever */
+        while (1)
+            ;
+    }
+}
+#endif
 
 static void __ramfunc jump_in(uint32_t reset)
 {
@@ -397,6 +414,17 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 #if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
     nrf_cleanup_peripheral();
+#endif
+#if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
+    /* This can change global shared peripheral permissions so that MCUBoot no longer has access
+     * to those peripherals. Therefore it must be executed after MCUBoot is finished
+     * with the peripherals.
+     */
+    rc = nrf_load_periphconf();
+    if (rc) {
+        /* If a failure occurs here, it is too late to do anything reasonable with. */
+        handle_late_fatal_error();
+    }
 #endif
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     cleanup_arm_interrupts(); /* Disable and acknowledge all interrupts */
