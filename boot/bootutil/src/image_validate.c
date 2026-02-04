@@ -64,6 +64,10 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #endif
 #include "bootutil_priv.h"
 
+#if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
+#include <load_ironside_se_conf.h>
+#endif
+
 /*
  * Currently, we only support being able to verify one type of
  * signature, because there is a single verification function that we
@@ -217,7 +221,8 @@ bootutil_img_validate(struct boot_loader_state *state,
 #if (defined(EXPECTED_KEY_TLV) && defined(MCUBOOT_HW_KEY)) || \
     (defined(EXPECTED_SIG_TLV) && defined(MCUBOOT_BUILTIN_KEY)) || \
     defined(MCUBOOT_HW_ROLLBACK_PROT) || defined(MCUBOOT_MANIFEST_UPDATES) || \
-    defined(MCUBOOT_UUID_VID) || defined(MCUBOOT_UUID_CID) || defined(MCUBOOT_DECOMPRESS_IMAGES)
+    defined(MCUBOOT_UUID_VID) || defined(MCUBOOT_UUID_CID) || defined(MCUBOOT_DECOMPRESS_IMAGES) ||\
+    defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
     int image_index = (state == NULL ? 0 : BOOT_CURR_IMG(state));
 #endif
     uint32_t off;
@@ -266,6 +271,8 @@ bootutil_img_validate(struct boot_loader_state *state,
 #ifdef MCUBOOT_MANIFEST_UPDATES
     bool manifest_found = false;
     bool manifest_valid = false;
+#endif
+#if defined(MCUBOOT_MANIFEST_UPDATES) || defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
     uint8_t slot = (flash_area_get_id(fap) == FLASH_AREA_IMAGE_SECONDARY(image_index) ? 1 : 0);
 #endif
 #ifdef MCUBOOT_UUID_VID
@@ -733,6 +740,20 @@ skip_security_counter_read:
 
             /* The image's class identifier has been successfully verified. */
             uuid_cid_valid = fih_rc;
+            break;
+        }
+#endif
+#if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
+        default:
+        {
+            /* Validate custom/vendor TLVs. */
+            rc = nrf_validate_custom_tlv_data(hdr, fap, boot_img_slot_off(state, slot),
+                                              type, off, len);
+            if (rc) {
+                BOOT_LOG_ERR("Slot %d image %d has invalid custom TLV data, error %d",
+                             slot, image_index, rc);
+                goto out;
+            }
             break;
         }
 #endif
