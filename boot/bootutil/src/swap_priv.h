@@ -130,12 +130,9 @@ bool swap_write_block_size_check(struct boot_loader_state *state);
  */
 int app_max_size(struct boot_loader_state *state);
 
-#if defined(PM_S1_ADDRESS) && !defined(MCUBOOT_OVERWRITE_ONLY) && \
-CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
 /**
  * Performs an NSIB update
  */
 void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs);
-#endif
 
 #endif /* H_SWAP_PRIV_ */
