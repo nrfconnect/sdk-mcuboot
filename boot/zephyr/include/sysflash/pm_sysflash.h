@@ -92,4 +92,75 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define SPI_FLASH_0_ID 1
 #endif
 
+/* Is this upgradeable MCUuboot in NSIB configuration */
+#ifdef MCUBOOT_IS_SECOND_STAGE
+/* Note: when NSIB is running it will boot MCUboot from one of
+ * slots designated as S0 or S1. This MCUboot will be in charge
+ * of handling update and/or boot of an application image and MCUboot in
+ * opposite Sx slot, so if it is running from S0 it will update S1
+ * and opposite.
+ * In both above situations the slot where the update comes from
+ * is the SECONDARY slot, in MCUboot nomenclature. MCUboot natively
+ * has not been able to process more than two slots for every image,
+ * so there is additional logic to target slot outside of the
+ * PRIMARY and SECONDARY slot, which would be slot of the Sx variant
+ * of MCUboot that is not currently running.
+ * The MCUboot update is always built for specific Sx slot and will
+ * not work from the opposite Sx slot.
+ */
+
+/* If defined then this build is for S1 instead of S0, which is default */
+#ifdef CONFIG_NCS_IS_VARIANT_IMAGE
+#define SECOND_STAGE_MCUBOOT_RUNNING_FROM_S1
+#else
+#define SECOND_STAGE_MCUBOOT_RUNNING_FROM_S0
+#endif
+
+#ifdef SECOND_STAGE_MCUBOOT_RUNNING_FROM_S0
+#define SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET     PM_S0_OFFSET
+#define SECOND_STAGE_ACTIVE_MCUBOOT_SIZE       PM_S0_SIZE
+#define SECOND_STAGE_ACTIVE_MCUBOOT_ID         PM_S0_ID
+#define SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET   PM_S1_OFFSET
+#define SECOND_STAGE_INACTIVE_MCUBOOT_SIZE     PM_S1_SIZE
+#define SECOND_STAGE_INACTIVE_MCUBOOT_ID       PM_S1_ID
+#endif
+
+#ifdef SECOND_STAGE_MCUBOOT_RUNNING_FROM_S1
+#define SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET     PM_S1_OFFSET
+#define SECOND_STAGE_ACTIVE_MCUBOOT_SIZE       PM_S1_SIZE
+#define SECOND_STAGE_ACTIVE_MCUBOOT_ID         PM_S1_ID
+#define SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET   PM_S0_OFFSET
+#define SECOND_STAGE_INACTIVE_MCUBOOT_SIZE     PM_S0_SIZE
+#define SECOND_STAGE_INACTIVE_MCUBOOT_ID       PM_S0_ID
+#endif
+
+/* FPROTECT region covers both S0 and S1 slots. Assumption here is
+ * that they precede PRIMARY application image partition, in flash
+ * layout.
+ */
+#ifdef CONFIG_FPROTECT
+#define FPROTECT_REGION_OFFSET  (PM_S0_ADDRESS)
+#define FPROTECT_REGION_SIZE    (PM_MCUBOOT_PRIMARY_ADDRESS - FPROTECT_REGION_OFFSET)
+#endif
+
+#else /* MCUBOOT_IS_SECOND_STAGE */
+
+/* These are not used. They are set to 0 to avoid compiler seeing
+ * undefined variables in code that gets thrown out in the end.
+ */
+#define SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET     0
+#define SECOND_STAGE_ACTIVE_MCUBOOT_SIZE       0
+#define SECOND_STAGE_ACTIVE_MCUBOOT_ID         0
+#define SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET   0
+#define SECOND_STAGE_INACTIVE_MCUBOOT_SIZE     0
+#define SECOND_STAGE_INACTIVE_MCUBOOT_ID       0
+
+/* FPROTECT region covers MCUboot only */
+#ifdef CONFIG_FPROTECT
+#define FPROTECT_REGION_OFFSET  PM_MCUBOOT_ADDRESS
+#define FPROTECT_REGION_SIZE    FPROTECT_ALIGN_UP(PM_MCUBOOT_SIZE)
+#endif
+
+#endif /* MCUBOOT_IS_SECOND_STAGE */
+
 #endif /* __PM_SYSFLASH_H__ */
