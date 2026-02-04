@@ -74,6 +74,10 @@ static struct image_max_size image_max_sizes[BOOT_IMAGE_NUMBER] = {0};
 #define BUF_SZ 1024
 #endif
 
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+int nrf_parse_custom_tlv_data(struct boot_loader_state *state, int slot);
+#endif
+
 struct boot_loader_state *boot_get_loader_state(void)
 {
     return &boot_data;
@@ -613,6 +617,15 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             FIH_SET(fih_rc, FIH_FAILURE);
             goto close;
         }
+
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+        rc = nrf_parse_custom_tlv_data(state,
+                                       state->slot_usage[BOOT_CURR_IMG(state)].active_slot);
+        if (rc != 0) {
+            FIH_SET(fih_rc, FIH_FAILURE);
+            goto close;
+        }
+#endif
     }
 
     /* All image loaded successfully. */

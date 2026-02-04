@@ -88,6 +88,10 @@ int pcd_version_cmp_net(const struct flash_area *fap, struct image_header *hdr);
 void s2ram_designate_slot(uint8_t slot);
 #endif
 
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+int nrf_parse_custom_tlv_data(struct boot_loader_state *state, int slot);
+#endif
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
@@ -2420,6 +2424,15 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             FIH_SET(fih_rc, FIH_FAILURE);
             goto out;
         }
+
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+        rc = nrf_parse_custom_tlv_data(state, BOOT_SLOT_PRIMARY);
+        if (rc != 0) {
+            FIH_SET(fih_rc, FIH_FAILURE);
+            goto out;
+        }
+#endif
+
         ++fih_cnt;
     }
     /*
@@ -2921,6 +2934,14 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
             FIH_SET(fih_rc, FIH_FAILURE);
             goto close;
         }
+
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+        rc = nrf_parse_custom_tlv_data(state, state->slot_usage[BOOT_CURR_IMG(state)].active_slot);
+        if (rc != 0) {
+            FIH_SET(fih_rc, FIH_FAILURE);
+            goto close;
+        }
+#endif
     }
 
 #ifdef CONFIG_SOC_EARLY_RESET_HOOK

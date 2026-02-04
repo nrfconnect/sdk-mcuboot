@@ -162,6 +162,10 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #include <nrf_cleanup.h>
 #endif
 
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+int nrf_load_periphconf(void);
+#endif
+
 #include <zephyr/linker/linker-defs.h>
 #define CLEANUP_RAM_GAP_START ((int)__ramfunc_region_start)
 #define CLEANUP_RAM_GAP_SIZE ((int) (__ramfunc_end - __ramfunc_region_start))
@@ -397,6 +401,15 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 #if CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL
     nrf_cleanup_peripheral();
+#endif
+#if defined(CONFIG_MCUBOOT_NRF_LOAD_PERIPHCONF)
+    /* This can change global shared peripheral permissions so that MCUBoot no longer has access
+     * to those peripherals. Therefore it must be executed after MCUBoot is finished
+     * with the peripherals.
+     *
+     * TODO: how to handle errors here?
+     */
+    nrf_load_periphconf();
 #endif
 #if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
     cleanup_arm_interrupts(); /* Disable and acknowledge all interrupts */
