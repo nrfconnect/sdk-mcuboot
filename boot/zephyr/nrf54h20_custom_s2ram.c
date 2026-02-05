@@ -25,10 +25,7 @@ volatile struct mcuboot_resume_s mcuboot_resume;
 #error  "mcuboot resume support section not defined in dts"
 #endif
 
-#define FIXED_PARTITION_ADDR(node_label)                                   \
-    (DT_REG_ADDR(DT_NODELABEL(node_label)) +                               \
-     COND_CODE_0(DT_FIXED_PARTITION_EXISTS(DT_NODELABEL(node_label)), (0), \
-        (DT_REG_ADDR(DT_GPARENT(DT_NODELABEL(node_label))))))
+#define FIXED_PARTITION_ADDR(node_label) DT_REG_ADDR(DT_NODELABEL(node_label))
 
 #define S2RAM_SLOT_INFO_A 0x37
 #define S2RAM_SLOT_INFO_B 0xA4
