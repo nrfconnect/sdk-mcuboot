@@ -22,6 +22,11 @@
 #if defined(NRF_DPPIC)
     #include <hal/nrf_dppi.h>
 #endif
+#if defined(CONFIG_MSPI_NRF_SQSPI)
+    #include <hal/nrf_vpr.h>
+    #include <softperipheral_regif.h>
+#endif
+
 
 #include <string.h>
 
@@ -110,6 +115,24 @@ static void nrf_cleanup_clock(void)
     nrf_clock_int_disable(NRF_CLOCK, 0xFFFFFFFF);
 }
 #endif
+#if defined(CONFIG_MSPI_NRF_SQSPI)
+static void nrf_cleanup_sqspi(void)
+{
+    nrf_vpr_cpurun_set(NRF_VPR, false);
+
+    // Reset VPR.
+    nrf_vpr_debugif_dmcontrol_mask_set(NRF_VPR,
+                                       (VPR_DEBUGIF_DMCONTROL_NDMRESET_Active
+                                        << VPR_DEBUGIF_DMCONTROL_NDMRESET_Pos |
+                                        VPR_DEBUGIF_DMCONTROL_DMACTIVE_Enabled
+                                        << VPR_DEBUGIF_DMCONTROL_DMACTIVE_Pos));
+    nrf_vpr_debugif_dmcontrol_mask_set(NRF_VPR,
+                                       (VPR_DEBUGIF_DMCONTROL_NDMRESET_Inactive
+                                        << VPR_DEBUGIF_DMCONTROL_NDMRESET_Pos |
+                                        VPR_DEBUGIF_DMCONTROL_DMACTIVE_Disabled
+                                        << VPR_DEBUGIF_DMCONTROL_DMACTIVE_Pos));
+}
+#endif
 
 void nrf_cleanup_peripheral(void)
 {
@@ -121,6 +144,10 @@ void nrf_cleanup_peripheral(void)
 #endif
 #if defined(NRF_RTC2)
     nrf_cleanup_rtc(NRF_RTC2);
+#endif
+
+#if defined(CONFIG_MSPI_NRF_SQSPI)
+    nrf_cleanup_sqspi();
 #endif
 
 #if defined(CONFIG_NRF_GRTC_TIMER)
