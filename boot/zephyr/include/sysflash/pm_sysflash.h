@@ -92,6 +92,13 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define SPI_FLASH_0_ID 1
 #endif
 
+/* Support for NETCPU application image updates */
+#if defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT)
+#define NETCPU_APP_SLOT_OFFSET  PM_CPUNET_APP_ADDRESS
+#define NETCPU_APP_SLOT_SIZE    (PM_CPUNET_APP_END_ADDRESS - PM_CPUNET_APP_ADDRESS)
+#define NETCPU_APP_SLOT_END     PM_CPUNET_APP_END_ADDRESS
+#endif
+
 /* Is this upgradeable MCUuboot in NSIB configuration */
 #if MCUBOOT_IS_SECOND_STAGE
 /* Note: when NSIB is running it will boot MCUboot from one of

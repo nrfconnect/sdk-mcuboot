@@ -105,7 +105,8 @@ const struct boot_uart_funcs boot_funcs = {
 #include <arm_cleanup.h>
 #endif
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT) && \
+    defined(CONFIG_PCD_APP)
 #include <dfu/pcd.h>
 #endif
 
@@ -939,7 +940,9 @@ int main(void)
             ;
     }
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
+/* Lock back PCD used for CPUNET application udapte */
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && \
+    defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT) && defined(CONFIG_PCD_APP)
 #if defined(PM_TFM_SECURE_ADDRESS)
     pcd_lock_ram(false);
 #else

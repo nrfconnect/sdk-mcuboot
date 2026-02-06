@@ -672,6 +672,17 @@ config BOOT_FIRMWARE_LOADER
 
 endchoice
 
+config NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT
+	bool "Support cross CPU update from APP to NET core"
+	depends on SOC_NRF5340_CPUAPP
+	depends on B0N_SIZE
+	# This is a hack to keep the option on in similar way the code has
+	# been detecting need to CPUNET application update.
+	default y if B0N_SIZE != 0
+	help
+	  Try to match update image against application image running on CPUNET and
+	  perform update if all requirements are fulfilled.
+
 config BOOT_DIRECT_XIP_REVERT
 	bool "Enable the revert mechanism in direct-xip mode"
 	depends on BOOT_DIRECT_XIP
