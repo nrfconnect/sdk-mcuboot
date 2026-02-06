@@ -48,6 +48,11 @@ if(CONFIG_BOOT_USE_TINYCRYPT)
   )
 endif()
 
+if(CONFIG_BOOT_USE_NRF_OBERON)
+  target_include_directories(MCUBOOT_BOOTUTIL INTERFACE ${OBERON_BASE}/include)
+  zephyr_link_libraries(nrfxlib_crypto)
+endif()
+
 if(CONFIG_BOOT_USE_PSA_CRYPTO)
   target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
      ${ZEPHYR_MBEDTLS_MODULE_DIR}/include
