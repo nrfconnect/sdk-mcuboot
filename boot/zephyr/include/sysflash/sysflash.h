@@ -23,6 +23,14 @@
 #define __SYSFLASH_H__
 #include <sysflash/pm_sysflash.h>
 
+/* Support for NETCPU application image updates */
+#if defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT)
+#define NETCPU_APP_SLOT_OFFSET  PM_CPUNET_APP_ADDRESS
+#define NETCPU_APP_SLOT_SIZE    (PM_CPUNET_APP_END_ADDRESS - PM_CPUNET_APP_ADDRESS)
+#define NETCPU_APP_SLOT_END     PM_CPUNET_APP_END_ADDRESS
+#endif
+
+
 /* Is this upgradeable MCUuboot in NSIB configuration */
 #if MCUBOOT_IS_SECOND_STAGE
 /* Note: when NSIB is running it will boot MCUboot from one of
