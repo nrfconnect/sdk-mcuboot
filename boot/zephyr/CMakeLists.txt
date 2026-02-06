@@ -808,9 +808,15 @@ if(SYSBUILD)
 endif()
 
 if(CONFIG_MCUBOOT_NRF_CLEANUP_PERIPHERAL)
-zephyr_library_sources(
-  ${BOOT_DIR}/zephyr/nrf_cleanup.c
-)
+  zephyr_library_sources(
+    ${BOOT_DIR}/zephyr/nrf_cleanup.c
+  )
+
+  if(CONFIG_MSPI_NRF_SQSPI)
+    zephyr_library_include_directories(
+      ${ZEPHYR_NRFXLIB_MODULE_DIR}/softperipheral/include
+    )
+  endif()
 endif()
 
 if(SYSBUILD AND CONFIG_PCD_APP)
