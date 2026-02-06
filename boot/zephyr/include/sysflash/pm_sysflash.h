@@ -99,6 +99,7 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define NETCPU_APP_SLOT_END     PM_CPUNET_APP_END_ADDRESS
 #endif
 
+
 /* Is this upgradeable MCUuboot in NSIB configuration */
 #ifdef MCUBOOT_IS_SECOND_STAGE
 /* Note: when NSIB is running it will boot MCUboot from one of
@@ -122,6 +123,9 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #else
 #define SECOND_STAGE_MCUBOOT_RUNNING_FROM_S0
 #endif
+
+/* Header size within MCUboot bootable application image */
+#define APP_IMAGE_HEADER_SIZE CONFIG_PM_PARTITION_SIZE_MCUBOOT_PAD
 
 #ifdef SECOND_STAGE_MCUBOOT_RUNNING_FROM_S0
 #define SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET     PM_S0_OFFSET
@@ -150,6 +154,18 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define FPROTECT_REGION_SIZE    (PM_MCUBOOT_PRIMARY_ADDRESS - FPROTECT_REGION_OFFSET)
 #endif
 
+/* RWX protection regions: the currently executing MCUboot is protecting itself */
+#if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
+/* Note: The APP_IMAGE_HEADER_SIZE is removed to save RWX bits on space
+ * that do not require protection. When MCUboot is Second Stage bootloader
+ * it does have header added, but it is not used by the NSIB.
+ */
+#define PROTECTED_REGION_START \
+    (SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET + APP_IMAGE_HEADER_SIZE)
+#define PROTECTED_REGION_SIZE  \
+    (SECOND_STAGE_ACTIVE_MCUBOOT_SIZE - APP_IMAGE_HEADER_SIZE)
+#endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
+
 #else /* MCUBOOT_IS_SECOND_STAGE */
 
 /* These are not used. They are set to 0 to avoid compiler seeing
@@ -167,6 +183,12 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define FPROTECT_REGION_OFFSET  PM_MCUBOOT_ADDRESS
 #define FPROTECT_REGION_SIZE    FPROTECT_ALIGN_UP(PM_MCUBOOT_SIZE)
 #endif
+
+/* RWX protection regions, MCUboot is protecting itself */
+#if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
+#define PROTECTED_REGION_START  PM_MCUBOOT_ADDRESS
+#define PROTECTED_REGION_SIZE   PM_MCUBOOT_SIZE
+#endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 
 #endif /* MCUBOOT_IS_SECOND_STAGE */
 
