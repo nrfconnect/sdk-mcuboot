@@ -94,4 +94,10 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define FPROTECT_REGION_SIZE    FIXED_PARTITION_SIZE(boot_partition)
 #endif
 
+/* RWX protection regions, MCUboot is protecting itself */
+#if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
+#define PROTECTED_REGION_START  FIXED_PARTITION_OFFSET(boot_partition)
+#define PROTECTED_REGION_SIZE   FIXED_PARTITION_SIZE(boot_partition)
+#endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
+
 #endif /* __SYSFLASH_H__ */
