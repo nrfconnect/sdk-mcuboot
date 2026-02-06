@@ -62,7 +62,8 @@
 #include <zephyr/sys/reboot.h>
 #endif
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) && defined(CONFIG_PCD_APP)
+#if defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT) && defined(CONFIG_PCD_APP) || \
+    defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
 #include <dfu/pcd.h>
 #ifdef CONFIG_PCD_READ_NETCORE_APP_VERSION
 #include <fw_info_bare.h>
@@ -803,14 +804,14 @@ check_validity:
         uint32_t max_addr;
         bool check_addresses = false;
 
-#ifdef PM_CPUNET_APP_ADDRESS
+#ifdef CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT
         /* The primary slot for the network core is emulated in RAM.
          * Its flash_area hasn't got relevant boundaries.
          * Therfore need to override its boundaries for the check.
          */
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
-            min_addr = PM_CPUNET_APP_ADDRESS;
-            max_addr = PM_CPUNET_APP_ADDRESS + PM_CPUNET_APP_SIZE;
+            min_addr = NETCPU_APP_SLOT_OFFSET;
+            max_addr = NETCPU_APP_SLOT_END;
             check_addresses = true;
         } else
 #endif
@@ -1019,7 +1020,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     bool upgrade_valid = false;
 
-#if MCUBOOT_IS_SECOND_STAGE || defined(PM_CPUNET_B0N_ADDRESS)
+#if MCUBOOT_IS_SECOND_STAGE || defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT)
     const struct flash_area *secondary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
     uint32_t reset_addr = 0;
@@ -1044,8 +1045,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
         sec_slot_touch(state);
 
 #if MCUBOOT_IS_SECOND_STAGE
-#ifdef PM_CPUNET_B0N_ADDRESS
-        if(!(reset_addr >= PM_CPUNET_APP_ADDRESS && reset_addr < PM_CPUNET_APP_END_ADDRESS))
+#ifdef CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT
+        if(!(reset_addr >= NETCPU_APP_SLOT_OFFSET && reset_addr < NETCPU_APP_SLOT_END))
 #endif
         {
             const struct flash_area *primary_fa;
@@ -1089,7 +1090,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         sec_slot_mark_assigned(state);
     }
 
-#endif /* MCUBOOT_IS_SECOND_STAGE || PM_CPUNET_B0N_ADDRESS */
+#endif /* MCUBOOT_IS_SECOND_STAGE || CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT */
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -1107,14 +1108,14 @@ boot_validated_swap_type(struct boot_loader_state *state,
             upgrade_valid = true;
         }
 
-#if defined(CONFIG_SOC_NRF5340_CPUAPP) && defined(PM_CPUNET_B0N_ADDRESS) \
+#if defined(CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT) \
     && !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP)
         /* If the update is valid, and it targets the network core: perform the
          * update and indicate to the caller of this function that no update is
          * available
          */
-        if (upgrade_valid && reset_addr >= PM_CPUNET_APP_ADDRESS &&
-            reset_addr < PM_CPUNET_APP_END_ADDRESS) {
+        if (upgrade_valid && reset_addr >= NETCPU_APP_SLOT_OFFSET &&
+            reset_addr < NETCPU_APP_SLOT_END) {
             struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
@@ -1136,7 +1137,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
         }
-#endif /* CONFIG_SOC_NRF5340_CPUAPP && PM_CPUNET_B0N_ADDRESS &&
+#endif /* CONFIG_NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT && \
           !CONFIG_NRF53_MULTI_IMAGE_UPDATE && CONFIG_PCD_APP */
     }
 
