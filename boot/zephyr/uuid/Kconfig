@@ -10,6 +10,7 @@ menu "Vendor and image Class UUIDs"
 
 choice NCS_MCUBOOT_UUID_IMPLEMENTATION
 	prompt "UUID checks implementation"
+	default NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID if BOOT_DIRECT_XIP
 	default NCS_MCUBOOT_UUID_SINGLE_VID
 
 config NCS_MCUBOOT_UUID_SINGLE_VID
@@ -18,9 +19,15 @@ config NCS_MCUBOOT_UUID_SINGLE_VID
 	  This implementation allows to specify a single, common Vendor UUID
 	  (VID) for all images and a unique Class UUID (CID) for each image.
 
+config NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID
+	bool "Single VID and one CID per image slot"
+	help
+	  This implementation allows to specify a single, common Vendor UUID
+	  (VID) for all images and a unique Class UUID (CID) for each image slot.
+
 endchoice # NCS_MCUBOOT_UUID_IMPLEMENTATION
 
-if NCS_MCUBOOT_UUID_SINGLE_VID
+if NCS_MCUBOOT_UUID_SINGLE_VID || NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID
 
 config NCS_MCUBOOT_UUID_VID_VALUE
 	string "Vendor name"
@@ -48,7 +55,7 @@ rsource "Kconfig.uuid.template"
 
 endif # MCUBOOT_UUID_CID
 
-endif # NCS_MCUBOOT_UUID_SINGLE_VID
+endif # NCS_MCUBOOT_UUID_SINGLE_VID || NCS_MCUBOOT_UUID_SINGLE_VID_SLOTTED_CID
 
 endmenu
 
