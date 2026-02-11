@@ -35,8 +35,9 @@
 #if (defined(MCUBOOT_USE_TINYCRYPT) + \
      defined(MCUBOOT_USE_CC310) + \
      defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
-     defined(MCUBOOT_USE_PSA_OR_MBED_TLS)) != 1
-    #error "One crypto backend must be defined: either CC310/TINYCRYPT/MBED_TLS/PSA_CRYPTO"
+     defined(MCUBOOT_USE_PSA_OR_MBED_TLS) + \
+     defined(MCUBOOT_USE_NRF_OBERON)) != 1
+    #error "One crypto backend must be defined: either CC310/TINYCRYPT/MBED_TLS/PSA_CRYPTO/NRF_OBERON"
 #endif
 
 #if defined(MCUBOOT_USE_TINYCRYPT)
@@ -58,8 +59,13 @@
     #define MCUBOOT_ECDSA_NEED_ASN1_SIG
 #endif /* MCUBOOT_USE_MBED_TLS */
 
+#if defined(MCUBOOT_USE_NRF_OBERON)
+  #include <ocrypto_ecdsa_p256.h>
+#endif /* MCUBOOT_USE_NRF_OBERON */
+
 /*TODO: remove this after cypress port mbedtls to abstract crypto api */
-#if defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_MBED_TLS)
+#if defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_MBED_TLS) || \
+  defined(MCUBOOT_USE_NRF_OBERON)
 #define NUM_ECC_BYTES (256 / 8)
 #endif
 
@@ -83,7 +89,8 @@ extern "C" {
 #endif
 
 #if (defined(MCUBOOT_USE_TINYCRYPT) || defined(MCUBOOT_USE_MBED_TLS) || \
-     defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO)) \
+     defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) || \
+     defined(MCUBOOT_USE_NRF_OBERON)) \
      && !defined(MCUBOOT_USE_PSA_CRYPTO)
 /*
  * Declaring these like this adds NULL termination.
@@ -718,6 +725,57 @@ static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
     return bootutil_import_key(cp, end);
 }
 #endif /* MCUBOOT_USE_NRF_EXTERNAL_CRYPTO */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+#define UNCOMPRESSED_KEY_PREFIX 0x04
+
+typedef uintptr_t bootutil_ecdsa_context;
+
+static inline void bootutil_ecdsa_init(bootutil_ecdsa_context *ctx)
+{
+  (void)ctx;
+}
+
+static inline void bootutil_ecdsa_drop(bootutil_ecdsa_context *ctx)
+{
+  (void)ctx;
+}
+
+static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
+                                        uint8_t *pk, size_t pk_len,
+                                        uint8_t *hash, size_t hash_len,
+                                        uint8_t *sig, size_t sig_len)
+{
+  if (pk == NULL || hash == NULL || sig == NULL) {
+    return -1;
+  }
+
+  uint8_t signature[2 * NUM_ECC_BYTES];
+  int rc = bootutil_decode_sig(signature, sig, sig + sig_len);
+  if (rc) {
+    return rc;
+  }
+
+  /* Support only uncompressed keys */
+  if (pk[0] != UNCOMPRESSED_KEY_PREFIX) {
+    return -2;
+  }
+
+  /* Skip the first byte holding key format */
+  pk++;
+
+  return ocrypto_ecdsa_p256_verify_hash(signature, hash, pk);
+}
+
+static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
+                                                  uint8_t **cp, uint8_t *end)
+{
+  (void)ctx;
+
+  return bootutil_import_key(cp, end);
+}
+
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #ifdef __cplusplus
 }
