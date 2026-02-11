@@ -10,7 +10,7 @@
  */
 
 #include <stdint.h>
-#include <nrf_ironside/counter.h>
+#include <ironside/se/api.h>
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/bootutil_public.h"
 
@@ -30,7 +30,7 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 		FIH_RET(FIH_FAILURE);
 	}
 
-	if (image_id > IRONSIDE_COUNTER_NUM) {
+	if (image_id > IRONSIDE_SE_COUNTER_NUM) {
 		FIH_RET(FIH_FAILURE);
 	}
 
@@ -38,7 +38,7 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 	 * read the counter multiple times and compare the results.
 	 */
 	for (i = 0; i < IRONSIDE_COUNTER_READ_RETRIES; i++) {
-		if (ironside_counter_get(image_id, &cur_sec_cnt[i]) != 0) {
+		if (ironside_se_counter_get(image_id, &cur_sec_cnt[i]) != 0) {
 			FIH_RET(FIH_FAILURE);
 		}
 	}
@@ -49,7 +49,7 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 		}
 	}
 
-	if (cur_sec_cnt[0] <= IRONSIDE_COUNTER_MAX_VALUE) {
+	if (cur_sec_cnt[0] <= IRONSIDE_SE_COUNTER_MAX_VALUE) {
 		*security_cnt = fih_int_encode(cur_sec_cnt[0]);
 		FIH_RET(FIH_SUCCESS);
 	}
@@ -59,11 +59,12 @@ fih_int boot_nv_security_counter_get(uint32_t image_id, fih_int *security_cnt)
 
 int32_t boot_nv_security_counter_update(uint32_t image_id, uint32_t img_security_cnt)
 {
-	if ((img_security_cnt > IRONSIDE_COUNTER_MAX_VALUE) || (image_id > IRONSIDE_COUNTER_NUM)) {
+	if ((img_security_cnt > IRONSIDE_SE_COUNTER_MAX_VALUE) ||
+	    (image_id > IRONSIDE_SE_COUNTER_NUM)) {
 		return -BOOT_EBADARGS;
 	}
 
-	if (ironside_counter_set(image_id, img_security_cnt) != 0) {
+	if (ironside_se_counter_set(image_id, img_security_cnt) != 0) {
 		return -BOOT_EBADSTATUS;
 	}
 
@@ -79,7 +80,7 @@ fih_int boot_nv_security_counter_is_update_possible(uint32_t image_id, uint32_t 
 	if (FIH_EQ(fih_err, FIH_SUCCESS)) {
 		int cnt = fih_int_decode(security_cnt);
 
-		if ((cnt <= IRONSIDE_COUNTER_MAX_VALUE) && (cnt <= img_security_cnt)) {
+		if ((cnt <= IRONSIDE_SE_COUNTER_MAX_VALUE) && (cnt <= img_security_cnt)) {
 			FIH_RET(FIH_SUCCESS);
 		}
 	}
@@ -89,11 +90,11 @@ fih_int boot_nv_security_counter_is_update_possible(uint32_t image_id, uint32_t 
 
 int32_t boot_nv_security_counter_lock(uint32_t image_id)
 {
-	if (image_id > IRONSIDE_COUNTER_NUM) {
+	if (image_id > IRONSIDE_SE_COUNTER_NUM) {
 		return -BOOT_EBADARGS;
 	}
 
-	if (ironside_counter_lock(image_id) != 0) {
+	if (ironside_se_counter_lock(image_id) != 0) {
 		return -BOOT_EBADSTATUS;
 	}
 

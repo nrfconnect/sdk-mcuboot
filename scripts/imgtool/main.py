@@ -23,6 +23,7 @@ import lzma
 import re
 import struct
 import sys
+from pathlib import Path
 
 import click
 
@@ -345,6 +346,12 @@ class BasedIntParamType(click.ParamType):
                    'Add "0x" prefix if the value should be interpreted as an '
                    'integer, otherwise it will be interpreted as a string. '
                    'Specify the option multiple times to add multiple TLVs.')
+@click.option('--custom-tlv-file', required=False, nargs=2, default=[],
+              multiple=True, metavar='[tag] [filename]',
+              help='Custom TLV that will be placed into protected area. '
+                   'The second argument is the path to a binary file '
+                   'containing the TLV data. Specify the option multiple '
+                   'times to add multiple TLVs.')
 @click.option('-R', '--erased-val', type=click.Choice(['0', '0xff']),
               required=False,
               help='The value that is read back from erased flash.')
@@ -455,7 +462,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
          pad_header, slot_size, pad, confirm, max_sectors, overwrite_only,
          endian, encrypt_keylen, encrypt, compression, infile, outfile,
          dependencies, load_addr, hex_addr, erased_val, save_enctlv,
-         security_counter, boot_record, custom_tlv, rom_fixed, max_align,
+         security_counter, boot_record, custom_tlv, custom_tlv_file, rom_fixed, max_align,
          clear, fix_sig, fix_sig_pubkey, sig_out, user_sha, hmac_sha, is_pure,
          vector_to_sign, non_bootable, vid, cid, manifest):
 
@@ -506,6 +513,19 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
             custom_tlvs[tag] = bytes.fromhex(value[2:])
         else:
             custom_tlvs[tag] = value.encode('utf-8')
+
+    # TODO: refactor?
+    for tlv in custom_tlv_file:
+        tag = int(tlv[0], 0)
+        if tag in custom_tlvs:
+            raise click.UsageError(f'Custom TLV {hex(tag)} already exists.')
+        if tag in image.TLV_VALUES.values():
+            raise click.UsageError(
+                f'Custom TLV {hex(tag)} conflicts with predefined TLV.')
+
+        filename = tlv[1]
+        with open(filename, "rb") as fp:
+            custom_tlvs[tag] = fp.read()
 
     # Allow signature calculated externally.
     raw_signature = load_signature(fix_sig) if fix_sig else None

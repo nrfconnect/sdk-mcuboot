@@ -6,7 +6,7 @@
 
 config NRF_MCUBOOT_IRONSIDE_COUNTERS
 	bool "Use IronSide counters for MCUBoot hardware downgrade prevention"
-	depends on MCUBOOT_HW_DOWNGRADE_PREVENTION && NRF_IRONSIDE_COUNTER_SERVICE
+	depends on MCUBOOT_HW_DOWNGRADE_PREVENTION && IRONSIDE_SE_CALL
 	imply MCUBOOT_HW_DOWNGRADE_PREVENTION_LOCK
 	help
 	  Use IronSide SE hardware counters to prevent rollback of firmware images
