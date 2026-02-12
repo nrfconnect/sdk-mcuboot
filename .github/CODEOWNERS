@@ -1,0 +1,6 @@
+# CODEOWNERS for autoreview assigning in github
+
+# Order is important; the last matching pattern takes the most
+# precedence.
+
+* @nrfconnect/ncs-eris
