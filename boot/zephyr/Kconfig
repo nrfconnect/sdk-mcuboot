@@ -527,6 +527,20 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX
 	  Sets RRAMC's region no.4 protection before jumping to application.
 	  It disables reads writes and execution memory area which holds MCUBOOT.
 
+config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
+	hex
+	depends on NCS_MCUBOOT_DISABLE_SELF_RWX
+	depends on !PARTITION_MANAGER_ENABLED
+	default 0x800 if SOC_SERIES_NRF54L
+	help
+	  Size of region, at the beginning of the partition, that does not require
+	  protections. This is used, for example, when MCUboot type image is protected
+	  but the header does not have to be. Allows to spare some protection bits.
+	  Note that when Partition Manager is enabled this value will be 0 and is useless.
+	  In case of images built for MCUboot the value here will be equivalent to
+	  ROM_START_OFFSET for application build for MCUboot, and it is not available
+	  in bootloader builds.
+
 config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
 	bool "Infinite loop after RAM cleanup"
 	depends on MCUBOOT_CLEANUP_RAM
