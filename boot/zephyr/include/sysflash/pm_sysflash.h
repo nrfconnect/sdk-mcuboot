@@ -125,7 +125,7 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #endif
 
 /* Header size within MCUboot bootable application image */
-#define APP_IMAGE_HEADER_SIZE CONFIG_PM_PARTITION_SIZE_MCUBOOT_PAD
+#define PROTECTED_REGION_START_SKIP PM_MCUBOOT_PAD_SIZE
 
 #ifdef SECOND_STAGE_MCUBOOT_RUNNING_FROM_S0
 #define SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET     PM_S0_OFFSET
@@ -161,9 +161,9 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
  * it does have header added, but it is not used by the NSIB.
  */
 #define PROTECTED_REGION_START \
-    (SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET + APP_IMAGE_HEADER_SIZE)
+    (SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET + PROTECTED_REGION_START_SKIP)
 #define PROTECTED_REGION_SIZE  \
-    (SECOND_STAGE_ACTIVE_MCUBOOT_SIZE - APP_IMAGE_HEADER_SIZE)
+    (SECOND_STAGE_ACTIVE_MCUBOOT_SIZE - PROTECTED_REGION_START_SKIP)
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 
 #else /* MCUBOOT_IS_SECOND_STAGE */
