@@ -449,6 +449,8 @@ class BasedIntParamType(click.ParamType):
               help='Unique vendor identifier, format: (<raw_uuid>|<domain_name)>')
 @click.option('--cid', default=None, required=False,
               help='Unique image class identifier, format: (<raw_uuid>|<image_class_name>)')
+@click.option('--edt-config', default=None, required=False,
+              help='Path to the pickle-encoded devicetree file with bootloader configuration.')
 @click.option('--manifest', default=None, required=False,
               help='Path to the update manifest file')
 def sign(key, public_key_format, align, version, pad_sig, header_size,
@@ -457,7 +459,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
          dependencies, load_addr, hex_addr, erased_val, save_enctlv,
          security_counter, boot_record, custom_tlv, rom_fixed, max_align,
          clear, fix_sig, fix_sig_pubkey, sig_out, user_sha, hmac_sha, is_pure,
-         vector_to_sign, non_bootable, vid, cid, manifest):
+         vector_to_sign, non_bootable, vid, cid, edt_config, manifest):
 
     if confirm:
         # Confirmed but non-padded images don't make much sense, because
@@ -471,7 +473,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                       erased_val=erased_val, save_enctlv=save_enctlv,
                       security_counter=security_counter, max_align=max_align,
                       non_bootable=non_bootable, vid=vid, cid=cid,
-                      manifest=manifest)
+                      edt_config=edt_config, manifest=manifest)
     compression_tlvs = {}
     img.load(infile)
     key = load_key(key) if key else None
@@ -542,7 +544,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                   load_addr=load_addr, rom_fixed=rom_fixed,
                   erased_val=erased_val, save_enctlv=save_enctlv,
                   security_counter=security_counter, max_align=max_align,
-                  vid=vid, cid=cid, manifest=manifest)
+                  vid=vid, cid=cid, edt_config=edt_config, manifest=manifest)
         compression_filters = [
             {"id": lzma.FILTER_LZMA2, "preset": comp_default_preset,
                 "dict_size": comp_default_dictsize, "lp": comp_default_lp,
