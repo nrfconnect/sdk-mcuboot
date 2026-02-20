@@ -56,6 +56,15 @@ struct flash_area;
 
 #define BOOT_TMPBUF_SZ  256
 
+#if MCUBOOT_IS_SECOND_STAGE
+#define IMAGE_IS_SECOND_STAGE_MCUBOOT(state) \
+        (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER)
+
+#else
+/* Alwasy evaluate to false, If MCUboot is not second stage bootloader */
+#define IMAGE_IS_SECOND_STAGE_MCUBOOT(state) (false)
+#endif
+
 /** Number of image slots in flash; currently limited to two. */
 #if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) || defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
 #define BOOT_NUM_SLOTS                  1
