@@ -142,6 +142,23 @@ endif # BOOT_USE_PSA_CRYPTO
 
 menu "MCUBoot settings"
 
+config NCS_MCUBOOT_IMAGE_HEADER_SIZE
+	hex
+	depends on !PARTITION_MANAGER_ENABLED
+	default 0x200 if SOC_SERIES_NRF52
+	default 0x200 if SOC_SERIES_NRF53
+	default 0x800 if SOC_SERIES_NRF54L
+	help
+	  Size reserved for headr in MCUboot application image. Actually this
+	  size will not be completely used by header, as it is aligned to
+	  minimal requirement of VTOR allignment for a device type.
+	  For example on Cortex-M33 VTOR can only be placed at address that
+	  is rounded up to closest power of two, so for nRF54, which has
+	  271 interrupts, each requiring 4 byte entry, we need at least
+	  1084 bytes, that rounds up to 2048.
+	  The definition here is provided to be picked by signing scripts,
+	  when building an image, for example b0 or MCUboot.
+
 config SINGLE_APPLICATION_SLOT
 	bool "Single slot bootloader"
 	help
