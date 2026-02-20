@@ -56,7 +56,7 @@ static inline void nrf_cleanup_rtc(NRF_RTC_Type * rtc_reg)
 }
 #endif
 
-#if defined(CONFIG_NRF_GRTC_TIMER)
+#if defined(CONFIG_NRF_GRTC_TIMER) && !defined(CONFIG_SYSTEM_TIMER_HAS_DISABLE_SUPPORT)
 
 /**
  * This function is temporary and should be removed once nrfx_grtc_uninit
@@ -64,6 +64,11 @@ static inline void nrf_cleanup_rtc(NRF_RTC_Type * rtc_reg)
  */
 static inline void nrfx_grtc_uninit_no_counter_reset(void)
 {
+    if (nrfx_grtc_init_check() == false) {
+        /* GRTC not initialized, nothing to do */
+        return;
+    }
+
     uint32_t ch_mask = NRFX_GRTC_CONFIG_ALLOWED_CC_CHANNELS_MASK;
 
 #if NRF_GRTC_HAS_RTCOUNTER
@@ -150,7 +155,7 @@ void nrf_cleanup_peripheral(void)
     nrf_cleanup_sqspi();
 #endif
 
-#if defined(CONFIG_NRF_GRTC_TIMER)
+#if defined(CONFIG_NRF_GRTC_TIMER) && !defined(CONFIG_SYSTEM_TIMER_HAS_DISABLE_SUPPORT)
     nrf_cleanup_grtc();
 #endif
 
