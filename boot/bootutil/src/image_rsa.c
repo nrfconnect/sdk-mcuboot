@@ -4,6 +4,7 @@
  * Copyright (c) 2017-2018 Linaro LTD
  * Copyright (c) 2017-2019 JUUL Labs
  * Copyright (c) 2020-2023 Arm Limited
+ * Copyright (c) 2025 Nordic Semiconductor ASA
  *
  * Original license:
  *
@@ -28,265 +29,170 @@
 #include <string.h>
 
 #include "mcuboot_config/mcuboot_config.h"
+
+#ifdef MCUBOOT_SIGN_RSA
+#include "bootutil/sign_key.h"
+
+#include <assert.h>
+#include <string.h>
+#include <stdint.h>
+
+#include <psa/crypto.h>
+#include <psa/crypto_types.h>
+#include <zephyr/sys/util.h>
+
 #include "bootutil/bootutil_log.h"
+#include "bootutil/crypto/sha.h"
+#include "bootutil_priv.h"
+
+#include <psa/crypto.h>
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
-#ifdef MCUBOOT_SIGN_RSA
-#include "bootutil_priv.h"
-#include "bootutil/sign_key.h"
-#include "bootutil/fault_injection_hardening.h"
+#define RSA_SIGNATURE_LENGTH        (256)
+#define RSA_PUBLIC_KEY_BIT_SIZE     (2048)
 
-#define BOOTUTIL_CRYPTO_RSA_SIGN_ENABLED
-#include "bootutil/crypto/rsa.h"
+extern const unsigned int rsa_pub_key_len;
 
-/* PSA Crypto APIs provide an integrated API to perform the verification
- * while for other crypto backends we need to implement each step at this
- * abstraction level
- */
-#if !defined(MCUBOOT_USE_PSA_CRYPTO)
-
-#include "bootutil/crypto/sha.h"
-
-/*
- * Constants for this particular constrained implementation of
- * RSA-PSS. In particular, we support RSA 2048, with a SHA256 hash,
- * and a 32-byte salt.  A signature with different parameters will be
- * rejected as invalid.
- */
-
-/* The size, in octets, of the message. */
-#define PSS_EMLEN (MCUBOOT_SIGN_RSA_LEN / 8)
-
-/* The size of the hash function.  For SHA256, this is 32 bytes. */
-#define PSS_HLEN 32
-
-/* Size of the salt, should be fixed. */
-#define PSS_SLEN 32
-
-/* The length of the mask: emLen - hLen - 1. */
-#define PSS_MASK_LEN (PSS_EMLEN - PSS_HLEN - 1)
-
-#define PSS_HASH_OFFSET PSS_MASK_LEN
-
-/* For the mask itself, how many bytes should be all zeros. */
-#define PSS_MASK_ZERO_COUNT (PSS_MASK_LEN - PSS_SLEN - 1)
-#define PSS_MASK_ONE_POS   PSS_MASK_ZERO_COUNT
-
-/* Where the salt starts. */
-#define PSS_MASK_SALT_POS   (PSS_MASK_ONE_POS + 1)
-
-static const uint8_t pss_zeros[8] = {0};
-
-/*
- * Compute the RSA-PSS mask-generation function, MGF1.  Assumptions
- * are that the mask length will be less than 256 * PSS_HLEN, and
- * therefore we never need to increment anything other than the low
- * byte of the counter.
- *
- * This is described in PKCS#1, B.2.1.
- */
-static void
-pss_mgf1(uint8_t *mask, const uint8_t *hash)
+int rsa_verify(const uint8_t *message, size_t message_len,
+                   const uint8_t signature[RSA_SIGNATURE_LENGTH],
+                   const uint8_t public_key[PSA_EXPORT_PUBLIC_KEY_MAX_SIZE])
 {
-    bootutil_sha_context ctx;
-    uint8_t counter[4] = { 0, 0, 0, 0 };
-    uint8_t htmp[PSS_HLEN];
-    int count = PSS_MASK_LEN;
-    int bytes;
+    /* Set to any error */
+    psa_status_t status = PSA_ERROR_BAD_STATE;
+    psa_key_attributes_t key_attr = PSA_KEY_ATTRIBUTES_INIT;
+    int ret = 0;        /* Fail by default */
+    psa_key_id_t key_id;
 
-    while (count > 0) {
-        bootutil_sha_init(&ctx);
-        bootutil_sha_update(&ctx, hash, PSS_HLEN);
-        bootutil_sha_update(&ctx, counter, 4);
-        bootutil_sha_finish(&ctx, htmp);
-        bootutil_sha_drop(&ctx);
+    BOOT_LOG_DBG("rsa_verify: PSA implementation, plain key");
 
-        counter[3]++;
-
-        bytes = PSS_HLEN;
-        if (bytes > count)
-            bytes = count;
-
-        memcpy(mask, htmp, bytes);
-        mask += bytes;
-        count -= bytes;
+    /* Initialize PSA Crypto */
+    status = psa_crypto_init();
+    if (status != PSA_SUCCESS) {
+        BOOT_LOG_ERR("PSA crypto init failed %d\n", status);
+        return 0;
     }
+
+    status = PSA_ERROR_BAD_STATE;
+
+    psa_set_key_usage_flags(&key_attr, PSA_KEY_USAGE_VERIFY_HASH);
+    psa_set_key_lifetime(&key_attr, PSA_KEY_LIFETIME_VOLATILE);
+    psa_set_key_algorithm(&key_attr, PSA_ALG_RSA_PSS(PSA_ALG_SHA_256));
+    psa_set_key_type(&key_attr, PSA_KEY_TYPE_RSA_PUBLIC_KEY);
+    psa_set_key_bits(&key_attr, RSA_PUBLIC_KEY_BIT_SIZE);
+
+    BOOT_LOG_DBG("Importing RSA PSS key of size: %d", rsa_pub_key_len);
+
+    status = psa_import_key(&key_attr, public_key, rsa_pub_key_len,
+                            &key_id);
+    if (status != PSA_SUCCESS) {
+        BOOT_LOG_ERR("RSA import key failed %d", status);
+        ret = 0;
+    }
+
+    BOOT_LOG_DBG("Key imported. key_id: %d", (int)key_id);
+
+    status = PSA_ERROR_BAD_STATE;
+
+    BOOT_LOG_INF("Verifying RSA PSS with signature len: %d", RSA_SIGNATURE_LENGTH);
+
+    status = psa_verify_hash(key_id, PSA_ALG_RSA_PSS(PSA_ALG_SHA_256),
+                             message, message_len, signature, RSA_SIGNATURE_LENGTH);
+    if (status != PSA_SUCCESS) {
+        BOOT_LOG_ERR("RSA signature verification failed %d", status);
+        ret = 0;
+    } else {
+        BOOT_LOG_INF("RSA signature verification successful");
+        ret = 1;
+    }
+
+    return ret;
 }
 
-/*
- * Validate an RSA signature, using RSA-PSS, as described in PKCS #1
- * v2.2, section 9.1.2, with many parameters required to have fixed
- * values. RSASSA-PSS-VERIFY RFC8017 section 8.1.2
- */
-static fih_ret
-bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
-  uint8_t *sig, size_t slen)
-{
-    bootutil_sha_context shactx;
-    uint8_t em[MBEDTLS_MPI_MAX_SIZE];
-    uint8_t db_mask[PSS_MASK_LEN];
-    uint8_t h2[PSS_HLEN];
-    int i;
-    FIH_DECLARE(fih_rc, FIH_FAILURE);
-
-    /* The caller has already verified that slen == bootutil_rsa_get_len(ctx) */
-    if (slen != PSS_EMLEN ||
-        PSS_EMLEN > MBEDTLS_MPI_MAX_SIZE) {
-        goto out;
-    }
-
-    if (hlen != PSS_HLEN) {
-        goto out;
-    }
-
-    /* Apply RSAVP1 to produce em = sig^E mod N using the public key */
-    if (bootutil_rsa_public(ctx, sig, em)) {
-        goto out;
-    }
-
-    /*
-     * PKCS #1 v2.2, 9.1.2 EMSA-PSS-Verify
-     *
-     * emBits is 2048
-     * emLen = ceil(emBits/8) = 256
-     *
-     * The salt length is not known at the beginning.
-     */
-
-    /* Step 1.  The message is constrained by the address space of a
-     * 32-bit processor, which is far less than the 2^61-1 limit of
-     * SHA-256.
-     */
-
-    /* Step 2.  mHash is passed in as 'hash', with hLen the hlen
-     * argument. */
-
-    /* Step 3.  if emLen < hLen + sLen + 2, inconsistent and stop.
-     * The salt length is not known at this point.
-     */
-
-    /* Step 4.  If the rightmost octet of EM does have the value
-     * 0xbc, output inconsistent and stop.
-     */
-    if (em[PSS_EMLEN - 1] != 0xbc) {
-        goto out;
-    }
-
-    /* Step 5.  Let maskedDB be the leftmost emLen - hLen - 1 octets
-     * of EM, and H be the next hLen octets.
-     *
-     * maskedDB is then the first 256 - 32 - 1 = 0-222
-     * H is 32 bytes 223-254
-     */
-
-    /* Step 6.  If the leftmost 8emLen - emBits bits of the leftmost
-     * octet in maskedDB are not all equal to zero, output
-     * inconsistent and stop.
-     *
-     * 8emLen - emBits is zero, so there is nothing to test here.
-     */
-
-    /* Step 7.  let dbMask = MGF(H, emLen - hLen - 1). */
-    pss_mgf1(db_mask, &em[PSS_HASH_OFFSET]);
-
-    /* Step 8.  let DB = maskedDB xor dbMask.
-     * To avoid needing an additional buffer, store the 'db' in the
-     * same buffer as db_mask.  From now, to the end of this function,
-     * db_mask refers to the unmasked 'db'. */
-    for (i = 0; i < PSS_MASK_LEN; i++) {
-        db_mask[i] ^= em[i];
-    }
-
-    /* Step 9.  Set the leftmost 8emLen - emBits bits of the leftmost
-     * octet in DB to zero.
-     * pycrypto seems to always make the emBits 2047, so we need to
-     * clear the top bit. */
-    db_mask[0] &= 0x7F;
-
-    /* Step 10.  If the emLen - hLen - sLen - 2 leftmost octets of DB
-     * are not zero or if the octet at position emLen - hLen - sLen -
-     * 1 (the leftmost position is "position 1") does not have
-     * hexadecimal value 0x01, output "inconsistent" and stop. */
-    for (i = 0; i < PSS_MASK_ZERO_COUNT; i++) {
-        if (db_mask[i] != 0) {
-            goto out;
-        }
-    }
-
-    if (db_mask[PSS_MASK_ONE_POS] != 1) {
-        goto out;
-    }
-
-    /* Step 11. Let salt be the last sLen octets of DB */
-
-    /* Step 12.  Let M' = 0x00 00 00 00 00 00 00 00 || mHash || salt; */
-
-    /* Step 13.  Let H' = Hash(M') */
-    bootutil_sha_init(&shactx);
-    bootutil_sha_update(&shactx, pss_zeros, 8);
-    bootutil_sha_update(&shactx, hash, PSS_HLEN);
-    bootutil_sha_update(&shactx, &db_mask[PSS_MASK_SALT_POS], PSS_SLEN);
-    bootutil_sha_finish(&shactx, h2);
-    bootutil_sha_drop(&shactx);
-
-    /* Step 14.  If H = H', output "consistent".  Otherwise, output
-     * "inconsistent". */
-    FIH_CALL(boot_fih_memequal, fih_rc, h2, &em[PSS_HASH_OFFSET], PSS_HLEN);
-
-out:
-    FIH_RET(fih_rc);
-}
-
-#else /* MCUBOOT_USE_PSA_CRYPTO */
 
 static fih_ret
-bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
-  uint8_t *sig, size_t slen)
+bootutil_verify(uint8_t *buf, uint32_t blen,
+                uint8_t *sig, size_t slen,
+                uint8_t key_id)
 {
-    int rc = -1;
-    FIH_DECLARE(fih_rc, FIH_FAILURE);
-
-    /* PSA Crypto APIs allow the verification in a single call */
-    rc = bootutil_rsassa_pss_verify(ctx, hash, hlen, sig, slen);
-
-    fih_rc = fih_ret_encode_zero_equality(rc);
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        FIH_SET(fih_rc, FIH_FAILURE);
-    }
-
-    FIH_RET(fih_rc);
-}
-
-#endif /* MCUBOOT_USE_PSA_CRYPTO */
-
-fih_ret
-bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
-  uint8_t key_id)
-{
-    bootutil_rsa_context ctx;
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
-    uint8_t *cp;
-    uint8_t *end;
+    uint8_t *pubkey = NULL;
 
-    BOOT_LOG_DBG("bootutil_verify_sig: RSA key_id %d", key_id);
+    BOOT_LOG_DBG("bootutil_verify: RSA key_id %d", (int)key_id);
 
-    bootutil_rsa_init(&ctx);
-
-    cp = (uint8_t *)bootutil_keys[key_id].key;
-    end = cp + *bootutil_keys[key_id].len;
-
-    /* The key used for signature verification is a public RSA key */
-    rc = bootutil_rsa_parse_public_key(&ctx, &cp, end);
-    if (rc || slen != bootutil_rsa_get_len(&ctx)) {
+    if (slen != RSA_SIGNATURE_LENGTH) {
+        BOOT_LOG_DBG("bootutil_verify: expected slen %d, got %u",
+                     RSA_SIGNATURE_LENGTH, (unsigned int)slen);
+        FIH_SET(fih_rc, FIH_FAILURE);
         goto out;
     }
-    FIH_CALL(bootutil_cmp_rsasig, fih_rc, &ctx, hash, hlen, sig, slen);
 
+    pubkey = (uint8_t *)bootutil_keys[key_id].key;
+
+    BOOT_LOG_DBG("bootutil_verify: RSA key_id %d", (int)key_id);
+
+    rc = rsa_verify(buf, blen, sig, pubkey);
+
+    BOOT_LOG_DBG("bootutil_verify: rsa_verify status %d", rc);
+
+    if (rc == 0) {
+        /* if verify returns 0, there was an error. */
+        FIH_SET(fih_rc, FIH_FAILURE);
+        goto out;
+    }
+
+    FIH_SET(fih_rc, FIH_SUCCESS);
 out:
-    bootutil_rsa_drop(&ctx);
 
     FIH_RET(fih_rc);
 }
+
+/* Hash signature verification function.
+ * Verifies hash against provided signature.
+ * The function verifies that hash is of expected size and then
+ * calls bootutil_verify to do the signature verification.
+ */
+fih_ret
+bootutil_verify_sig(uint8_t *hash, uint32_t hlen,
+                    uint8_t *sig, size_t slen,
+                    uint8_t key_id)
+{
+    FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+    BOOT_LOG_DBG("bootutil_verify_sig: RSA key_id %d", (int)key_id);
+
+    if (hlen != IMAGE_HASH_SIZE) {
+        BOOT_LOG_DBG("bootutil_verify_sig: expected hlen %d, got %d",
+                     IMAGE_HASH_SIZE, hlen);
+        FIH_SET(fih_rc, FIH_FAILURE);
+        goto out;
+    }
+
+    FIH_CALL(bootutil_verify, fih_rc, hash, IMAGE_HASH_SIZE, sig,
+             slen, key_id);
+
+out:
+    FIH_RET(fih_rc);
+}
+
+/* Image verification function.
+ * The function directly calls bootutil_verify to verify signature
+ * of image.
+ */
+fih_ret
+bootutil_verify_img(uint8_t *img, uint32_t size,
+                    uint8_t *sig, size_t slen,
+                    uint8_t key_id)
+{
+    FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+    BOOT_LOG_DBG("bootutil_verify_img: RSA key_id %d", (int)key_id);
+
+    FIH_CALL(bootutil_verify, fih_rc, img, size, sig,
+             slen, key_id);
+
+    FIH_RET(fih_rc);
+}
+
 #endif /* MCUBOOT_SIGN_RSA */
