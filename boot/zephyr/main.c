@@ -263,8 +263,34 @@ static void handle_late_fatal_error(void)
 }
 #endif
 
-static void __ramfunc jump_in(uint32_t reset)
+static void __ramfunc jump_in(struct arm_vector_table *vt)
 {
+#ifdef CONFIG_CPU_CORTEX_M
+        __set_MSP(vt->msp);
+#endif
+
+#if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
+#ifdef CONFIG_CPU_CORTEX_M
+        __set_CONTROL(0x00); /* application will configures core on its own */
+        __ISB();
+#else
+        /* Set mode to supervisor and A, I and F bit as described in the
+         * Cortex R5 TRM */
+        __asm__ volatile(
+                "   mrs r0, CPSR\n"
+                /* change mode bits to supervisor */
+                "   bic r0, #0x1f\n"
+                "   orr r0, #0x13\n"
+                /* set the A, I and F bit */
+                "   mov r1, #0b111\n"
+                "   lsl r1, #0x6\n"
+                "   orr r0, r1\n"
+
+                "   msr CPSR, r0\n"
+                ::: "r0", "r1");
+#endif /* CONFIG_CPU_CORTEX_M */
+#endif /* CONFIG_MCUBOOT_CLEANUP_ARM_CORE */
+
         __asm__ volatile (
                 /* reset -> r0 */
                 "   mov  r0, %0\n"
@@ -331,7 +357,7 @@ static void __ramfunc jump_in(uint32_t reset)
                 /* Jump to reset vector of an app */
                 "   bx   r0\n"
                 :
-                : "r" (reset),
+                : "r" (vt->reset),
                   "r" (CONFIG_SRAM_BASE_ADDRESS),
                   "i" (CONFIG_SRAM_SIZE * 1024),
                   "r" (CLEANUP_RAM_GAP_START),
@@ -470,33 +496,7 @@ static void do_boot(struct boot_rsp *rsp)
 #endif
 #endif /* CONFIG_BOOT_INTR_VEC_RELOC */
 
-#ifdef CONFIG_CPU_CORTEX_M
-    __set_MSP(vt->msp);
-#endif
-
-#if CONFIG_MCUBOOT_CLEANUP_ARM_CORE
-#ifdef CONFIG_CPU_CORTEX_M
-    __set_CONTROL(0x00); /* application will configures core on its own */
-    __ISB();
-#else
-    /* Set mode to supervisor and A, I and F bit as described in the
-     * Cortex R5 TRM */
-    __asm__ volatile(
-        "   mrs r0, CPSR\n"
-        /* change mode bits to supervisor */
-        "   bic r0, #0x1f\n"
-        "   orr r0, #0x13\n"
-        /* set the A, I and F bit */
-        "   mov r1, #0b111\n"
-        "   lsl r1, #0x6\n"
-        "   orr r0, r1\n"
-
-        "   msr CPSR, r0\n"
-        ::: "r0", "r1");
-#endif /* CONFIG_CPU_CORTEX_M */
-
-#endif
-    jump_in(vt->reset);
+    jump_in(vt);
 }
 
 #elif defined(CONFIG_XTENSA) || defined(CONFIG_RISCV)
