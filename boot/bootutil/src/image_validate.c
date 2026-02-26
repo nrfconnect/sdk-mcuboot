@@ -217,7 +217,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 #if (defined(EXPECTED_KEY_TLV) && defined(MCUBOOT_HW_KEY)) || \
     (defined(EXPECTED_SIG_TLV) && defined(MCUBOOT_BUILTIN_KEY)) || \
     defined(MCUBOOT_HW_ROLLBACK_PROT) || defined(MCUBOOT_MANIFEST_UPDATES) || \
-    defined(MCUBOOT_UUID_VID) || defined(MCUBOOT_UUID_CID) || defined(MCUBOOT_DECOMPRESS_IMAGES)
+    defined(MCUBOOT_DECOMPRESS_IMAGES)
     int image_index = (state == NULL ? 0 : BOOT_CURR_IMG(state));
 #endif
     uint32_t off;
@@ -696,9 +696,10 @@ skip_security_counter_read:
                 goto out;
             }
 
-            FIH_CALL(boot_uuid_vid_match, fih_rc, image_index, &img_uuid_vid);
+            FIH_CALL(boot_uuid_vid_match, fih_rc, fap, &img_uuid_vid);
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
                 FIH_SET(uuid_vid_valid, FIH_FAILURE);
+                BOOT_LOG_ERR("bootutil_img_validate: image rejected, vendor UUID does not match");
                 goto out;
             }
 
@@ -725,9 +726,10 @@ skip_security_counter_read:
                 goto out;
             }
 
-            FIH_CALL(boot_uuid_cid_match, fih_rc, image_index, &img_uuid_cid);
+            FIH_CALL(boot_uuid_cid_match, fih_rc, fap, &img_uuid_cid);
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
                 FIH_SET(uuid_cid_valid, FIH_FAILURE);
+                BOOT_LOG_ERR("bootutil_img_validate: image rejected, class UUID does not match");
                 goto out;
             }
 

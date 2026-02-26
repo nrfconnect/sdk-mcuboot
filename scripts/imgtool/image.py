@@ -23,7 +23,6 @@ Image signing and management.
 import copy
 import hashlib
 import os.path
-import re
 import struct
 import uuid
 from collections import namedtuple
@@ -45,6 +44,7 @@ from . import keys
 from . import version as versmod
 from .boot_record import create_sw_component_data
 from .keys import ecdsa, rsa, x25519
+from .bootlib import BootUuid, BootConfiguration
 
 IMAGE_MAGIC = 0x96f3b83d
 IMAGE_HEADER_SIZE = 32
@@ -252,27 +252,6 @@ def tlv_matches_key_type(tlv_type, key):
 
     return False
 
-def parse_uuid(namespace, value):
-    # Check if UUID is in the RAW format (12345678-1234-5678-1234-567812345678)
-    uuid_re = r'[0-9A-f]{8}-[0-9A-f]{4}-[0-9A-f]{4}-[0-9A-f]{4}-[0-9A-f]{12}'
-    if re.match(uuid_re, value):
-        uuid_bytes = bytes.fromhex(value.replace('-', ''))
-
-    # Check if UUID is in the RAW HEX format (12345678123456781234567812345678)
-    elif re.match(r'[0-9A-f]{32}', value):
-        uuid_bytes = bytes.fromhex(value)
-
-    # Check if UUID is in the string format
-    elif value.isprintable():
-        if namespace is not None:
-            uuid_bytes = uuid.uuid5(namespace, value).bytes
-        else:
-            raise ValueError(f"Unknown namespace for UUID: {value}")
-    else:
-        raise ValueError(f"Unknown UUID format: {value}")
-
-    return uuid_bytes
-
 class Manifest:
     def __init__(self, endian, path):
         self.path = path
@@ -375,7 +354,8 @@ class Image:
                  overwrite_only=False, endian="little", load_addr=0,
                  rom_fixed=None, erased_val=None, save_enctlv=False,
                  security_counter=None, max_align=None,
-                 non_bootable=False, vid=None, cid=None, manifest=None):
+                 non_bootable=False, vid=None, cid=None,
+                 edt_config=None, manifest=None):
 
         if load_addr and rom_fixed:
             raise click.UsageError("Can not set rom_fixed and load_addr at the same time")
@@ -404,8 +384,14 @@ class Image:
         self.enctlv_len = 0
         self.max_align = max(DEFAULT_MAX_ALIGN, align) if max_align is None else int(max_align)
         self.non_bootable = non_bootable
-        self.vid = vid
-        self.cid = cid
+        self.vid = BootUuid(uuid.NAMESPACE_DNS, vid) if vid is not None else None
+        self.cid = BootUuid(self.vid, cid) if cid is not None else None
+        self.config = BootConfiguration(edt_config) if edt_config is not None else None
+        if self.config and self.config.image:
+            if self.vid is None:
+                self.vid = self.config.image.vid
+            if self.cid is None:
+                self.cid = self.config.image.cid
         self.manifest = Manifest(endian=endian, path=manifest) if manifest is not None else None
 
         if self.max_align == DEFAULT_MAX_ALIGN:
@@ -743,17 +729,11 @@ class Image:
                     prot_tlv.add(tag, value)
 
             if self.vid is not None:
-                vid = parse_uuid(uuid.NAMESPACE_DNS, self.vid)
-                payload = struct.pack(e + '16s', vid)
+                payload = struct.pack(e + '16s', self.vid.bytes)
                 prot_tlv.add('UUID_VID', payload)
 
             if self.cid is not None:
-                if self.vid is not None:
-                    namespace = uuid.UUID(bytes=vid)
-                else:
-                    namespace = None
-                cid = parse_uuid(namespace, self.cid)
-                payload = struct.pack(e + '16s', cid)
+                payload = struct.pack(e + '16s', self.cid.bytes)
                 prot_tlv.add('UUID_CID', payload)
 
             if self.manifest is not None:

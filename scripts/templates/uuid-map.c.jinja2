@@ -1,0 +1,40 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+#include <bootutil/mcuboot_uuid_generated.h>
+#include <zephyr/devicetree.h>
+
+static const struct uuid_map_entry uuid_{{ uuid_type }}_map[] = {
+{%- for img_name, img in bootloader.images.items() %}
+	/* Image app (index {{ img.index }}) UUID {{ uuid_type.upper() }} map */
+{%- for part in img.partitions %}
+	{
+		/* Partition (index {{ loop.index0 }}): {{ part['partition']['labels']|join(", ") }} */
+		.dev = DEVICE_DT_GET(DT_PATH({{ part['partition']['dev']|join(', ') }})),
+		.off = {{ '0x%x' % part['partition']['off'] }},
+		.size = {{ '0x%x' % part['partition']['size'] }},
+		.image_index = {{ img.index }},
+		.partition_index = {{ loop.index0 }},
+		.uuid = {{ '{{' }}
+			/* UUID generated from: {{ part['uuid-' + uuid_type] }} */
+			{{ part['uuid-' + uuid_type].c_array }}
+		}}
+	},
+{%- endfor  %}
+{%- endfor  %}
+};
+
+size_t boot_uuid_{{ uuid_type }}_map_get(const struct uuid_map_entry **map)
+{
+	if (map == NULL) {
+		return 0;
+	}
+
+	*map = uuid_{{ uuid_type }}_map;
+
+	return ARRAY_SIZE(uuid_{{ uuid_type }}_map);
+}
+
