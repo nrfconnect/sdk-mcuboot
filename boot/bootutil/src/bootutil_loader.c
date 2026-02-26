@@ -197,7 +197,11 @@ boot_check_image(struct boot_loader_state *state, struct boot_status *bs, int sl
      */
 #if defined(MCUBOOT_ENC_IMAGES) && !defined(MCUBOOT_RAM_LOAD)
     if (MUST_DECRYPT(fap, BOOT_CURR_IMG(state), hdr)) {
+#ifdef MCUBOOT_EMBEDDED_ENC_KEY
+        rc = boot_take_enc_key(bs->enckey[BOOT_SLOT_SECONDARY], BOOT_CURR_IMG(state), BOOT_SLOT_SECONDARY);
+#else
         rc = boot_enc_load(state, BOOT_SLOT_SECONDARY, hdr, fap, bs);
+#endif
         if (rc < 0) {
             FIH_RET(fih_rc);
         }
@@ -434,3 +438,21 @@ boot_close_all_flash_areas(struct boot_loader_state *state)
     }
 }
 #endif /* !MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD && !MCUBOOT_SINGLE_APPLICATION_SLOT */
+
+void boot_state_init(struct boot_loader_state *state)
+{
+#if defined(MCUBOOT_ENC_IMAGES)
+    int image;
+    int slot;
+#endif
+
+    memset(state, 0, sizeof(*state));
+
+#if defined(MCUBOOT_ENC_IMAGES)
+    for (image = 0; image < BOOT_IMAGE_NUMBER; ++image) {
+        for (slot = 0; slot < BOOT_NUM_SLOTS; ++slot) {
+            boot_enc_init(&state->enc[image][slot]);
+        }
+    }
+#endif
+}
