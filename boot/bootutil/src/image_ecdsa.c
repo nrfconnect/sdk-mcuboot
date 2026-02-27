@@ -37,6 +37,9 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #include "bootutil_priv.h"
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/crypto/ecdsa.h"
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <nrf_lcs/nrf_lcs.h>
+#endif
 
 #if !defined(MCUBOOT_BUILTIN_KEY)
 fih_ret
@@ -48,6 +51,16 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     uint8_t *pubkey;
     uint8_t *end;
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    if (nrf_lcs_get() != NRF_LCS_SECURED) {
+        if (key_id != CONFIG_NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER) {
+            BOOT_LOG_ERR("bootutil_verify_sig: invalid key ID %d for non-secured device", key_id);
+            FIH_RET(FIH_FAILURE);
+        }
+        BOOT_LOG_DBG("bootutil_verify_sig: using manufacturing application key ID %d", key_id);
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     BOOT_LOG_DBG("bootutil_verify_sig: ECDSA builtin key %d", key_id);
 
@@ -79,6 +92,16 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     int rc;
     bootutil_ecdsa_context ctx;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    if (nrf_lcs_get() != NRF_LCS_SECURED) {
+        if (key_id != CONFIG_NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER) {
+            BOOT_LOG_ERR("bootutil_verify_sig: invalid key ID %d for non-secured device", key_id);
+            FIH_RET(FIH_FAILURE);
+        }
+        BOOT_LOG_DBG("bootutil_verify_sig: using manufacturing application key ID %d", key_id);
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     BOOT_LOG_DBG("bootutil_verify_sig: ECDSA embedded key %hhd", key_id);
 

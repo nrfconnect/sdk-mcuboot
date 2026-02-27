@@ -13,6 +13,10 @@
 #include <inttypes.h>
 #include <string.h>
 
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <nrf_lcs/nrf_lcs.h>
+#endif
+
 #if defined(MCUBOOT_ENCRYPT_RSA)
 #define BOOTUTIL_CRYPTO_RSA_CRYPT_ENABLED
 #include "bootutil/crypto/rsa.h"
@@ -585,6 +589,16 @@ boot_enc_load(struct boot_loader_state *state, int slot,
     int rc;
 
     BOOT_LOG_DBG("boot_enc_load: slot %d", slot);
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    switch (nrf_lcs_get()) {
+    case NRF_LCS_SECURED:
+        break;
+    default:
+        /* The device is in a non-secured state. Avoid loading any encryption key. */
+        return -1;
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     /* Already loaded... */
     if (boot_enc_valid(enc_state)) {

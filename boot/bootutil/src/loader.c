@@ -50,6 +50,9 @@
 #include "bootutil/boot_hooks.h"
 #include "bootutil/mcuboot_status.h"
 #include "bootutil_loader.h"
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <nrf_lcs/nrf_lcs.h>
+#endif
 
 #ifndef MCUBOOT_MANIFEST_UPDATES
 
@@ -1986,6 +1989,11 @@ boot_prepare_image_for_update(struct boot_loader_state *state,
 
             /* Swap has finished set to NONE */
             BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_NONE;
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+        } else if (nrf_lcs_get() != NRF_LCS_SECURED) {
+            /* Execute the regular update/swap logic only in the secured state. */
+            BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_NONE;
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
         } else {
             /* There was no partial swap, determine swap type. */
             if (bs->swap_type == BOOT_SWAP_TYPE_NONE) {
@@ -2686,6 +2694,37 @@ boot_select_or_erase(struct boot_loader_state *state)
     memset(active_swap_state, 0, sizeof(struct boot_swap_state));
     rc = boot_read_swap_state(fap, active_swap_state);
     assert(rc == 0);
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    switch (nrf_lcs_get()) {
+    case NRF_LCS_ASSEMBLY_AND_TEST:
+    case NRF_LCS_PSA_ROT_PROVISIONING:
+    {
+        /*
+         * The FW update logic is allowed only in the secured state.
+         * Avoid booting or marking any image that is not already confirmed.
+         */
+        if (active_swap_state->magic == BOOT_MAGIC_GOOD &&
+            active_swap_state->copy_done == BOOT_FLAG_SET &&
+            active_swap_state->image_ok == BOOT_FLAG_SET) {
+            BOOT_LOG_INF("Selecting provisioning image from the %s slot",
+                         (active_slot == BOOT_SLOT_PRIMARY) ?
+                         "primary" : "secondary");
+            return 0;
+        }
+
+        return -1;
+    }
+
+    case NRF_LCS_SECURED:
+        /* Execute the regular logic in the secured state. */
+        break;
+
+    default:
+        /* The device is in a non-secured state. Avoid booting or marking any image. */
+        return -1;
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     if (active_swap_state->magic != BOOT_MAGIC_GOOD ||
         (active_swap_state->copy_done == BOOT_FLAG_SET &&
