@@ -17,6 +17,9 @@
 #if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
 #include <cracen_psa_kmu.h>
 #endif
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <nrf_lcs/nrf_lcs.h>
+#endif
 
 BOOT_LOG_MODULE_REGISTER(ed25519_psa_kmu_its);
 
@@ -35,6 +38,10 @@ static psa_key_id_t key_ids[] =  {
     MAKE_PSA_KMU_KEY_ID(PSA_KEY_STARTING_ID + PSA_KEY_INDEX_SIZE),
     MAKE_PSA_KMU_KEY_ID(PSA_KEY_STARTING_ID + (2 * PSA_KEY_INDEX_SIZE))
 };
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+static psa_key_id_t manufacturing_app_key_id =
+    MAKE_PSA_KMU_KEY_ID(CONFIG_NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER);
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
 #define KEY_SLOTS_COUNT CONFIG_BOOT_SIGNATURE_KMU_SLOTS
 
@@ -55,6 +62,10 @@ static const psa_key_id_t key_ids[] =  {
     0x40022102,
     0x40022103
 };
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+static const psa_key_id_t manufacturing_app_key_id =
+    CONFIG_NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER;
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
 #define KEY_SLOTS_COUNT ARRAY_SIZE(key_ids)
 #endif
@@ -77,23 +88,44 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
     status = PSA_ERROR_BAD_STATE;
     BOOT_LOG_DBG("ED25519_verify: total key count %d", KEY_SLOTS_COUNT);
 
-    for (int i = 0; i < KEY_SLOTS_COUNT; ++i) {
-        psa_key_id_t kid = key_ids[i];
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    if (nrf_lcs_get() == NRF_LCS_SECURED) {
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
+        for (int i = 0; i < KEY_SLOTS_COUNT; ++i) {
+            psa_key_id_t kid = key_ids[i];
 
-        BOOT_LOG_DBG("ED25519_verify: trying key ID 0x%" PRIx32, (uint32_t)kid);
-        status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message,
-                                    message_len, signature,
-                                    EDDSA_SIGNAGURE_LENGTH);
-        if (status == PSA_SUCCESS) {
-#if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
-            if(i < validated_with) {
-                validated_with = i;
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+            if (kid == manufacturing_app_key_id) {
+                BOOT_LOG_DBG("ED25519_verify: skipping manufacturing application key ID 0x%" PRIx32,
+                             (uint32_t)kid);
+                continue;
             }
-#endif
-            return 1;
-        }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
+            status = psa_verify_message(kid, PSA_ALG_PURE_EDDSA, message,
+                                        message_len, signature,
+                                        EDDSA_SIGNAGURE_LENGTH);
+            if (status == PSA_SUCCESS) {
+#if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
+                if(i < validated_with) {
+                    validated_with = i;
+                }
+#endif
+                return 1;
+            }
+        }
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    } else {
+            BOOT_LOG_INF("ED25519_verify: trying manufacturing application key ID 0x%" PRIx32,
+                (uint32_t)manufacturing_app_key_id);
+            status = psa_verify_message(manufacturing_app_key_id, PSA_ALG_PURE_EDDSA, message,
+                                        message_len, signature,
+                                        EDDSA_SIGNAGURE_LENGTH);
+            if (status == PSA_SUCCESS) {
+                return 1;
+            }
     }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     BOOT_LOG_ERR("ED25519 signature verification failed %d", status);
 

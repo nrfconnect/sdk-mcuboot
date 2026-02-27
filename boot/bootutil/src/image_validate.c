@@ -59,6 +59,10 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #include <compression/decompression.h>
 #endif
 
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <nrf_lcs/nrf_lcs.h>
+#endif
+
 #ifdef MCUBOOT_ENC_IMAGES
 #include "bootutil/enc_key.h"
 #endif
@@ -526,6 +530,14 @@ bootutil_img_validate(struct boot_loader_state *state,
                 rc = -1;
                 goto out;
             }
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+            if (nrf_lcs_get() == NRF_LCS_ASSEMBLY_AND_TEST) {
+                BOOT_LOG_WRN("bootutil_img_validate: device in A&T, skipping key validation");
+                break;
+            }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
+
 #ifndef MCUBOOT_HW_KEY
             rc = LOAD_IMAGE_DATA(hdr, fap, off, buf, len);
             if (rc) {
@@ -551,6 +563,13 @@ bootutil_img_validate(struct boot_loader_state *state,
         case EXPECTED_SIG_TLV:
         {
             BOOT_LOG_DBG("bootutil_img_validate: EXPECTED_SIG_TLV == %d", EXPECTED_SIG_TLV);
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+            if (nrf_lcs_get() == NRF_LCS_ASSEMBLY_AND_TEST) {
+                BOOT_LOG_WRN("bootutil_img_validate: device in A&T, skipping signature verification");
+                FIH_SET(valid_signature, FIH_SUCCESS);
+                break;
+            }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 #if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
             /* Ignore this signature if it is out of bounds. */
             if (key_id < 0 || key_id >= bootutil_key_cnt) {
@@ -877,6 +896,12 @@ skip_security_counter_check:
         }
 
         while (true) {
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+            if (nrf_lcs_get() == NRF_LCS_ASSEMBLY_AND_TEST) {
+                BOOT_LOG_WRN("bootutil_img_validate: device in A&T, skipping key search");
+                break;
+            }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
             rc = bootutil_tlv_iter_next(&it, &off, &len, &type);
             if (rc < 0) {
                 goto out;
@@ -924,6 +949,12 @@ skip_security_counter_check:
         }
 
         while (true) {
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+            if (nrf_lcs_get() == NRF_LCS_ASSEMBLY_AND_TEST) {
+                BOOT_LOG_WRN("bootutil_img_validate: device in A&T, skipping signature search");
+                break;
+            }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
             rc = bootutil_tlv_iter_next(&it, &off, &len, &type);
             if (rc < 0) {
                 goto out;
