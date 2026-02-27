@@ -142,6 +142,37 @@ endif # BOOT_USE_PSA_CRYPTO
 
 menu "MCUBoot settings"
 
+config NCS_MCUBOOT_IMAGE_HEADER_SIZE
+	hex
+	depends on !PARTITION_MANAGER_ENABLED
+	default 0x200 if SOC_SERIES_NRF52
+	default 0x200 if SOC_SERIES_NRF53
+	default 0x800 if SOC_SERIES_NRF54L
+	help
+	  Size reserved for headr in MCUboot application image. Actually this
+	  size will not be completely used by header, as it is aligned to
+	  minimal requirement of VTOR allignment for a device type.
+	  For example on Cortex-M33 VTOR can only be placed at address that
+	  is rounded up to closest power of two, so for nRF54, which has
+	  271 interrupts, each requiring 4 byte entry, we need at least
+	  1084 bytes, that rounds up to 2048.
+	  The definition here is provided to be picked by signing scripts,
+	  when building an image, for example b0 or MCUboot.
+
+config ROM_START_OFFSET
+	hex
+	depends on !PARTITION_MANAGER_ENABLED
+	default NCS_MCUBOOT_IMAGE_HEADER_SIZE if MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+	help
+	  Enforced for second stage bootloaders to provide space for header.
+	  Normally this is only set for applications when built for MCUboot,
+	  so when CONFIG_BOOTLOADER_MCUBOOT=y is set; but here we are building
+	  MCUboot for some other bootloader and we do not have such info,
+	  so we check whether MCUboot is second stage, by checking value
+	  of MCUBOOT_MCUBOOT_IMAGE_NUMBER, which will not be -1 for second
+	  stage bootloader. We really need Kconfig that will strictly state
+	  that MCUboot it build as N'th stage...
+
 config SINGLE_APPLICATION_SLOT
 	bool "Single slot bootloader"
 	help
@@ -527,6 +558,20 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX
 	  Sets RRAMC's region no.4 protection before jumping to application.
 	  It disables reads writes and execution memory area which holds MCUBOOT.
 
+config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
+	hex
+	depends on NCS_MCUBOOT_DISABLE_SELF_RWX
+	depends on !PARTITION_MANAGER_ENABLED
+	default 0x800 if SOC_SERIES_NRF54L
+	help
+	  Size of region, at the beginning of the partition, that does not require
+	  protections. This is used, for example, when MCUboot type image is protected
+	  but the header does not have to be. Allows to spare some protection bits.
+	  Note that when Partition Manager is enabled this value will be 0 and is useless.
+	  In case of images built for MCUboot the value here will be equivalent to
+	  ROM_START_OFFSET for application build for MCUboot, and it is not available
+	  in bootloader builds.
+
 config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
 	bool "Infinite loop after RAM cleanup"
 	depends on MCUBOOT_CLEANUP_RAM
@@ -671,6 +716,17 @@ config BOOT_FIRMWARE_LOADER
 	  key as the primary image.
 
 endchoice
+
+config NCS_CPUNET_APP_IMAGE_UPDATE_SUPPORT
+	bool "Support cross CPU update from APP to NET core"
+	depends on SOC_NRF5340_CPUAPP
+	depends on B0N_SIZE
+	# This is a hack to keep the option on in similar way the code has
+	# been detecting need to CPUNET application update.
+	default y if B0N_SIZE != 0
+	help
+	  Try to match update image against application image running on CPUNET and
+	  perform update if all requirements are fulfilled.
 
 config BOOT_DIRECT_XIP_REVERT
 	bool "Enable the revert mechanism in direct-xip mode"
