@@ -59,6 +59,10 @@
 #include "boot_serial/boot_serial_cdc_acm_usb_next.h"
 #endif
 
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <nrf_lcs/nrf_lcs.h>
+#endif
+
 #if defined(CONFIG_MCUBOOT_UUID_VID) || defined(CONFIG_MCUBOOT_UUID_CID)
 #include "bootutil/mcuboot_uuid.h"
 #endif /* CONFIG_MCUBOOT_UUID_VID || CONFIG_MCUBOOT_UUID_CID */
@@ -786,6 +790,26 @@ int main(void)
     if (rc) {
         BOOT_LOG_ERR("Failed to prevalidate the state: %d", rc);
     }
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    BOOT_LOG_INF("LCS-awareness enabled. Current LCS: %x", nrf_lcs_get());
+
+    switch (nrf_lcs_get()) {
+    case NRF_LCS_ASSEMBLY_AND_TEST:
+    case NRF_LCS_PSA_ROT_PROVISIONING:
+    case NRF_LCS_SECURED:
+        /* Boot and update logic is allowed only in these three states. */
+        break;
+
+    default:
+        BOOT_LOG_ERR("Device in an unbootable state: %x", nrf_lcs_get());
+        mcuboot_status_change(MCUBOOT_STATUS_BOOT_FAILED);
+        FIH_PANIC;
+        return -1;
+    }
+#else
+    BOOT_LOG_INF("LCS-awareness disabled, skipping LCS check");
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
 #ifdef CONFIG_BOOT_SERIAL_ENTRANCE_GPIO
     BOOT_LOG_DBG("Checking GPIO for serial recovery");
