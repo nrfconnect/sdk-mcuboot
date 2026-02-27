@@ -36,6 +36,9 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #include "bootutil_priv.h"
 #include "bootutil/sign_key.h"
 #include "bootutil/fault_injection_hardening.h"
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <bootloader/lcs.h>
+#endif
 
 #define BOOTUTIL_CRYPTO_RSA_SIGN_ENABLED
 #include "bootutil/crypto/rsa.h"
@@ -269,6 +272,16 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     uint8_t *cp;
     uint8_t *end;
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    if (lcs_get() != LCS_SECURED) {
+        if (key_id != CONFIG_NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER) {
+            BOOT_LOG_ERR("bootutil_verify_sig: invalid key ID %d for non-secured device", key_id);
+            FIH_RET(FIH_FAILURE);
+        }
+        BOOT_LOG_DBG("bootutil_verify_sig: using manufacturing application key ID %d", key_id);
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     BOOT_LOG_DBG("bootutil_verify_sig: RSA key_id %d", key_id);
 

@@ -12,6 +12,9 @@
 
 #ifdef MCUBOOT_SIGN_ED25519
 #include "bootutil/sign_key.h"
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <bootloader/lcs.h>
+#endif
 
 #if !defined(MCUBOOT_KEY_IMPORT_BYPASS_ASN)
 /* We are not really using the MBEDTLS but need the ASN.1 parsing functions */
@@ -109,6 +112,17 @@ bootutil_verify(uint8_t *buf, uint32_t blen,
     }
 
 #if !defined(CONFIG_BOOT_SIGNATURE_USING_KMU) && !defined(CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    if (lcs_get() != LCS_SECURED) {
+        if (key_id != CONFIG_NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER) {
+            BOOT_LOG_ERR("bootutil_verify: invalid key ID %d for non-secured device", key_id);
+            FIH_SET(fih_rc, FIH_FAILURE);
+            goto out;
+        }
+        BOOT_LOG_DBG("bootutil_verify: using manufacturing application key ID %d", key_id);
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
+
     pubkey = (uint8_t *)bootutil_keys[key_id].key;
     end = pubkey + *bootutil_keys[key_id].len;
 
