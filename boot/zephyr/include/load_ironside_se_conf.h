@@ -13,6 +13,7 @@
 extern "C" {
 #endif
 
+struct boot_rsp;
 struct boot_loader_state;
 struct image_header;
 struct flash_area;
@@ -29,6 +30,15 @@ int nrf_add_custom_tlv_data(struct boot_loader_state *state, int slot);
 
 /* Configure peripherals using parameters loaded from PERIPHCONF TLVs. */
 int nrf_load_periphconf(void);
+
+/* Update information about which slot is being booted.
+ * This determines which MPCCONF that is loaded by nrf_load_mpcconf(): active images are
+ * write protected, and inactivate images are kept writable.
+ */
+int nrf_mpcconf_update_active_slot(const struct boot_rsp *rsp);
+
+/* Configure global domain MPCs based on the images being booted. */
+int nrf_load_mpcconf(void);
 
 #ifdef __cplusplus
 }

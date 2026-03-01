@@ -8,15 +8,16 @@
 #include "bootutil/bootutil_log.h"
 #include "../bootutil/src/bootutil_priv.h"
 #include "flash_map_backend/flash_map_backend.h"
+#include <zephyr/devicetree.h>
 #include <zephyr/sys/math_extras.h>
+#include <zephyr/sys/util.h>
 
 #include <ironside/se/api.h>
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 #define PERIPHCONF_TLV_ID CONFIG_NCS_MCUBOOT_PERIPHCONF_TLV_ID
-
-#define MAX_PERIPHCONFS CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF_MAX_BLOBS
+#define MAX_PERIPHCONFS   CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF_MAX_BLOBS
 
 /* To store parsed PERIPHCONF parameters between reading them from
  * the TLVs and calling the IronSide API.
