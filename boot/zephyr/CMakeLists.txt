@@ -822,6 +822,10 @@ endif()
 if(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
   zephyr_sources(${BOOT_DIR}/zephyr/load_ironside_se_conf.c)
 endif()
+if(CONFIG_NCS_MCUBOOT_MPCCONF_STATIC_WRITE_PROTECTION)
+  zephyr_sources(${BOOT_DIR}/zephyr/load_ironside_se_conf_mpc.c)
+endif()
+
 
 if(SYSBUILD AND CONFIG_PCD_APP)
     # Sysbuild requires details of the RAM flash device are stored to the cache of MCUboot so
