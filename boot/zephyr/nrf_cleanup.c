@@ -26,7 +26,9 @@
     #include <hal/nrf_vpr.h>
     #include <softperipheral_regif.h>
 #endif
-
+#if defined(SPIM_PRESENT)
+    #include <hal/nrf_spim.h>
+#endif
 
 #include <string.h>
 
@@ -202,6 +204,33 @@ void nrf_cleanup_peripheral(void)
         memset((uint8_t *)current + NRF_UARTE_PUBLISH_CONF_OFFS, 0,
                NRF_UARTE_PUBLISH_CONF_SIZE);
 #endif
+    }
+#endif
+
+#if defined(SPIM_PRESENT)
+    /* Stop SPIM EasyDMA and disable all instances to prevent stale DMA
+     * from causing RAMACCERR when TF-M reconfigures SPU permissions. */
+    {
+        NRF_SPIM_Type *spim_inst[] = {
+#if defined(NRF_SPIM0)
+            NRF_SPIM0,
+#endif
+#if defined(NRF_SPIM1)
+            NRF_SPIM1,
+#endif
+#if defined(NRF_SPIM2)
+            NRF_SPIM2,
+#endif
+#if defined(NRF_SPIM3)
+            NRF_SPIM3,
+#endif
+        };
+
+        for (int i = 0; i < sizeof(spim_inst) / sizeof(spim_inst[0]); ++i) {
+            nrf_spim_task_trigger(spim_inst[i], NRF_SPIM_TASK_STOP);
+            nrf_spim_disable(spim_inst[i]);
+            nrf_spim_int_disable(spim_inst[i], 0xFFFFFFFF);
+        }
     }
 #endif
 
