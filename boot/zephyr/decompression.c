@@ -1089,6 +1089,9 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     TARGET_STATIC uint8_t decomp_buf[DECOMP_BUF_ALLOC_SIZE] __attribute__((aligned(4)));
     TARGET_STATIC struct image_header modified_hdr;
     uint16_t decomp_buf_max_size;
+#ifndef CONFIG_PARTITION_MANAGER_ENABLED
+    uint32_t hdr_write_pos = 0;
+#endif
 
 #if defined(CONFIG_NRF_COMPRESS_ARM_THUMB)
     uint8_t unaligned_data_length = 0;
@@ -1205,6 +1208,40 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
         rc = BOOT_EFLASH;
         goto finish;
     }
+
+#ifndef CONFIG_PARTITION_MANAGER_ENABLED
+    /* The image digest is calculated on a binary, that has the area between header and the image
+     * binary filled with zeros.
+     * The zeros are a result of building the image with the CONFIG_ROM_START_OFFSET option set to
+     * the ih_hdr_size.
+     * The configuration with partition manager leaves this area uninitialized and signs
+     * the image using the --pad-header option, which fills the gap with the erase value
+     * (usually 0xFF) instead of zeros.
+     */
+
+    /* Reuse decompression buffer to write zeros. */
+    memset(decomp_buf, 0x00, sizeof(decomp_buf));
+    hdr_write_pos = sizeof(modified_hdr);
+
+    while (hdr_write_pos < hdr->ih_hdr_size) {
+        uint32_t set_size = hdr->ih_hdr_size - hdr_write_pos;
+
+        /* Assuming that sizeof(modified_hdr) is always aligned to write block size. */
+        if (set_size > sizeof(modified_hdr)) {
+            set_size = sizeof(modified_hdr);
+        }
+
+        rc = flash_area_write(fap_dst, off_dst + hdr_write_pos, decomp_buf, set_size);
+        if (rc != 0) {
+            BOOT_LOG_ERR("Flash write failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
+                         (off_dst + hdr_write_pos), set_size, fap_dst->fa_id, rc);
+            rc = BOOT_EFLASH;
+            goto finish;
+        }
+
+        hdr_write_pos += set_size;
+    }
+#endif
 
     /* Read in, decompress and write out data */
 #ifdef MCUBOOT_ENC_IMAGES
