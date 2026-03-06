@@ -33,10 +33,12 @@
  * Sanity check the target support.
  */
 #if (!defined(CONFIG_XTENSA) && !defined(CONFIG_SOC_SERIES_NRF54H) && \
+    !defined(CONFIG_SOC_SERIES_NRF71) && \
     !DT_HAS_CHOSEN(zephyr_flash_controller)) || \
     (defined(CONFIG_XTENSA) && !DT_NODE_EXISTS(DT_INST(0, jedec_spi_nor)) && \
     !defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)) || \
-    (defined(CONFIG_SOC_SERIES_NRF54H) && !DT_HAS_CHOSEN(zephyr_flash)) || \
+    ((defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF71)) && \
+    !DT_HAS_CHOSEN(zephyr_flash)) || \
     !defined(FLASH_ALIGN) ||                  \
     !(FIXED_PARTITION_EXISTS(slot0_partition)) || \
     !(FIXED_PARTITION_EXISTS(slot1_partition) || CONFIG_SINGLE_APPLICATION_SLOT) || \
