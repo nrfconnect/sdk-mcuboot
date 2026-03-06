@@ -30,10 +30,6 @@
 
 #include <string.h>
 
-#if USE_PARTITION_MANAGER
-#include <pm_config.h>
-#endif
-
 #if defined(NRF_UARTE0) || defined(NRF_UARTE1) || defined(NRF_UARTE20) ||   \
     defined(NRF_UARTE30)
 #define NRF_UARTE_CLEANUP

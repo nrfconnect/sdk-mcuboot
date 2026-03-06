@@ -138,6 +138,13 @@
 
 #endif /* CONFIG_SINGLE_APPLICATION_SLOT */
 
+/* Is MCUboot second stage bootloader in NSIB configuration ? */
+#if CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER == -1
+#define MCUBOOT_IS_SECOND_STAGE 0
+#else
+#define MCUBOOT_IS_SECOND_STAGE 1
+#endif
+
 #ifdef CONFIG_SINGLE_APPLICATION_SLOT_RAM_LOAD
 #define MCUBOOT_RAM_LOAD    1
 #define MCUBOOT_IMAGE_NUMBER    1
