@@ -344,13 +344,13 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
         ${MBEDTLS_ASN1_DIR}/src/asn1parse.c
       )
     endif()
-    if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU)
+    if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
       zephyr_library_sources(
         ${BOOT_DIR}/bootutil/src/ed25519_psa.c
       )
     else()
       zephyr_library_sources(
-        ${BOOT_DIR}/bootutil/src/ed25519_psa_kmu.c
+        ${BOOT_DIR}/bootutil/src/ed25519_psa_kmu_its.c
       )
     endif()
   endif()
