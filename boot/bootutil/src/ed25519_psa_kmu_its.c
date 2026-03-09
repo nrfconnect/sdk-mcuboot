@@ -18,7 +18,7 @@
 #include <cracen_psa_kmu.h>
 #endif
 
-BOOT_LOG_MODULE_REGISTER(ed25519_psa_kmu);
+BOOT_LOG_MODULE_REGISTER(ed25519_psa_kmu_its);
 
 #define EDDSA_KEY_LENGTH        32
 #define EDDSA_SIGNAGURE_LENGTH  64
@@ -116,7 +116,7 @@ int exec_revoke(void)
             ret = BOOT_KEY_REVOKE_FAILED;
             goto out;
     }
-    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; i++) {
+    for (int i = 0; i < KEY_SLOTS_COUNT; i++) {
         if ( i == validated_with) {
             break;
         }
@@ -142,20 +142,20 @@ void nrf_crypto_keys_housekeeping(void)
      * processing any of it. Only doing BOOT_LOG_DBG, as we do not
      * really want to inform on failures to lock.
      */
-    for (int i = 0; i < CONFIG_BOOT_SIGNATURE_KMU_SLOTS; ++i) {
+    for (int i = 0; i < KEY_SLOTS_COUNT; ++i) {
         psa_key_attributes_t attr;
 
         status = psa_get_key_attributes(key_ids[i], &attr);
-        BOOT_LOG_DBG("KMU key 0x%x(%d) attr query status == %d",
-                     key_ids[i], i, status);
+        BOOT_LOG_DBG("Key 0x%x(%d) attr query status == %d", key_ids[i], i, status);
 
+#if defined(CONFIG_BOOT_SIGNATURE_USING_KMU)
         if (status == PSA_SUCCESS) {
             status = cracen_kmu_block(&attr);
-            BOOT_LOG_DBG("KMU key lock status == %d", status);
+            BOOT_LOG_DBG("Key 0x%x(%d) lock status == %d", key_ids[i], i, status);
         }
+#endif /* CONFIG_BOOT_SIGNATURE_USING_KMU */
 
         status = psa_purge_key(key_ids[i]);
-        BOOT_LOG_DBG("KMU key 0x%x(%d) purge status == %d",
-                     key_ids[i], i, status);
+        BOOT_LOG_DBG("Key 0x%x(%d) purge status == %d", key_ids[i], i, status);
     }
 }
