@@ -846,6 +846,13 @@ check_validity:
             fih_rc = FIH_NO_BOOTABLE_IMAGE;
             goto out;
         }
+#ifdef MCUBOOT_DECOMPRESS_IMAGES
+        if (MUST_DECOMPRESS(fap, BOOT_CURR_IMG(state), secondary_hdr)) {
+            BOOT_LOG_DBG("Image %d is compressed, skipping reset vector address check",
+                         BOOT_CURR_IMG(state));
+            check_addresses = false;
+        }
+#endif /* MCUBOOT_DECOMPRESS_IMAGES */
 #endif
 
         BOOT_LOG_DBG("Image %d expected load address 0x%x", BOOT_CURR_IMG(state), internal_img_addr);
