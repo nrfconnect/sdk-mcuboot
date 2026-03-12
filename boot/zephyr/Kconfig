@@ -1504,4 +1504,20 @@ config NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS
 	  Time between image validation attempts, in milliseconds.
 	  Allows for recovery from transient bit flips or similar situations.
 
+config NCS_MCUBOOT_LCS_AWARE
+	bool "Enable lifecycle state awareness"
+	depends on LCS
+	default y
+	help
+	  If y, the bootloader will be aware of the device lifecycle state and
+	  will only boot and update images in matching lifecycle states.
+
+config NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER
+	int "Manufacturing application key identifier"
+	depends on NCS_MCUBOOT_LCS_AWARE
+	default 224 if BOOT_SIGNATURE_USING_KMU
+	default 0
+	help
+	  Manufacturing application key identifier.
+
 source "Kconfig.zephyr"

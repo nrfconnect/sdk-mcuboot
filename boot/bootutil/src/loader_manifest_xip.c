@@ -48,6 +48,9 @@
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/boot_hooks.h"
 #include "bootutil_loader.h"
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+#include <bootloader/lcs.h>
+#endif
 
 #if defined(MCUBOOT_MANIFEST_UPDATES) && defined(MCUBOOT_DIRECT_XIP)
 #include "bootutil/mcuboot_manifest.h"
@@ -353,6 +356,37 @@ boot_select_or_erase(struct boot_loader_state *state)
         /* Image was not selected for test. Skip slot. */
         return -1;
     }
+
+#ifdef CONFIG_NCS_MCUBOOT_LCS_AWARE
+    switch (lcs_get()) {
+    case LCS_ASSEMBLY_AND_TEST:
+    case LCS_PSA_ROT_PROVISIONING:
+    {
+        /*
+         * The FW update logic is allowed only in the secured state.
+         * Avoid booting or marking any image that is not already confirmed.
+         */
+        if (active_swap_state->magic == BOOT_MAGIC_GOOD &&
+            active_swap_state->copy_done == BOOT_FLAG_SET &&
+            active_swap_state->image_ok == BOOT_FLAG_SET) {
+            BOOT_LOG_INF("Selecting provisioning image from the %s slot",
+                         (active_slot == BOOT_SLOT_PRIMARY) ?
+                         "primary" : "secondary");
+            return 0;
+        }
+
+        return -1;
+    }
+
+    case LCS_SECURED:
+        /* Execute the regular logic in the secured state. */
+        break;
+
+    default:
+        /* The device is in a non-secured state. Avoid booting or marking any image. */
+        return -1;
+    }
+#endif /* CONFIG_NCS_MCUBOOT_LCS_AWARE */
 
     if (active_swap_state->copy_done == BOOT_FLAG_SET &&
         active_swap_state->image_ok  != BOOT_FLAG_SET) {
