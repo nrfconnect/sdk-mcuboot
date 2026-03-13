@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+# Auto-generated file. Do not edit manually!
+
+add_library(uuid STATIC)
+{%- for file in source_files %}
+target_sources(uuid PRIVATE {{ file }})
+{%- endfor %}
+
