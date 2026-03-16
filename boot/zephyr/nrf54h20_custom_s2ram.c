@@ -6,8 +6,8 @@
 #include <stdbool.h>
 #include <zephyr/arch/common/pm_s2ram.h>
 #include <hal/nrf_resetinfo.h>
-#include "pm_s2ram.h"
-#include "power.h"
+#include "haltium_pm_s2ram.h"
+#include "haltium_power.h"
 
 #include <zephyr/devicetree.h>
 #include <zephyr/storage/flash_map.h>
