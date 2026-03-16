@@ -21,7 +21,7 @@ BUILD_ASSERT(MCUBOOT_IMAGE_NUMBER <= 2,
 	     "partitions does not currently support more than two images.");
 
 /* Required alignment for OVERRIDE addresses in MPC110. */
-#define OVERRIDE_ALIGNMENT KB(4)
+#define OVERRIDE_ALIGNMENT (4UL * 1024UL)
 
 /* clang-format off */
 #define MIN_START_ADDR(_label0, _label1)                                                           \
@@ -75,38 +75,50 @@ BUILD_ASSERT((BOOT_PARTITION_END % OVERRIDE_ALIGNMENT) == 0);
  * We define:
  * - "active 0" as the slot 0 image with the lowest address.
  * - "active 1" as the slot 0 image with the highest address (if it exists).
+ *
+ * The final 4kB of each image area is left writable, to allow the booted firmware to write to the
+ * end of the image trailer. If the the image trailer is less than 4kB, this means that the end of
+ * the image firmware is also left writable.
  */
 #define SLOT0_ACTIVE0_START MIN_START_ADDR(slot0_partition, slot2_partition)
 BUILD_ASSERT((SLOT0_ACTIVE0_START % OVERRIDE_ALIGNMENT) == 0);
 
-#define SLOT0_ACTIVE0_END MIN_END_ADDR(slot0_partition, slot2_partition)
-BUILD_ASSERT((SLOT0_ACTIVE0_END % OVERRIDE_ALIGNMENT) == 0);
+#define SLOT0_ACTIVE0_END (MIN_END_ADDR(slot0_partition, slot2_partition) - OVERRIDE_ALIGNMENT)
+BUILD_ASSERT((SLOT0_ACTIVE0_END > SLOT0_ACTIVE0_START) &&
+	     (SLOT0_ACTIVE0_END % OVERRIDE_ALIGNMENT) == 0);
 
 #if MCUBOOT_IMAGE_NUMBER > 1
 #define SLOT0_ACTIVE1_START MAX_START_ADDR(slot0_partition, slot2_partition)
 BUILD_ASSERT((SLOT0_ACTIVE1_START % OVERRIDE_ALIGNMENT) == 0);
 
-#define SLOT0_ACTIVE1_END MAX_END_ADDR(slot0_partition, slot2_partition)
-BUILD_ASSERT((SLOT0_ACTIVE1_END % OVERRIDE_ALIGNMENT) == 0);
+#define SLOT0_ACTIVE1_END (MAX_END_ADDR(slot0_partition, slot2_partition) - OVERRIDE_ALIGNMENT)
+BUILD_ASSERT((SLOT0_ACTIVE1_END > SLOT0_ACTIVE1_START) &&
+	     (SLOT0_ACTIVE1_END % OVERRIDE_ALIGNMENT) == 0);
 #endif
 
 /* Address ranges of the "active" images when booting slot 1.
  * We define:
  * - "active 0" as the slot 1 image with the lowest address.
  * - "active 1" as the slot 1 image with the highest address (if it exists).
+ *
+ * The final 4kB of each image area is left writable, to allow the booted firmware to write to the
+ * end of the image trailer. If the the image trailer is less than 4kB, this means that the end of
+ * the image firmware is also left writable.
  */
 #define SLOT1_ACTIVE0_START MIN_START_ADDR(slot1_partition, slot3_partition)
 BUILD_ASSERT((SLOT1_ACTIVE0_START % OVERRIDE_ALIGNMENT) == 0);
 
-#define SLOT1_ACTIVE0_END MIN_END_ADDR(slot1_partition, slot3_partition)
-BUILD_ASSERT((SLOT1_ACTIVE0_END % OVERRIDE_ALIGNMENT) == 0);
+#define SLOT1_ACTIVE0_END (MIN_END_ADDR(slot1_partition, slot3_partition) - OVERRIDE_ALIGNMENT)
+BUILD_ASSERT((SLOT1_ACTIVE0_END > SLOT1_ACTIVE0_START) &&
+	     (SLOT1_ACTIVE0_END % OVERRIDE_ALIGNMENT) == 0);
 
 #if MCUBOOT_IMAGE_NUMBER > 1
 #define SLOT1_ACTIVE1_START MAX_START_ADDR(slot1_partition, slot3_partition)
 BUILD_ASSERT((SLOT1_ACTIVE1_START % OVERRIDE_ALIGNMENT) == 0);
 
-#define SLOT1_ACTIVE1_END MAX_END_ADDR(slot1_partition, slot3_partition)
-BUILD_ASSERT((SLOT1_ACTIVE1_END % OVERRIDE_ALIGNMENT) == 0);
+#define SLOT1_ACTIVE1_END (MAX_END_ADDR(slot1_partition, slot3_partition) - OVERRIDE_ALIGNMENT)
+BUILD_ASSERT((SLOT1_ACTIVE1_END > SLOT1_ACTIVE1_START) &&
+	     (SLOT1_ACTIVE1_END % OVERRIDE_ALIGNMENT) == 0);
 #endif
 
 /* MPC overrides used to implement image write protection.
