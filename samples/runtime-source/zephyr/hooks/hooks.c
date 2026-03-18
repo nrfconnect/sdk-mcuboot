@@ -17,8 +17,8 @@ static struct image_header _hdr;
 static uint8_t tmpbuf[BOOT_TMPBUF_SZ];
 
 static uint8_t known_ids[] = {
-	FIXED_PARTITION_ID(slot0_partition),
-	FIXED_PARTITION_ID(slot1_partition),
+	PARTITION_ID(slot0_partition),
+	PARTITION_ID(slot1_partition),
 };
 
 static int current_id;

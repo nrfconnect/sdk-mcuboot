@@ -79,31 +79,31 @@
 #define PROTECTED_REGION_START_SKIP CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
 
 #define SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET      \
-    FIXED_PARTITION_OFFSET(SECOND_STAGE_ACTIVE_PARTITION)
+    PARTITION_OFFSET(SECOND_STAGE_ACTIVE_PARTITION)
 
 #define SECOND_STAGE_ACTIVE_MCUBOOT_SIZE        \
-    FIXED_PARTITION_SIZE(SECOND_STAGE_ACTIVE_PARTITION)
+    PARTITION_SIZE(SECOND_STAGE_ACTIVE_PARTITION)
 
 #define SECOND_STAGE_ACTIVE_MCUBOOT_ID          \
-    FIXED_PARTITION_ID(SECOND_STAGE_ACTIVE_PARTITION)
+    PARTITION_ID(SECOND_STAGE_ACTIVE_PARTITION)
 
 #define SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET      \
-    FIXED_PARTITION_OFFSET(SECOND_STAGE_INACTIVE_PARTITION)
+    PARTITION_OFFSET(SECOND_STAGE_INACTIVE_PARTITION)
 
 #define SECOND_STAGE_INACTIVE_MCUBOOT_SIZE        \
-    FIXED_PARTITION_SIZE(SECOND_STAGE_INACTIVE_PARTITION)
+    PARTITION_SIZE(SECOND_STAGE_INACTIVE_PARTITION)
 
 #define SECOND_STAGE_INACTIVE_MCUBOOT_ID          \
-    FIXED_PARTITION_ID(SECOND_STAGE_INACTIVE_PARTITION)
+    PARTITION_ID(SECOND_STAGE_INACTIVE_PARTITION)
 
 /* FPROTECT region covers both S0 and S1 slots. Assumption here is
  * that they precede PRIMARY application image partition, in flash
  * layout.
  */
 #ifdef CONFIG_FPROTECT
-#define FPROTECT_REGION_OFFSET  FIXED_PARTITION_OFFSET(s0_partition)
+#define FPROTECT_REGION_OFFSET  PARTITION_OFFSET(s0_partition)
 #define FPROTECT_REGION_SIZE    \
-    (FIXED_PARTITION_SIZE(s0_partition) + FIXED_PARTITION_SIZE(s1_partition))
+    (PARTITION_SIZE(s0_partition) + PARTITION_SIZE(s1_partition))
 #endif
 
 /* RWX protection regions: the currently executing MCUboot is protecting itself */
@@ -139,12 +139,12 @@
 static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 {
     static const int all_slots[] = {
-        FIXED_PARTITION_ID(slot0_partition), FIXED_PARTITION_ID(slot1_partition),
+        PARTITION_ID(slot0_partition), PARTITION_ID(slot1_partition),
 #if MCUBOOT_NEEDED_SLOT_PAIRS > 1
-        FIXED_PARTITION_ID(slot2_partition), FIXED_PARTITION_ID(slot3_partition),
+        PARTITION_ID(slot2_partition), PARTITION_ID(slot3_partition),
 #endif
 #if MCUBOOT_NEEDED_SLOT_PAIRS > 2
-        FIXED_PARTITION_ID(slot4_partition), FIXED_PARTITION_ID(slot5_partition),
+        PARTITION_ID(slot4_partition), PARTITION_ID(slot5_partition),
 #endif
 #ifdef MCUBOOT_IS_SECOND_STAGE
 /* MCUboot as a second stage bootloader brings in two additional slots;
@@ -152,7 +152,7 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
  * of update. At this point source slot is, by default, secondary slot
  * of primary image.
  */
-        SECOND_STAGE_INACTIVE_MCUBOOT_ID, FIXED_PARTITION_ID(slot1_partition)
+        SECOND_STAGE_INACTIVE_MCUBOOT_ID, PARTITION_ID(slot1_partition)
 #endif
     };
     return all_slots[img * 2 + slot];
@@ -162,13 +162,13 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #define FLASH_AREA_IMAGE_SECONDARY(x) __flash_area_ids_for_slot(x, 1)
 
 #if !defined(CONFIG_BOOT_SWAP_USING_MOVE) && !defined(CONFIG_BOOT_SWAP_USING_OFFSET)
-#define FLASH_AREA_IMAGE_SCRATCH    FIXED_PARTITION_ID(scratch_partition)
+#define FLASH_AREA_IMAGE_SCRATCH    PARTITION_ID(scratch_partition)
 #endif
 
 #else /* !CONFIG_SINGLE_APPLICATION_SLOT && !CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP */
 
-#define FLASH_AREA_IMAGE_PRIMARY(x)	FIXED_PARTITION_ID(slot0_partition)
-#define FLASH_AREA_IMAGE_SECONDARY(x)	FIXED_PARTITION_ID(slot0_partition)
+#define FLASH_AREA_IMAGE_PRIMARY(x)	PARTITION_ID(slot0_partition)
+#define FLASH_AREA_IMAGE_SECONDARY(x)	PARTITION_ID(slot0_partition)
 
 #endif /* CONFIG_SINGLE_APPLICATION_SLOT */
 
@@ -176,14 +176,14 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 #ifndef MCUBOOT_IS_SECOND_STAGE
 /* Protecting MCUboot partition */
 #ifdef CONFIG_FPROTECT
-#define FPROTECT_REGION_OFFSET  FIXED_PARTITION_OFFSET(boot_partition)
-#define FPROTECT_REGION_SIZE    FIXED_PARTITION_SIZE(boot_partition)
+#define FPROTECT_REGION_OFFSET  PARTITION_OFFSET(boot_partition)
+#define FPROTECT_REGION_SIZE    PARTITION_SIZE(boot_partition)
 #endif
 
 /* RWX protection regions, MCUboot is protecting itself */
 #if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
-#define PROTECTED_REGION_START  FIXED_PARTITION_OFFSET(boot_partition)
-#define PROTECTED_REGION_SIZE   FIXED_PARTITION_SIZE(boot_partition)
+#define PROTECTED_REGION_START  PARTITION_OFFSET(boot_partition)
+#define PROTECTED_REGION_SIZE   PARTITION_SIZE(boot_partition)
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 #endif
 
