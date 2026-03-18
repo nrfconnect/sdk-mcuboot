@@ -25,8 +25,6 @@ volatile struct mcuboot_resume_s mcuboot_resume;
 #error  "mcuboot resume support section not defined in dts"
 #endif
 
-#define FIXED_PARTITION_ADDR(node_label) DT_REG_ADDR(DT_NODELABEL(node_label))
-
 #define S2RAM_SLOT_INFO_A 0x37
 #define S2RAM_SLOT_INFO_B 0xA4
 
@@ -76,17 +74,17 @@ void pm_s2ram_mark_check_and_mediate(void)
 #ifdef CONFIG_BOOT_DIRECT_XIP
     if (mcuboot_resume.slot_info == S2RAM_SLOT_INFO_A) {
         vt = (struct arm_vector_table *)
-                 (FIXED_PARTITION_ADDR(slot0_partition) + APP_EXE_START_OFFSET);
+                 (PARTITION_ADDRESS(slot0_partition) + APP_EXE_START_OFFSET);
     } else if (mcuboot_resume.slot_info == S2RAM_SLOT_INFO_B) {
         vt = (struct arm_vector_table *)
-                 (FIXED_PARTITION_ADDR(slot1_partition) + APP_EXE_START_OFFSET);
+                 (PARTITION_ADDRESS(slot1_partition) + APP_EXE_START_OFFSET);
     }  else {
         /* invalid slot info */
         goto resume_failed;
     }
 #else
     vt = (struct arm_vector_table *)
-            (FIXED_PARTITION_ADDR(slot0_partition) + APP_EXE_START_OFFSET);
+            (PARTITION_ADDRESS(slot0_partition) + APP_EXE_START_OFFSET);
 #endif
 
     /* Jump to application */
