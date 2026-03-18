@@ -40,14 +40,14 @@
     ((defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF71)) && \
     !DT_HAS_CHOSEN(zephyr_flash)) || \
     !defined(FLASH_ALIGN) ||                  \
-    !(FIXED_PARTITION_EXISTS(slot0_partition)) || \
-    !(FIXED_PARTITION_EXISTS(slot1_partition) || CONFIG_SINGLE_APPLICATION_SLOT) || \
-    (defined(CONFIG_BOOT_SWAP_USING_SCRATCH) && !FIXED_PARTITION_EXISTS(scratch_partition))
+    !(PARTITION_EXISTS(slot0_partition)) || \
+    !(PARTITION_EXISTS(slot1_partition) || CONFIG_SINGLE_APPLICATION_SLOT) || \
+    (defined(CONFIG_BOOT_SWAP_USING_SCRATCH) && !PARTITION_EXISTS(scratch_partition))
 #error "Target support is incomplete; cannot build mcuboot."
 #endif
 
-#if (MCUBOOT_IMAGE_NUMBER == 2) && (!(FIXED_PARTITION_EXISTS(slot2_partition)) || \
-                                     !(FIXED_PARTITION_EXISTS(slot3_partition)))
+#if (MCUBOOT_IMAGE_NUMBER == 2) && (!(PARTITION_EXISTS(slot2_partition)) || \
+                                     !(PARTITION_EXISTS(slot3_partition)))
 #error "Target support is incomplete; cannot build mcuboot."
 #endif
 

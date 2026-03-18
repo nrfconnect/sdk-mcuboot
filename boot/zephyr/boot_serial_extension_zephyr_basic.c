@@ -41,7 +41,7 @@ static int bs_custom_storage_erase(const struct nmgr_hdr *hdr,
         return MGMT_ERR_ENOTSUP;
     }
 
-    rc = flash_area_open(FIXED_PARTITION_ID(storage_partition), &fa);
+    rc = flash_area_open(PARTITION_ID(storage_partition), &fa);
 
     if (rc < 0) {
         BOOT_LOG_ERR("failed to open flash area");
