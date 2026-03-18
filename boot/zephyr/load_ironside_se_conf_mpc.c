@@ -25,49 +25,49 @@ BUILD_ASSERT(MCUBOOT_IMAGE_NUMBER <= 2,
 
 /* clang-format off */
 #define MIN_START_ADDR(_label0, _label1)                                                           \
-	MIN(FIXED_PARTITION_ADDRESS(_label0),                                                    \
+	MIN(PARTITION_ADDRESS(_label0),                                                    \
 	    COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(_label1)),                            \
-	        (FIXED_PARTITION_ADDRESS(_label1)),                                              \
+	        (PARTITION_ADDRESS(_label1)),                                              \
 	        (UINTPTR_MAX)))
 
 #define MIN_END_ADDR(_label0, _label1)                                                             \
-	MIN((FIXED_PARTITION_ADDRESS(_label0) + FIXED_PARTITION_SIZE(_label0)),                    \
+	MIN((PARTITION_ADDRESS(_label0) + PARTITION_SIZE(_label0)),                    \
 	    COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(_label1)),                            \
-	        ((FIXED_PARTITION_ADDRESS(_label1) + FIXED_PARTITION_SIZE(_label1))),              \
+	        ((PARTITION_ADDRESS(_label1) + PARTITION_SIZE(_label1))),              \
 	        (UINTPTR_MAX)))
 
 #define MAX_START_ADDR(_label0, _label1)                                                           \
-	MAX(FIXED_PARTITION_ADDRESS(_label0),                                                      \
+	MAX(PARTITION_ADDRESS(_label0),                                                      \
 	    COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(_label1)),                            \
-	        (FIXED_PARTITION_ADDRESS(_label1)),                                                \
+	        (PARTITION_ADDRESS(_label1)),                                                \
 	        (0)))
 
 #define MAX_END_ADDR(_label0, _label1)                                                             \
-	MAX((FIXED_PARTITION_ADDRESS(_label0) + FIXED_PARTITION_SIZE(_label0)),                    \
+	MAX((PARTITION_ADDRESS(_label0) + PARTITION_SIZE(_label0)),                    \
 	    COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(_label1)),                            \
-	        ((FIXED_PARTITION_ADDRESS(_label1) + FIXED_PARTITION_SIZE(_label1))),              \
+	        ((PARTITION_ADDRESS(_label1) + PARTITION_SIZE(_label1))),              \
 	        (0)))
 /* clang-format on */
 
-#define ACCESSIBLE_MRAM_START FIXED_PARTITION_NODE_ADDRESS(DT_CHOSEN(zephyr_code_partition))
+#define ACCESSIBLE_MRAM_START PARTITION_NODE_ADDRESS(DT_CHOSEN(zephyr_code_partition))
 BUILD_ASSERT((ACCESSIBLE_MRAM_START % OVERRIDE_ALIGNMENT) == 0);
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(secure_storage_partition))
-BUILD_ASSERT((FIXED_PARTITION_ADDRESS(secure_storage_partition) +
-	      FIXED_PARTITION_SIZE(secure_storage_partition)) ==
+BUILD_ASSERT((PARTITION_ADDRESS(secure_storage_partition) +
+	      PARTITION_SIZE(secure_storage_partition)) ==
 		     (DT_REG_ADDR(DT_NODELABEL(mram1x)) + DT_REG_SIZE(DT_NODELABEL(mram1x))),
 	     "The MPC override configuration used to provide write protection for the image "
 	     "partitions currently requires that the secure storage partitions are placed at the "
 	     "end of MRAM.");
 
-#define ACCESSIBLE_MRAM_END FIXED_PARTITION_ADDRESS(secure_storage_partition)
+#define ACCESSIBLE_MRAM_END PARTITION_ADDRESS(secure_storage_partition)
 #else
 #define ACCESSIBLE_MRAM_END (DT_REG_ADDR(DT_NODELABEL(mram1x)) + DT_REG_SIZE(DT_NODELABEL(mram1x)))
 #endif
 BUILD_ASSERT((ACCESSIBLE_MRAM_END % OVERRIDE_ALIGNMENT) == 0);
 
 #define BOOT_PARTITION_END                                                                         \
-	(FIXED_PARTITION_NODE_ADDRESS(DT_CHOSEN(zephyr_code_partition)) +                          \
+	(PARTITION_NODE_ADDRESS(DT_CHOSEN(zephyr_code_partition)) +                          \
 	 CONFIG_NCS_MCUBOOT_MPCCONF_STATIC_WRITE_PROTECTION_INITIAL_REGION_SIZE)
 BUILD_ASSERT((BOOT_PARTITION_END % OVERRIDE_ALIGNMENT) == 0);
 
