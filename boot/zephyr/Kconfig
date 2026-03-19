@@ -101,15 +101,26 @@ config BOOT_ED25519_PSA_DEPENDENCIES
 
 if BOOT_ENCRYPT_IMAGE
 
+config BOOT_AES_DEPENDENCIES
+	bool
+	default y if BOOT_USE_PSA_CRYPTO
+	select PSA_WANT_ALG_CTR
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_AES_KEY_SIZE_256 if BOOT_ENCRYPT_ALG_AES_256
+	select PSA_WANT_AES_KEY_SIZE_128 if BOOT_ENCRYPT_ALG_AES_128
+	help
+	  PSA Dependencies for image encryption. At this point they select
+	  AES CTR mode with support for key as selected by user.
+
+if !BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
+
 config BOOT_X25519_PSA_DEPENDENCIES
 	bool
 	select PSA_WANT_ALG_ECDH
 	select PSA_WANT_ALG_HMAC
 	select PSA_WANT_ALG_HKDF
-	select PSA_WANT_ALG_CTR
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
 	select PSA_WANT_KEY_TYPE_DERIVE
-	select PSA_WANT_KEY_TYPE_AES
 	select PSA_WANT_ECC_MONTGOMERY_255
 	help
 	  Dependencies for x25519 shared-random key encryption and AES
@@ -117,6 +128,8 @@ config BOOT_X25519_PSA_DEPENDENCIES
 	  enable Counter based block cipher and AES key, and algorithm support,
 	  to use with it; the others are used for shared key decryption
 	  and derivation.
+
+endif # !BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
 
 endif # BOOT_ENCRYPT_IMAGE
 
@@ -377,7 +390,7 @@ config BOOT_ED25519_PSA
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !PSA_CORE_LITE
 	select BOOT_IMG_HASH_ALG_SHA512_ALLOW if !PSA_CORE_LITE
 	select BOOT_ED25519_PSA_DEPENDENCIES
-	select BOOT_X25519_PSA_DEPENDENCIES if BOOT_ENCRYPT_IMAGE
+	select BOOT_X25519_PSA_DEPENDENCIES if BOOT_ENCRYPT_IMAGE_WITH_SHARED_KEY
 
 endchoice
 
@@ -475,6 +488,7 @@ if !BOOT_SIGNATURE_USING_KMU && !NCS_BOOT_SIGNATURE_USING_ITS
 
 config BOOT_SIGNATURE_KEY_FILE
 	string "PEM key file"
+	depends on !BOOT_SIGNATURE_TYPE_NONE
 	default "root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
 	default "root-ed25519.pem" if BOOT_SIGNATURE_TYPE_ED25519
 	default "root-rsa-3072.pem" if BOOT_SIGNATURE_TYPE_RSA && BOOT_SIGNATURE_TYPE_RSA_LEN=3072
@@ -483,12 +497,15 @@ config BOOT_SIGNATURE_KEY_FILE
 	help
 	  You can use either absolute or relative path.
 	  In case relative path is used, the build system assumes that it starts
-	  from the directory where the MCUBoot KConfig configuration file is
-	  located. If the key file is not there, the build system uses relative
-	  path that starts from the MCUBoot repository root directory.
+	  from the APPLICATION_CONFIG_DIR directory. If the key file is not there, the build
+	  system uses relative path that starts from the MCUBoot repository root directory.
 	  The key file will be parsed by imgtool's getpub command and a .c source
 	  with the public key information will be written in a format expected by
 	  MCUboot.
+
+	  Note: In configuration files, escaped CMake variables can be used to refer to paths
+	  e.g. \${CMAKE_CURRENT_LIST_DIR} will allow referencing a file in that directory, these
+	  will be automatically configured by the build system.
 
 endif
 
@@ -703,7 +720,8 @@ config BOOT_BOOTSTRAP
 
 config BOOT_SWAP_SAVE_ENCTLV
 	bool "Save encrypted key TLVs instead of plaintext keys in swap metadata"
-	depends on BOOT_ENCRYPT_IMAGE
+	depends on BOOT_ENCRYPT_IMAGE_WITH_SHARED_KEY
+	depends on !BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
 	help
 	  If y, instead of saving the encrypted image keys in plaintext in the
 	  swap resume metadata, save the encrypted image TLVs. This should be used
@@ -745,6 +763,16 @@ config MULTIPLE_EXECUTABLE_RAM_REGIONS
 	  When selected, boot_get_image_exec_ram_info() should be updated to provide
 	  the information about the areas.
 
+config MULTIPLE_EXECUTABLE_RAM_REGIONS_DEFAULT_FILE
+	bool "Default MCUboot multiple executable RAM region source file"
+	default y
+	depends on MULTIPLE_EXECUTABLE_RAM_REGIONS
+	help
+	  When enabled, will include the default MCUboot file that has the
+	  boot_get_image_exec_ram_info() implementation in it, for users with out-of-tree or
+	  custom configuration then this option can be disabled and a custom file can be added
+	  by a CMake module which defines the configuration for the intended board.
+
 config FLASH_RUNTIME_SOURCES
 	bool "Images are read from flash partitions defined at runtime"
 	depends on SINGLE_APPLICATION_SLOT
@@ -761,12 +789,62 @@ config BOOT_ENCRYPTION_SUPPORT
 	help
 	  Hidden option used to check if image encryption is supported.
 
-config BOOT_ENCRYPT_IMAGE
-	bool "Support for encrypted image updates"
-	depends on BOOT_ENCRYPTION_SUPPORT
+config BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
+	bool "Use key that is already on board with MCUboot [EXPERIMENTAL]"
+	depends on BOOT_ENCRYPT_IMAGE
+	help
+	  The key is supposed to be either compiled in or on board.
+	  User is responsible for providing boot_enc_take_key
+	  function that will be able to retrieve the key.
+
+if BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
+
+choice  BOOT_ENCRYPT_IMAGE_EMBEDDED_KEY_PROVIDER
+	prompt "Embedded AES key provider"
+	default BOOT_ENCRYPT_IMAGE_GENERATE_BASIC_KEY_PROVIDER
+
+config BOOT_ENCRYPT_IMAGE_GENERATE_BASIC_KEY_PROVIDER
+	bool "Generate basic boot_enc_take_key"
+	depends on BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
+	help
+	  Basic implementation of boot_enc_take_key will be implemented,
+	  that will have single key built in, used for all images and
+	  slots.
+
+config BOOT_ENCRYPT_IMAGE_USE_CUSTOM_KEY_PROVIDER
+	bool "User provides source code for key provider"
+        help
+          User is required to provide implementation for
+          the boot_enc_take_key function.
+
+endchoice # BOOT_ENCRYPT_IMAGE_EMBEDDED_KEY_PROVIDER
+
+config BOOT_ENCRYPT_IMAGE_EMBEDDED_RAW_KEY
+	string "Hexadecimal string representing AES key [EXPERIMENTAL]"
+	depends on BOOT_ENCRYPT_IMAGE_GENERATE_BASIC_KEY_PROVIDER
+	help
+	  AES key in form of hexadecimal string that will be used to
+          generate boot_enc_take_key function, returning the key for
+          decryption and encryption of image.
+	  The key character length should be the double of expected
+	  AES key length in bytes.
+
+endif # BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
+
+config BOOT_ENCRYPT_IMAGE_WITH_SHARED_KEY
+	bool
+	default y if !BOOT_ENCRYPT_IMAGE_WITH_EMBEDDED_KEY
+	depends on BOOT_ENCRYPT_IMAGE
 	select BOOT_ENCRYPT_RSA if BOOT_SIGNATURE_TYPE_RSA
 	select BOOT_ENCRYPT_EC256 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 	select BOOT_ENCRYPT_X25519 if BOOT_SIGNATURE_TYPE_ED25519
+	help
+	  Hidden option for default behaviour where AES encryption key
+	  is derived from Public Key Cryptography key exchange.
+
+config BOOT_ENCRYPT_IMAGE
+	bool "Support for encrypted image updates"
+	depends on BOOT_ENCRYPTION_SUPPORT
 	depends on !SINGLE_APPLICATION_SLOT || MCUBOOT_SERIAL
 	help
 	  If y, images in the secondary slot can be encrypted and are decrypted
@@ -855,12 +933,15 @@ config BOOT_ENCRYPTION_KEY_FILE
 	help
 	  You can use either absolute or relative path.
 	  In case relative path is used, the build system assumes that it starts
-	  from the directory where the MCUBoot KConfig configuration file is
-	  located. If the key file is not there, the build system uses relative
-	  path that starts from the MCUBoot repository root directory.
+	  from the APPLICATION_CONFIG_DIR directory. If the key file is not there, the build
+	  system uses relative path that starts from the MCUBoot repository root directory.
 	  The key file will be parsed by imgtool's getpriv command and a .c source
 	  with the public key information will be written in a format expected by
 	  MCUboot.
+
+	  Note: In configuration files, escaped CMake variables can be used to refer to paths
+	  e.g. \${CMAKE_CURRENT_LIST_DIR} will allow referencing a file in that directory, these
+	  will be automatically configured by the build system.
 
 config BOOT_MAX_IMG_SECTORS_AUTO
 	bool "Calculate maximum sectors automatically"
