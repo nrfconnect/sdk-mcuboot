@@ -34,13 +34,6 @@ from imgtool.version import decode_version
 
 from .keys import ECDSAUsageError, Ed25519UsageError, RSAUsageError, X25519UsageError
 
-comp_default_dictsize=131072
-comp_default_pb=2
-comp_default_lc=3
-comp_default_lp=1
-comp_default_preset=9
-
-
 MIN_PYTHON_VERSION = (3, 6)
 if sys.version_info < MIN_PYTHON_VERSION:
     sys.exit("Python {}.{} or newer is required by imgtool.".format(*MIN_PYTHON_VERSION))
@@ -458,13 +451,24 @@ class BasedIntParamType(click.ParamType):
               help='Unique image class identifier, format: (<raw_uuid>|<image_class_name>)')
 @click.option('--manifest', default=None, required=False,
               help='Path to the update manifest file')
+@click.option('--compression-lzma-dictsize', type=int, default=128*1024,
+              help='LZMA - dictionary size, in bytes', show_default=True)
+@click.option('--compression-lzma-pb', type=int, default=2,
+              help='LZMA - number of position bits', show_default=True)
+@click.option('--compression-lzma-lc', type=int, default=3,
+              help='LZMA - number of literal context bits', show_default=True)
+@click.option('--compression-lzma-lp', type=int, default=1,
+              help='LZMA - number of literal position bits', show_default=True)
+@click.option('--compression-lzma-preset', type=int, default=9,
+              help='LZMA - compression level preset', show_default=True)
 def sign(key, public_key_format, align, version, pad_sig, header_size,
          pad_header, slot_size, pad, confirm, max_sectors, overwrite_only,
          endian, encrypt_keylen, encrypt, compression, infile, outfile,
          dependencies, load_addr, hex_addr, erased_val, save_enctlv,
          security_counter, boot_record, custom_tlv, custom_tlv_file, rom_fixed, max_align,
          clear, fix_sig, fix_sig_pubkey, sig_out, user_sha, hmac_sha, is_pure,
-         vector_to_sign, non_bootable, vid, cid, manifest):
+         vector_to_sign, non_bootable, vid, cid, manifest,
+         compression_lzma_dictsize, compression_lzma_pb, compression_lzma_lc, compression_lzma_lp, compression_lzma_preset):
 
     if confirm:
         # Confirmed but non-padded images don't make much sense, because
@@ -555,9 +559,9 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                   security_counter=security_counter, max_align=max_align,
                   vid=vid, cid=cid, manifest=manifest)
         compression_filters = [
-            {"id": lzma.FILTER_LZMA2, "preset": comp_default_preset,
-                "dict_size": comp_default_dictsize, "lp": comp_default_lp,
-                "lc": comp_default_lc}
+            {"id": lzma.FILTER_LZMA2, "preset": compression_lzma_preset,
+                "dict_size": compression_lzma_dictsize, "lp": compression_lzma_lp,
+                "lc": compression_lzma_lc}
         ]
         if compression == "lzma2armthumb":
             compression_filters.insert(0, {"id":lzma.FILTER_ARMTHUMB})
@@ -579,8 +583,8 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
             compression_tlvs_size += len(compression_tlvs["DECOMP_SIGNATURE"])
         if (compressed_size + compression_tlvs_size) < uncompressed_size:
             compression_header = create_lzma2_header(
-                dictsize = comp_default_dictsize, pb = comp_default_pb,
-                lc = comp_default_lc, lp = comp_default_lp)
+                dictsize = compression_lzma_dictsize, pb = compression_lzma_pb,
+                lc = compression_lzma_lc, lp = compression_lzma_lp)
             compressed_img.load_compressed(compressed_data, compression_header)
             compressed_img.base_addr = img.base_addr
             keep_comp_size = False
