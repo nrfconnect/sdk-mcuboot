@@ -1831,6 +1831,12 @@ boot_review_image_swap_types(struct boot_loader_state *state,
      *      REVERT swap types to NONE (these images had been successfully
      *      updated before the system rebooted between two separate image
      *      upgrades).
+     *
+     * Note: scenario 2 is indistinguishable from one where a higher-numbered image
+     * is uploaded while a lower-numbered image is currently running in TEST mode.
+     * In such a case, the REVERT swap type for the lower-numbered image is actually appropriate.
+     * Due to the following  code the revert process for the lower-numbered image
+     * will be postponed until the next reboot.
      */
 
     if (BOOT_CURR_IMG(state) == 0) {
