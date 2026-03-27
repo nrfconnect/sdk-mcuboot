@@ -37,16 +37,14 @@ void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs)
     const struct flash_area *fap_pri;
     const struct flash_area *fap_sec;
     int rc;
+    const struct image_header *hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
 
     BOOT_LOG_INF("Starting swap using nsib algorithm.");
 
     sector_sz = boot_img_sector_size(state, BOOT_SLOT_SECONDARY, 0);
 
-#if (CONFIG_NCS_IS_VARIANT_IMAGE)
-    rc = flash_area_open(PM_S0_ID, &fap_pri);
-#else
-    rc = flash_area_open(PM_S1_ID, &fap_pri);
-#endif
+    rc = flash_area_open(SECOND_STAGE_INACTIVE_MCUBOOT_ID, &fap_pri);
+
     assert (rc == 0);
     image_index = BOOT_CURR_IMG(state);
 
@@ -56,7 +54,7 @@ void nsib_swap_run(struct boot_loader_state *state, struct boot_status *bs)
     rc = boot_erase_region(fap_pri, 0, fap_pri->fa_size, false);
     assert(rc == 0);
 
-    rc = boot_copy_region(state, fap_sec, fap_pri, 0, 0, fap_pri->fa_size);
+    rc = boot_copy_region(state, fap_sec, fap_pri, hdr->ih_hdr_size, 0, hdr->ih_img_size);
     assert(rc == 0);
 
     rc = swap_scramble_trailer_sectors(state, fap_sec);
