@@ -26,8 +26,8 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct flash_area fa_app_installer = {
     .fa_id = 1,
-    .fa_off = FIXED_PARTITION_OFFSET(slot0_partition),
-    .fa_size = FIXED_PARTITION_SIZE(slot0_partition),
+    .fa_off = PARTITION_OFFSET(slot0_partition),
+    .fa_size = PARTITION_SIZE(slot0_partition),
     .fa_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_flash_controller)),
 };
 
