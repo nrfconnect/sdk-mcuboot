@@ -409,7 +409,7 @@ config BOOT_BYPASS_KEY_MATCH
 config BOOT_SIGNATURE_USING_KMU
 	bool "Use KMU stored keys for signature verification"
 	depends on NRF_SECURITY
-	depends on CRACEN_LIB_KMU
+	depends on CRACEN_KMU
 	select PSA_WANT_ALG_GCM
 	select PSA_WANT_KEY_TYPE_AES
 	select PSA_WANT_AES_KEY_SIZE_256
