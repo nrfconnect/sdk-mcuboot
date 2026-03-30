@@ -494,6 +494,13 @@ config BOOT_SIGNATURE_KEY_FILE
 
 endif
 
+config SOC_NRF54LX_SKIP_GLITCHDETECTOR_DISABLE
+	bool "Skip disabling glitch detector"
+	default y if SOC_SERIES_NRF54L
+	help
+	 With this option, the glitch detector is not disabled during system initialization.
+	 The CPU runs with the default state of glitch detector.
+
 config MCUBOOT_CLEANUP_ARM_CORE
 	bool "Perform core cleanup before chain-load the application"
 	depends on CPU_CORTEX_M || ARMV7_R
