@@ -394,6 +394,10 @@ if(CONFIG_MCUBOOT_SERIAL)
     ${BOOT_DIR}/bootutil/src
     )
 
+  if(CONFIG_BOOT_SERIAL_CDC_ACM AND CONFIG_USB_DEVICE_STACK_NEXT)
+    zephyr_sources(${BOOT_DIR}/zephyr/boot_serial_cdc_acm_usb_next.c)
+  endif()
+
   if(CONFIG_BOOT_ENCRYPT_IMAGE)
     zephyr_library_sources(
       ${BOOT_DIR}/boot_serial/src/boot_serial_encryption.c

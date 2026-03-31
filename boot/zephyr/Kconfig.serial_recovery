@@ -37,7 +37,8 @@ config BOOT_SERIAL_UART
 
 config BOOT_SERIAL_CDC_ACM
 	bool "CDC ACM"
-	select USB_DEVICE_STACK
+	select USB_DEVICE_STACK if !(SOC_NRF54LM20A || SOC_NRF54LM20B)
+	select USB_DEVICE_STACK_NEXT if (SOC_NRF54LM20A || SOC_NRF54LM20B)
 	imply DEPRECATION_TEST
 	help
 	  This setting will choose CDC ACM for serial recovery unless chosen
@@ -221,5 +222,38 @@ config BOOT_SERIAL_IMG_GRP_SLOT_INFO
 	help
 	  If y, will include the slot info command which lists what available
 	  slots there are in the system.
+
+if BOOT_SERIAL_CDC_ACM && USB_DEVICE_STACK_NEXT
+
+config BOOT_SERIAL_CDC_ACM_STRING_MANUFACTURER
+	string "MCUBoot serial recovery USB device manufacturer string descriptor"
+	default "Nordic Semiconductor"
+
+config BOOT_SERIAL_CDC_ACM_STRING_PRODUCT
+	string "MCUBoot serial recovery USB device product string descriptor"
+	default "CDC ACM serial backend"
+
+config BOOT_SERIAL_CDC_ACM_STRING_VID
+	hex "MCUBoot serial recovery USB device Vendor ID"
+	default 0x1915
+	help
+	  The Vendor ID of the MCUBoot serial recovery USB device.
+	  Change it to your own Vendor ID in the final product.
+
+config BOOT_SERIAL_CDC_ACM_STRING_PID
+	hex "MCUBoot serial recovery USB device Product ID"
+	default 0x8523
+	help
+	  The Product ID of the MCUBoot serial recovery USB device.
+	  Change it to your own Product ID in the final product.
+
+config BOOT_SERIAL_CDC_ACM_MAX_POWER
+	int "USB device bMaxPower value"
+	default 125
+	range 0 250
+	help
+	  bMaxPower value in the configuration in 2 mA units.
+
+endif
 
 endif # MCUBOOT_SERIAL

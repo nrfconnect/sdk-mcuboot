@@ -54,6 +54,10 @@
 #define BOOT_REQUEST_NUM_SLOTS 2
 #endif /* CONFIG_NRF_MCUBOOT_BOOT_REQUEST */
 
+#if defined(CONFIG_BOOT_SERIAL_CDC_ACM) && defined(CONFIG_USB_DEVICE_STACK_NEXT)
+#include "boot_serial/boot_serial_cdc_acm_usb_next.h"
+#endif
+
 #if defined(CONFIG_MCUBOOT_UUID_VID) || defined(CONFIG_MCUBOOT_UUID_CID)
 #include "bootutil/mcuboot_uuid.h"
 #endif /* CONFIG_MCUBOOT_UUID_VID || CONFIG_MCUBOOT_UUID_CID */
@@ -431,6 +435,9 @@ static void do_boot(struct boot_rsp *rsp)
 #ifdef CONFIG_USB_DEVICE_STACK
     /* Disable the USB to prevent it from firing interrupts */
     usb_disable();
+#endif
+#if defined(CONFIG_BOOT_SERIAL_CDC_ACM) && defined(CONFIG_USB_DEVICE_STACK_NEXT)
+	rc = boot_serial_cdc_acm_usb_next_disable();
 #endif
 
 #if defined(CONFIG_FW_INFO) && !defined(CONFIG_EXT_API_PROVIDE_EXT_API_UNUSED)
