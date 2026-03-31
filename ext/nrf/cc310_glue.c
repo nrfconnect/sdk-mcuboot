@@ -17,6 +17,9 @@
 
 #include "cc310_glue.h"
 
+
+#define CC310_SHA256_MAX_UPDATE_CHUNK 4096U
+
 int cc310_init(void)
 {
     /* Only initialize once */
@@ -34,6 +37,37 @@ int cc310_init(void)
     return 0;
 }
 
+static void cc310_sha256_update_internal(nrf_cc310_bl_hash_context_sha256_t *ctx,
+                                         const void *data,
+                                         uint32_t data_len,
+                                         uint8_t* stack_chunk_buffer)
+{
+    const uint8_t *next = (const uint8_t*)data;
+    uint32_t remaining = data_len;
+    uint8_t *chunk_ptr;
+
+    if (stack_chunk_buffer != NULL) {
+        chunk_ptr = stack_chunk_buffer;
+    }
+
+    while (remaining > 0U) {
+        uint32_t chunk = remaining > CC310_SHA256_MAX_UPDATE_CHUNK
+                             ? CC310_SHA256_MAX_UPDATE_CHUNK
+                             : remaining;
+
+        if (stack_chunk_buffer != NULL) {
+            /* chunk_ptr is already set to stack_chunk_buffer */
+            memcpy(stack_chunk_buffer, next, chunk);
+        } else {
+            chunk_ptr = (uint8_t*)next;
+        }
+
+        nrf_cc310_bl_hash_sha256_update(ctx, chunk_ptr, chunk);
+        next += chunk;
+        remaining -= chunk;
+    }
+}
+
 void cc310_sha256_update(nrf_cc310_bl_hash_context_sha256_t *ctx,
                          const void *data,
                          uint32_t data_len)
@@ -41,17 +75,19 @@ void cc310_sha256_update(nrf_cc310_bl_hash_context_sha256_t *ctx,
     /*
      * NRF Cryptocell can only read from RAM this allocates a buffer on the stack
      * if the data provided is not located in RAM.
+     * Chunk RAM inputs as very large single updates (e.g. full decompression
+     * buffer) must not be passed in one nrf_cc310_bl_hash_sha256_update call.
      */
 
     if ((uint32_t) data < CONFIG_SRAM_BASE_ADDRESS) {
-        uint8_t stack_buffer[data_len];
-        uint32_t block_len = data_len;
-        memcpy(stack_buffer, data, block_len);
-        nrf_cc310_bl_hash_sha256_update(ctx, stack_buffer, block_len);
+        uint8_t stack_buffer[CC310_SHA256_MAX_UPDATE_CHUNK];
+
+        cc310_sha256_update_internal(ctx, data, data_len, stack_buffer);
     } else {
-        nrf_cc310_bl_hash_sha256_update(ctx, data, data_len);
+        cc310_sha256_update_internal(ctx, data, data_len, NULL);
     }
-};
+
+}
 
 int cc310_ecdsa_verify_secp256r1(uint8_t *hash,
                                  uint8_t *public_key,
@@ -70,4 +106,3 @@ int cc310_ecdsa_verify_secp256r1(uint8_t *hash,
         nrf_cc310_disable();
         return rc;
 }
-
