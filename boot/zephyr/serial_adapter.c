@@ -21,6 +21,9 @@
 #include <zephyr/kernel.h>
 #include "bootutil/bootutil_log.h"
 #include <zephyr/usb/usb_device.h>
+#if defined(CONFIG_BOOT_SERIAL_CDC_ACM) && defined(CONFIG_USB_DEVICE_STACK_NEXT)
+#include "boot_serial/boot_serial_cdc_acm_usb_next.h"
+#endif
 
 #if defined(CONFIG_BOOT_SERIAL_UART) && defined(CONFIG_UART_CONSOLE) && \
     (!DT_HAS_CHOSEN(zephyr_uart_mcumgr) ||                              \
@@ -225,7 +228,12 @@ boot_uart_fifo_init(void)
 	}
 
 #if CONFIG_BOOT_SERIAL_CDC_ACM
-	int rc = usb_enable(NULL);
+	int rc = 0;
+#if CONFIG_USB_DEVICE_STACK_NEXT
+	rc = boot_serial_cdc_acm_usb_next_enable();
+#else
+	rc = usb_enable(NULL);
+#endif
 	if (rc) {
 		return (-1);
 	}
