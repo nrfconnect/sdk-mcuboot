@@ -34,8 +34,12 @@
 #include <pm_config.h>
 #endif
 
+#ifdef CONFIG_SOC_NRF53_RTC_PRETICK
+    #include <hal/nrf_ipc.h>
+#endif
+
 #if defined(NRF_UARTE0) || defined(NRF_UARTE1) || defined(NRF_UARTE00) ||   \
-    defined(NRF_UARTE20) || defined(NRF_UARTE30) || defined(NRF_UARTE136) 
+    defined(NRF_UARTE20) || defined(NRF_UARTE30) || defined(NRF_UARTE136)
 #define NRF_UARTE_CLEANUP
 #endif
 
@@ -56,8 +60,22 @@ static inline void nrf_cleanup_rtc(NRF_RTC_Type * rtc_reg)
 }
 #endif
 
-#if defined(CONFIG_NRF_GRTC_TIMER) && !defined(CONFIG_SYSTEM_TIMER_HAS_DISABLE_SUPPORT)
+#ifdef CONFIG_SOC_NRF53_RTC_PRETICK
+static inline void nrf_cleanup_nrf53_rtc_pretick(void)
+{
+    nrf_ipc_event_t ipc_event =
+        nrf_ipc_receive_event_get(CONFIG_SOC_NRF53_RTC_PRETICK_IPC_CH_FROM_NET);
+    nrf_ipc_task_t ipc_task =
+        nrf_ipc_send_task_get(CONFIG_SOC_NRF53_RTC_PRETICK_IPC_CH_TO_NET);
+    uint32_t task_ipc = nrf_ipc_task_address_get(NRF_IPC, ipc_task);
+    uint32_t evt_ipc = nrf_ipc_event_address_get(NRF_IPC, ipc_event);
 
+    NRF_DPPI_ENDPOINT_CLEAR(task_ipc);
+    NRF_DPPI_ENDPOINT_CLEAR(evt_ipc);
+}
+#endif
+
+#if defined(CONFIG_NRF_GRTC_TIMER) && !defined(CONFIG_SYSTEM_TIMER_HAS_DISABLE_SUPPORT)
 /**
  * This function is temporary and should be removed once nrfx_grtc_uninit
  * no longer resets the counter - see NRFX-8487.
@@ -210,5 +228,9 @@ void nrf_cleanup_peripheral(void)
 
 #if defined(CONFIG_NRFX_CLOCK)
     nrf_cleanup_clock();
+#endif
+
+#ifdef CONFIG_SOC_NRF53_RTC_PRETICK
+    nrf_cleanup_nrf53_rtc_pretick();
 #endif
 }
