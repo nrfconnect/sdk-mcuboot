@@ -20,21 +20,41 @@
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
+#if (DT_NODE_EXISTS(DT_INST(0, jedec_spi_nor)))
+#define EXT_FLASH_DEVICE_NODE DT_INST(0, jedec_spi_nor)
+#if defined(CONFIG_SPI_NOR)
+#define EXT_FLASH_DEVICE DEVICE_DT_GET(EXT_FLASH_DEVICE_NODE)
+#endif
+#define EXT_FLASH_DEVICE_ID SPI_FLASH_0_ID
+#define EXT_FLASH_DEVICE_BASE 0
+
+#elif (DT_NODE_EXISTS(DT_INST(0, jedec_mspi_nor)))
+#define EXT_FLASH_DEVICE_NODE DT_INST(0, jedec_mspi_nor)
+#if defined(CONFIG_FLASH_MSPI_NOR)
+#define EXT_FLASH_DEVICE DEVICE_DT_GET(EXT_FLASH_DEVICE_NODE)
+#endif
+#define EXT_FLASH_DEVICE_ID SPI_FLASH_0_ID
+#define EXT_FLASH_DEVICE_BASE 0
+#endif
+
 #if (DT_HAS_CHOSEN(zephyr_flash_controller))
 #define FLASH_DEVICE_ID SOC_FLASH_0_ID
 #define FLASH_DEVICE_BASE CONFIG_FLASH_BASE_ADDRESS
 #define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash_controller)
-
-#elif (DT_NODE_EXISTS(DT_INST(0, jedec_spi_nor)))
-#define FLASH_DEVICE_ID SPI_FLASH_0_ID
-#define FLASH_DEVICE_BASE 0
-#define FLASH_DEVICE_NODE DT_INST(0, jedec_spi_nor)
 
 #elif (defined(CONFIG_SOC_SERIES_NRF54H) && DT_HAS_CHOSEN(zephyr_flash))
 
 #define FLASH_DEVICE_ID SOC_FLASH_0_ID
 #define FLASH_DEVICE_BASE CONFIG_FLASH_BASE_ADDRESS
 #define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash)
+
+#elif defined(EXT_FLASH_DEVICE_ID)
+/* This code is here for backwards compatibility.
+ * Probably it was added to support devices fully running from external flash.
+ */
+#define FLASH_DEVICE_ID EXT_FLASH_DEVICE_ID
+#define FLASH_DEVICE_BASE EXT_FLASH_DEVICE_BASE
+#define FLASH_DEVICE_NODE EXT_FLASH_DEVICE_NODE
 
 #else
 #error "FLASH_DEVICE_ID could not be determined"
@@ -44,6 +64,12 @@ static const struct device *flash_dev = DEVICE_DT_GET(FLASH_DEVICE_NODE);
 
 int flash_device_base(uint8_t fd_id, uintptr_t *ret)
 {
+#if defined(EXT_FLASH_DEVICE)
+    if (fd_id == EXT_FLASH_DEVICE_ID) {
+        *ret = EXT_FLASH_DEVICE_BASE;
+        return 0;
+    }
+#endif
     if (fd_id != FLASH_DEVICE_ID) {
         BOOT_LOG_ERR("invalid flash ID %d; expected %d",
                      fd_id, FLASH_DEVICE_ID);
@@ -149,7 +175,14 @@ int flash_area_sector_from_off(off_t off, struct flash_sector *sector)
 
 uint8_t flash_area_get_device_id(const struct flash_area *fa)
 {
+#if defined(EXT_FLASH_DEVICE)
+    if (fa->fa_dev == EXT_FLASH_DEVICE) {
+        return EXT_FLASH_DEVICE_ID;
+    }
+#else
     (void)fa;
+#endif
+
     return FLASH_DEVICE_ID;
 }
 
