@@ -37,7 +37,7 @@ fih_ret boot_uuid_vid_match(const struct flash_area *fap, const struct image_uui
 	 */
 	fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
 	if (fa_ret != 0) {
-		base = 0;
+		FIH_RET(FIH_FAILURE);
 	}
 
 	for (size_t i = 0; i < n_uuids; i++) {
@@ -68,7 +68,7 @@ fih_ret boot_uuid_cid_match(const struct flash_area *fap, const struct image_uui
 	 */
 	fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
 	if (fa_ret != 0) {
-		base = 0;
+		FIH_RET(FIH_FAILURE);
 	}
 
 	for (size_t i = 0; i < n_uuids; i++) {
