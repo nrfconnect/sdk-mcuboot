@@ -11,14 +11,14 @@
 
 #include "bootutil/bootutil_log.h"
 
-#define MAIN_FLASH_DEV FIXED_PARTITION_NODE_DEVICE(DT_CHOSEN(nrf_bootloader_request))
-#define MAIN_OFFSET    FIXED_PARTITION_NODE_OFFSET(DT_CHOSEN(nrf_bootloader_request))
-#define MAIN_SIZE      FIXED_PARTITION_NODE_SIZE(DT_CHOSEN(nrf_bootloader_request))
+#define MAIN_FLASH_DEV PARTITION_NODE_DEVICE(DT_CHOSEN(nrf_bootloader_request))
+#define MAIN_OFFSET    PARTITION_NODE_OFFSET(DT_CHOSEN(nrf_bootloader_request))
+#define MAIN_SIZE      PARTITION_NODE_SIZE(DT_CHOSEN(nrf_bootloader_request))
 
 #ifdef CONFIG_NRF_MCUBOOT_BOOT_REQUEST_PREFERENCE_KEEP
-#define BACKUP_FLASH_DEV FIXED_PARTITION_NODE_DEVICE(DT_CHOSEN(nrf_bootloader_request_backup))
-#define BACKUP_OFFSET    FIXED_PARTITION_NODE_OFFSET(DT_CHOSEN(nrf_bootloader_request_backup))
-#define BACKUP_SIZE      FIXED_PARTITION_NODE_SIZE(DT_CHOSEN(nrf_bootloader_request_backup))
+#define BACKUP_FLASH_DEV PARTITION_NODE_DEVICE(DT_CHOSEN(nrf_bootloader_request_backup))
+#define BACKUP_OFFSET    PARTITION_NODE_OFFSET(DT_CHOSEN(nrf_bootloader_request_backup))
+#define BACKUP_SIZE      PARTITION_NODE_SIZE(DT_CHOSEN(nrf_bootloader_request_backup))
 #endif /* CONFIG_NRF_MCUBOOT_BOOT_REQUEST_PREFERENCE_KEEP */
 
 #define BOOT_REQUEST_CHECKSUM_SIZE sizeof(uint32_t)
