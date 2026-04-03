@@ -64,6 +64,10 @@
 #include <load_ironside_se_conf.h>
 #endif
 
+#ifdef CONFIG_SOC_EARLY_RESET_HOOK
+void s2ram_designate_slot(uint8_t slot);
+#endif
+
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
@@ -627,6 +631,11 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         }
 #endif
     }
+
+#ifdef CONFIG_SOC_EARLY_RESET_HOOK
+    /* Designate the slot to be used by the PM_S2RAM resume module */
+    s2ram_designate_slot((uint8_t)state->slot_usage[MCUBOOT_MANIFEST_IMAGE_INDEX].active_slot);
+#endif
 
     /* All image loaded successfully. */
 #ifdef MCUBOOT_HAVE_LOGGING
