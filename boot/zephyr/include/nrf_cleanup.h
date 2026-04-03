@@ -11,8 +11,8 @@
  * Perform cleanup on some peripheral resources used by MCUBoot prior chainload
  * the application.
  *
- * This function disables all RTC instances and UARTE instances.
- * It Disables their interrupts signals as well.
+ * This function disables all RTC, UARTE, and SPIM instances.
+ * It disables their interrupts signals as well.
  */
 void nrf_cleanup_peripheral(void);
 
