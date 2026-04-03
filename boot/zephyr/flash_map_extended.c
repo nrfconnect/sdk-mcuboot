@@ -20,44 +20,26 @@
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
-#if defined(CONFIG_STM32_MEMMAP)
-/* MEMORY MAPPED for XiP on external NOR flash takes the sspi-nor or ospi-nor or qspi-nor device */
-#define FLASH_DEVICE_ID SPI_FLASH_0_ID
-#if DT_NODE_HAS_STATUS(DT_INST(0, st_stm32_xspi_nor), okay)
-#define DT_DRV_COMPAT st_stm32_xspi_nor
-#define FLASH_DEVICE_NODE DT_INST(0, st_stm32_xspi_nor)
-#define FLASH_DEVICE_BASE DT_REG_ADDR_BY_IDX(DT_INST_PARENT(0), 1)
-#elif DT_NODE_HAS_STATUS(DT_INST(0, st_stm32_ospi_nor), okay)
-#define DT_DRV_COMPAT st_stm32_ospi_nor
-#define FLASH_DEVICE_NODE DT_INST(0, st_stm32_ospi_nor)
-#define FLASH_DEVICE_BASE DT_REG_ADDR_BY_IDX(DT_INST_PARENT(0), 1)
-#elif DT_NODE_HAS_STATUS(DT_INST(0, st_stm32_qspi_nor), okay)
-#define DT_DRV_COMPAT st_stm32_qspi_nor
-#define FLASH_DEVICE_NODE DT_INST(0, st_stm32_qspi_nor)
-#define FLASH_DEVICE_BASE DT_REG_ADDR_BY_IDX(DT_INST_PARENT(0), 1)
-#else
-#error "FLASH_DEVICE_NODE could not be determined"
+#if (DT_NODE_EXISTS(DT_INST(0, jedec_spi_nor)))
+#define EXT_FLASH_DEVICE_NODE DT_INST(0, jedec_spi_nor)
+#if defined(CONFIG_SPI_NOR)
+#define EXT_FLASH_DEVICE DEVICE_DT_GET(EXT_FLASH_DEVICE_NODE)
+#endif
+#define EXT_FLASH_DEVICE_ID SPI_FLASH_0_ID
+#define EXT_FLASH_DEVICE_BASE 0
+
+#elif (DT_NODE_EXISTS(DT_INST(0, jedec_mspi_nor)))
+#define EXT_FLASH_DEVICE_NODE DT_INST(0, jedec_mspi_nor)
+#if defined(CONFIG_FLASH_MSPI_NOR)
+#define EXT_FLASH_DEVICE DEVICE_DT_GET(EXT_FLASH_DEVICE_NODE)
+#endif
+#define EXT_FLASH_DEVICE_ID SPI_FLASH_0_ID
+#define EXT_FLASH_DEVICE_BASE 0
 #endif
 
-#elif (DT_NODE_HAS_STATUS_OKAY(DT_INST(0, nxp_imx_flexspi)) && DT_HAS_CHOSEN(zephyr_flash_controller))
-#define FLASH_DEVICE_ID SPI_FLASH_0_ID
-#define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash_controller)
-#define FLASH_DEVICE_BASE DT_REG_ADDR_BY_IDX(DT_PARENT(FLASH_DEVICE_NODE), 1)
-
-#elif (!defined(CONFIG_XTENSA) && DT_HAS_CHOSEN(zephyr_flash_controller))
+#if (DT_HAS_CHOSEN(zephyr_flash_controller))
 #define FLASH_DEVICE_ID SOC_FLASH_0_ID
 #define FLASH_DEVICE_BASE CONFIG_FLASH_BASE_ADDRESS
-#define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash_controller)
-
-#elif (defined(CONFIG_XTENSA) && DT_NODE_EXISTS(DT_INST(0, jedec_spi_nor)))
-#define FLASH_DEVICE_ID SPI_FLASH_0_ID
-#define FLASH_DEVICE_BASE 0
-#define FLASH_DEVICE_NODE DT_INST(0, jedec_spi_nor)
-
-#elif defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
-
-#define FLASH_DEVICE_ID SPI_FLASH_0_ID
-#define FLASH_DEVICE_BASE 0
 #define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash_controller)
 
 #elif (defined(CONFIG_SOC_SERIES_NRF54H) && DT_HAS_CHOSEN(zephyr_flash))
@@ -65,6 +47,14 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define FLASH_DEVICE_ID SOC_FLASH_0_ID
 #define FLASH_DEVICE_BASE CONFIG_FLASH_BASE_ADDRESS
 #define FLASH_DEVICE_NODE DT_CHOSEN(zephyr_flash)
+
+#elif defined(EXT_FLASH_DEVICE_ID)
+/* This code is here for backwards compatibility.
+ * Probably it was added to support devices fully running from external flash.
+ */
+#define FLASH_DEVICE_ID EXT_FLASH_DEVICE_ID
+#define FLASH_DEVICE_BASE EXT_FLASH_DEVICE_BASE
+#define FLASH_DEVICE_NODE EXT_FLASH_DEVICE_NODE
 
 #else
 #error "FLASH_DEVICE_ID could not be determined"
@@ -74,6 +64,12 @@ static const struct device *flash_dev = DEVICE_DT_GET(FLASH_DEVICE_NODE);
 
 int flash_device_base(uint8_t fd_id, uintptr_t *ret)
 {
+#if defined(EXT_FLASH_DEVICE)
+    if (fd_id == EXT_FLASH_DEVICE_ID) {
+        *ret = EXT_FLASH_DEVICE_BASE;
+        return 0;
+    }
+#endif
     if (fd_id != FLASH_DEVICE_ID) {
         BOOT_LOG_ERR("invalid flash ID %d; expected %d",
                      fd_id, FLASH_DEVICE_ID);
@@ -179,7 +175,14 @@ int flash_area_sector_from_off(off_t off, struct flash_sector *sector)
 
 uint8_t flash_area_get_device_id(const struct flash_area *fa)
 {
+#if defined(EXT_FLASH_DEVICE)
+    if (fa->fa_dev == EXT_FLASH_DEVICE) {
+        return EXT_FLASH_DEVICE_ID;
+    }
+#else
     (void)fa;
+#endif
+
     return FLASH_DEVICE_ID;
 }
 
