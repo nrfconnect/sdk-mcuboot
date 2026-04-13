@@ -27,21 +27,11 @@ fih_ret boot_uuid_vid_match(const struct flash_area *fap, const struct image_uui
 {
 	const struct uuid_map_entry *map = NULL;
 	size_t n_uuids = boot_uuid_vid_map_get(&map);
-	int fa_ret;
-	uintptr_t base;
 
 	assert(fap != NULL);
 
-	/* The memory map contains absolute addresses - fetch the base address for the area
-	 * in question.
-	 */
-	fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
-	if (fa_ret != 0) {
-		FIH_RET(FIH_FAILURE);
-	}
-
 	for (size_t i = 0; i < n_uuids; i++) {
-		if ((map[i].dev == fap->fa_dev) && (fap->fa_off + base == map[i].off) &&
+		if ((map[i].dev == fap->fa_dev) && (fap->fa_off == map[i].off) &&
 		    (fap->fa_size == map[i].size)) {
 			if (boot_uuid_compare(uuid_vid, &map[i].uuid)) {
 				FIH_RET(FIH_SUCCESS);
@@ -58,21 +48,11 @@ fih_ret boot_uuid_cid_match(const struct flash_area *fap, const struct image_uui
 {
 	const struct uuid_map_entry *map = NULL;
 	size_t n_uuids = boot_uuid_cid_map_get(&map);
-	int fa_ret;
-	uintptr_t base;
 
 	assert(fap != NULL);
 
-	/* The memory map contains absolute addresses - fetch the base address for the area
-	 * in question.
-	 */
-	fa_ret = flash_device_base(flash_area_get_device_id(fap), &base);
-	if (fa_ret != 0) {
-		FIH_RET(FIH_FAILURE);
-	}
-
 	for (size_t i = 0; i < n_uuids; i++) {
-		if ((map[i].dev == fap->fa_dev) && (fap->fa_off + base == map[i].off) &&
+		if ((map[i].dev == fap->fa_dev) && (fap->fa_off == map[i].off) &&
 		    (fap->fa_size == map[i].size)) {
 			if (boot_uuid_compare(uuid_cid, &map[i].uuid)) {
 				FIH_RET(FIH_SUCCESS);
