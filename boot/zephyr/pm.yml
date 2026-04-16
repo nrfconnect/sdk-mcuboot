@@ -25,8 +25,8 @@ mcuboot_secondary:
     align: {start: 4}
 #else
   placement:
-    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
-    align_next: CONFIG_FPROTECT_BLOCK_SIZE # Ensure that the next partition does not interfere with this image
+    align: {start: CONFIG_PM_APP_ALIGNMENT}
+    align_next: CONFIG_PM_APP_ALIGNMENT # Ensure that the next partition does not interfere with this image
     after: mcuboot_primary
 #endif /* CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY */
 
@@ -42,7 +42,7 @@ mcuboot_secondary_pad:
   share_size: mcuboot_pad
   placement:
     after: mcuboot_primary
-    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align: {start: CONFIG_PM_APP_ALIGNMENT}
 
 mcuboot_secondary_app:
   share_size: mcuboot_primary_app
@@ -59,7 +59,7 @@ mcuboot_scratch:
   size: CONFIG_PM_PARTITION_SIZE_MCUBOOT_SCRATCH
   placement:
     after: app
-    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align: {start: CONFIG_PM_APP_ALIGNMENT}
 #endif /* CONFIG_BOOT_SWAP_USING_SCRATCH */
 
 # Padding placed before image to boot. This reserves space for the MCUboot image header
@@ -71,7 +71,7 @@ mcuboot_pad:
   placement:
     before: [mcuboot_primary_app]
 #ifdef CONFIG_FPROTECT
-    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align: {start: CONFIG_PM_APP_ALIGNMENT}
 #endif
 
 #if (CONFIG_NRF53_MCUBOOT_PRIMARY_1_RAM_FLASH)
@@ -86,7 +86,7 @@ mcuboot_secondary_1:
   region: external_flash
 #else
   placement:
-    align: {start: CONFIG_FPROTECT_BLOCK_SIZE}
+    align: {start: CONFIG_PM_APP_ALIGNMENT}
     after: mcuboot_secondary
 #endif
   size: CONFIG_NRF53_RAM_FLASH_SIZE
