@@ -1527,4 +1527,9 @@ config NCS_MCUBOOT_IMG_VALIDATE_ATTEMPT_WAIT_MS
 	  Time between image validation attempts, in milliseconds.
 	  Allows for recovery from transient bit flips or similar situations.
 
+config PM_APP_ALIGNMENT
+	hex
+	default 0x1000 if SOC_SERIES_NRF54L
+	default FPROTECT_BLOCK_SIZE
+
 source "Kconfig.zephyr"
