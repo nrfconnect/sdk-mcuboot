@@ -567,7 +567,7 @@ config MBEDTLS
 config NRF_SECURITY
 	select MBEDTLS_PROMPTLESS
 
-config MBEDTLS_CFG_FILE
+config MBEDTLS_CONFIG_FILE
 	# It might be awkward to define an Mbed TLS header file when TinyCrypt
 	# is used, but the fact is that Mbed TLS' ASN1 parse module is used
 	# also when TinyCrypt is used as crypto backend.
