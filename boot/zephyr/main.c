@@ -948,8 +948,14 @@ int main(void)
 
 #ifdef CONFIG_FPROTECT
 #ifdef CONFIG_SOC_SERIES_NRF54L
+#if defined(CONFIG_SOC_NRF54L15) || defined(CONFIG_SOC_NRF54L10) || defined(CONFIG_SOC_NRF54L05)
     BUILD_ASSERT(FPROTECT_REGION_SIZE <= (62 * 1024), "Can not FPROTECT region that big");
+#elif defined(CONFIG_SOC_NRF54LM20A) || defined(CONFIG_SOC_NRF54LM20B) || defined(CONFIG_SOC_NRF54LV10A)
+    BUILD_ASSERT(FPROTECT_REGION_SIZE <= (254 * 1024), "Can not FPROTECT region that big");
+#else
+    #error Fprotect unsupported SOC
 #endif
+#endif /* CONFIG_SOC_SERIES_NRF54L */
     rc = fprotect_area(FPROTECT_REGION_OFFSET, FPROTECT_REGION_SIZE);
 
     if (rc != 0) {
