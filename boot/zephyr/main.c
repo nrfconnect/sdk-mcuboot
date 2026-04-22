@@ -350,7 +350,8 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
                  * If not, the region has not been configured yet.
                  * Set the size and address to the partition size and address.
                  */
-                "   ands r4, r2, %12\n"
+                "   ldr r5, =%12\n"
+                "   ands r4, r2, r5\n"
                 "   cbnz r4, clear_rwx\n"
                 /* Set the size of the protected region */
                 "   movt r2, %8\n"
