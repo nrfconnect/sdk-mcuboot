@@ -26,6 +26,7 @@
 
 #include <zephyr/toolchain.h>
 #include <zephyr/arch/cpu.h>
+#include <zephyr/linker/sections.h>
 
 GTEXT(pm_s2ram_mark_check_and_mediate)
 
