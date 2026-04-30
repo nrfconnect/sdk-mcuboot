@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+};
+
 /* This is nRF54lm20dongle_nrf54lm20b_cpuapp peculiar partitioning for MCUboot and firmware loader
  * slot0_partition spans RRAM with can be update by the firmware loader and booted by MCUboot.
  * beginning of the slot0_partition must match with the beginning of the slot0_partition of the user
