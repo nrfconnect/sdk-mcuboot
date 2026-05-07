@@ -841,3 +841,24 @@ if(SYSBUILD AND CONFIG_PCD_APP)
     set(RAM_FLASH_ADDR "${ram_flash_addr}" CACHE STRING "" FORCE)
     set(RAM_FLASH_SIZE "${ram_flash_size}" CACHE STRING "" FORCE)
 endif()
+
+if(NOT CONFIG_PARTITION_MANAGER_ENABLED AND CONFIG_SOC_NRF5340_CPUAPP)
+  if(CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER AND NOT CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER EQUAL -1)
+    if(NOT TARGET b0n_target)
+      add_custom_target(b0n_target)
+      zephyr_dt_import(EDT_PICKLE_FILE ${CMAKE_BINARY_DIR}/../b0n/zephyr/edt.pickle TARGET b0n_target)
+    endif()
+    # Really this dependency if set for MCUboot, but it will also cover s1 image,
+    # since contition that let us here checks for `CONFIG_MCUBOOT` which is only
+    # set for MCUboot builds.
+    add_dependencies(${TARGET_NAME} b0n_target)
+
+    dt_nodelabel(s0_partition_path NODELABEL s0_partition REQUIRED TARGET b0n_target)
+    dt_reg_addr(s0_partition_address PATH ${s0_partition_path} TARGET b0n_target)
+    dt_reg_size(s0_partition_size PATH ${s0_partition_path} TARGET b0n_target)
+    # Using same identifiers as nrf5340 hooks use, as they represnt the same
+    # information in hooks.
+    zephyr_compile_definitions("PCD_NET_CORE_APP_ADDRESS=${s0_partition_address}")
+    zephyr_compile_definitions("PCD_NET_CORE_APP_SIZE=${s0_partition_size}")
+  endif()
+endif()
