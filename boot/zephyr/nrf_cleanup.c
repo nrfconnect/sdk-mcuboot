@@ -116,6 +116,10 @@ static NRF_UARTE_Type *nrf_uarte_to_clean[] = {
 #if defined(CONFIG_NRFX_CLOCK)
 static void nrf_cleanup_clock(void)
 {
+    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_HFCLKSTOP);
+#if NRF_CLOCK_HAS_PLL
+    nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_PLLSTOP);
+#endif
     nrf_clock_int_disable(NRF_CLOCK, 0xFFFFFFFF);
 }
 #endif
