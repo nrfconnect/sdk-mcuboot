@@ -43,6 +43,10 @@
 
 static int load_segment(const struct flash_area *fap, uint32_t data_addr, uint32_t data_len, uint32_t load_addr)
 {
+    if (data_len > 0 && (load_addr + data_len) < load_addr) {
+        BOOT_LOG_ERR("%s: Segment address overflow detected", __func__);
+        return -1;
+    }
     const uint32_t *data = (const uint32_t *)bootloader_mmap((fap->fa_off + data_addr), data_len);
     if (!data) {
         BOOT_LOG_ERR("%s: Bootloader mmap failed", __func__);
