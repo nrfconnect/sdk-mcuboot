@@ -1528,7 +1528,10 @@ boot_serial_read_console(const struct boot_uart_funcs *f,int timeout_in_ms)
     max_input = sizeof(in_buf);
 
     off = 0;
-    while (timeout_in_ms > 0 || bs_entry) {
+#ifdef MCUBOOT_SERIAL_WAIT_FOR_DFU
+        uint32_t start = k_uptime_get_32();
+#endif
+    while (timeout_in_ms > elapsed_in_ms || bs_entry) {
         /*
          * Don't enter CPU idle state here if timeout based serial recovery is
          * used as otherwise the boot process hangs forever, waiting for input
@@ -1541,9 +1544,6 @@ boot_serial_read_console(const struct boot_uart_funcs *f,int timeout_in_ms)
         }
 #endif
         MCUBOOT_WATCHDOG_FEED();
-#ifdef MCUBOOT_SERIAL_WAIT_FOR_DFU
-        uint32_t start = k_uptime_get_32();
-#endif
         rc = f->read(in_buf + off, sizeof(in_buf) - off, &full_line);
         if (rc <= 0 && !full_line) {
 #ifndef MCUBOOT_SERIAL_WAIT_FOR_DFU
@@ -1580,7 +1580,6 @@ check_timeout:
 #ifdef MCUBOOT_SERIAL_WAIT_FOR_DFU
         elapsed_in_ms = (k_uptime_get_32() - start);
 #endif
-        timeout_in_ms -= elapsed_in_ms;
     }
 }
 
