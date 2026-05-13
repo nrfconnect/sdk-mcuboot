@@ -341,7 +341,7 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
   else()
     if(MBEDTLS_ASN1_DIR)
       zephyr_library_sources(
-        ${MBEDTLS_ASN1_DIR}/src/asn1parse.c
+        ${ZEPHYR_OBERON_PSA_CRYPTO_MODULE_DIR}/utilities/asn1parse.c
       )
     endif()
     if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)
