@@ -822,11 +822,14 @@ check_validity:
             check_addresses = true;
         } else
 #endif
+#ifdef MCUBOOT_IS_SECOND_STAGE
         if (IMAGE_IS_SECOND_STAGE_MCUBOOT(state)) {
             min_addr = SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET;
             max_addr = (SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET + SECOND_STAGE_INACTIVE_MCUBOOT_SIZE);
             check_addresses = true;
-        } else if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
+        } else
+#endif
+        if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
             min_addr = flash_area_get_off(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
             max_addr = flash_area_get_size(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY)) + min_addr;
 
