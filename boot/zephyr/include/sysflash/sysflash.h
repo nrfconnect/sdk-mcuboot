@@ -43,6 +43,13 @@
 #define SPI_FLASH_0_ID 1
 #endif
 
+/* Support for NETCPU application image updates */
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#define NETCPU_APP_SLOT_OFFSET  PCD_NET_CORE_APP_ADDRESS
+#define NETCPU_APP_SLOT_SIZE    PCD_NET_CORE_APP_SIZE
+#define NETCPU_APP_SLOT_END     (NETCPU_APP_SLOT_OFFSET + NETCPU_APP_SLOT_SIZE)
+#endif
+
 /* This is workaround because of bootutil public interface also requiring this
  * file. In reality application is supposed to maintain flash area access,
  * but bootutil uses own definitions, taken directly from DTS, which includes
