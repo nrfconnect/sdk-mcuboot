@@ -72,7 +72,7 @@
 /* Universal defines */
 #define BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE (32)
 
-#include "mbedtls/oid.h"
+#include <crypto_oid.h>
 #include "mbedtls/asn1.h"
 #include "bootutil/sign_key.h"
 #if !defined(MCUBOOT_USE_PSA_CRYPTO)

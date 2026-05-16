@@ -10,7 +10,10 @@
 /* The check below can be performed even for those cases
  * where MCUBOOT_USE_MBED_TLS has not been defined
  */
-#include "mbedtls/version.h"
+#ifndef MBEDTLS_VERSION_NUMBER
+#define MBEDTLS_VERSION_NUMBER 0x04010000
+#endif
+
 #if MBEDTLS_VERSION_NUMBER >= 0x03000000
 #define MBEDTLS_CONTEXT_MEMBER(X) MBEDTLS_PRIVATE(X)
 #else
