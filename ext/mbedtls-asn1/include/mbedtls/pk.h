@@ -29,7 +29,7 @@
 #include "mbedtls/md.h"
 
 #if defined(MBEDTLS_RSA_C)
-#include "mbedtls/rsa.h"
+#include "mbedtls/private/rsa.h"
 #endif
 
 #if defined(MBEDTLS_ECP_C)

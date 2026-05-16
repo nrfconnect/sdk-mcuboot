@@ -15,7 +15,7 @@
 #include "bootsim.h"
 
 #ifdef MCUBOOT_ENCRYPT_RSA
-#include "mbedtls/rsa.h"
+#include "mbedtls/private/rsa.h"
 #include "mbedtls/asn1.h"
 #endif
 
