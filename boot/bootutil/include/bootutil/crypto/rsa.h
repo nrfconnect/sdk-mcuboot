@@ -43,14 +43,9 @@
 
 #elif defined(MCUBOOT_USE_MBED_TLS)
 
-#include "mbedtls/rsa.h"
-#include "mbedtls/version.h"
+#include "mbedtls/private/rsa.h"
 #if defined(BOOTUTIL_CRYPTO_RSA_CRYPT_ENABLED)
-#if MBEDTLS_VERSION_NUMBER >= 0x03000000
 #include "rsa_alt_helpers.h"
-#else
-#include "mbedtls/rsa_internal.h"
-#endif
 #endif /* BOOTUTIL_CRYPTO_RSA_CRYPT_ENABLED */
 #include "mbedtls/asn1.h"
 #include "bootutil/crypto/common.h"
@@ -235,9 +230,7 @@ bootutil_rsa_parse_private_key(bootutil_rsa_context *ctx, uint8_t **p, uint8_t *
     }
 
     /* Non-optional fields. */
-    if ( /* version */
-        mbedtls_asn1_get_int(p, end, &ctx->MBEDTLS_CONTEXT_MEMBER(ver)) != 0 ||
-         /* public modulus */
+    if ( /* public modulus */
         mbedtls_asn1_get_mpi(p, end, &ctx->MBEDTLS_CONTEXT_MEMBER(N)) != 0 ||
          /* public exponent */
         mbedtls_asn1_get_mpi(p, end, &ctx->MBEDTLS_CONTEXT_MEMBER(E)) != 0 ||
@@ -288,6 +281,31 @@ bootutil_rsa_parse_private_key(bootutil_rsa_context *ctx, uint8_t **p, uint8_t *
 #endif /* BOOTUTIL_CRYPTO_RSA_CRYPT_ENABLED */
 
 #if defined(BOOTUTIL_CRYPTO_RSA_SIGN_ENABLED)
+
+#include <mbedtls/private/error_common.h>
+
+static int mbedtls_rsa_import(mbedtls_rsa_context *ctx,
+                       const mbedtls_mpi *N,
+                       const mbedtls_mpi *P, const mbedtls_mpi *Q,
+                       const mbedtls_mpi *D, const mbedtls_mpi *E)
+{
+    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+
+    if ((N != NULL && (ret = mbedtls_mpi_copy(&ctx->MBEDTLS_CONTEXT_MEMBER(N), N)) != 0) ||
+        (P != NULL && (ret = mbedtls_mpi_copy(&ctx->MBEDTLS_CONTEXT_MEMBER(P), P)) != 0) ||
+        (Q != NULL && (ret = mbedtls_mpi_copy(&ctx->MBEDTLS_CONTEXT_MEMBER(Q), Q)) != 0) ||
+        (D != NULL && (ret = mbedtls_mpi_copy(&ctx->MBEDTLS_CONTEXT_MEMBER(D), D)) != 0) ||
+        (E != NULL && (ret = mbedtls_mpi_copy(&ctx->MBEDTLS_CONTEXT_MEMBER(E), E)) != 0)) {
+        return MBEDTLS_ERROR_ADD(MBEDTLS_ERR_RSA_BAD_INPUT_DATA, ret);
+    }
+
+    if (N != NULL) {
+        ctx->MBEDTLS_CONTEXT_MEMBER(len) = mbedtls_mpi_size(&ctx->MBEDTLS_CONTEXT_MEMBER(N));
+    }
+
+    return 0;
+}
+
 /*
  * Parse a RSA public key with format specified in RFC3447 A.1.1
  */
