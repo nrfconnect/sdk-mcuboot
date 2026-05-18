@@ -14,7 +14,7 @@
 #define MBEDTLS_ASN1_PARSE_C
 
 #include "bootutil/crypto/sha.h"
-#include "mbedtls/oid.h"
+#include "crypto_oid.h"
 #include "mbedtls/asn1.h"
 
 #include "bootutil/image.h"

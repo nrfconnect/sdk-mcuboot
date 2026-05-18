@@ -38,7 +38,7 @@
 #if defined(MCUBOOT_ENCRYPT_EC256) || defined(MCUBOOT_ENCRYPT_X25519)
 #include "bootutil/crypto/sha.h"
 #include "bootutil/crypto/hmac_sha256.h"
-#include "mbedtls/oid.h"
+#include "crypto_oid.h"
 #include "mbedtls/asn1.h"
 #endif
 #endif
