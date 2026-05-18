@@ -291,7 +291,7 @@ config BOOT_SIGNATURE_TYPE_ECDSA_P256
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice BOOT_ECDSA_IMPLEMENTATION
 	prompt "Ecdsa implementation"
-	default BOOT_ECDSA_PSA if NRF_SECURITY
+	default BOOT_ECDSA_PSA if PSA_CRYPTO
 	default BOOT_ECDSA_TINYCRYPT
 
 config BOOT_ECDSA_NRF_OBERON
@@ -312,9 +312,8 @@ config BOOT_ECDSA_CC310
 
 config BOOT_ECDSA_PSA
 	bool "Use psa cryptoo"
-	depends on NRF_SECURITY
+	depends on PSA_CRYPTO
 	select BOOT_USE_PSA_CRYPTO
-	select PSA_CRYPTO
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !PSA_CORE_LITE
 	select BOOT_IMG_HASH_ALG_SHA512_ALLOW if !PSA_CORE_LITE
 	select BOOT_ECDSA_PSA_DEPENDENCIES
@@ -348,7 +347,7 @@ config BOOT_SIGNATURE_TYPE_PURE
 
 choice BOOT_ED25519_IMPLEMENTATION
 	prompt "Ecdsa implementation"
-	default BOOT_ED25519_PSA if NRF_SECURITY
+	default BOOT_ED25519_PSA if PSA_CRYPTO
 	default BOOT_ED25519_TINYCRYPT
 
 config BOOT_ED25519_TINYCRYPT
@@ -369,9 +368,8 @@ config BOOT_ED25519_MBEDTLS
 
 config BOOT_ED25519_PSA
 	bool "Use PSA crypto"
-	depends on NRF_SECURITY
+	depends on PSA_CRYPTO
 	select BOOT_USE_PSA_CRYPTO
-	select PSA_CRYPTO
 	select MBEDTLS_ASN1_PARSE_C if MBEDTLS_BUILTIN
 	select MBEDTLS_ENABLE_HEAP if !PSA_CORE_LITE
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !PSA_CORE_LITE
@@ -408,7 +406,7 @@ config BOOT_BYPASS_KEY_MATCH
 
 config BOOT_SIGNATURE_USING_KMU
 	bool "Use KMU stored keys for signature verification"
-	depends on NRF_SECURITY
+	depends on PSA_CRYPTO
 	depends on CRACEN_LIB_KMU
 	select PSA_WANT_ALG_GCM
 	select PSA_WANT_KEY_TYPE_AES
@@ -555,11 +553,6 @@ config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
 	help
 	  Verification option that keeps execution in infinite loop after
 	  RAM cleanup has been performed.
-
-# Disable MBEDTLS from being selected if NRF_SECURITY is enabled, and use default NRF_SECURITY
-# configuration file for MBEDTLS
-config MBEDTLS
-	depends on !NRF_SECURITY
 
 config NRF_SECURITY
 	select MBEDTLS_PROMPTLESS
