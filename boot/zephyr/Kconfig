@@ -98,6 +98,7 @@ config BOOT_ED25519_PSA_DEPENDENCIES
 	select PSA_WANT_ECC_TWISTED_EDWARDS_255
 	select PSA_WANT_ECC_MONTGOMERY_255
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT if !PSA_CORE_LITE
+	select MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS if BOOT_ENCRYPT_X25519
 	help
 	  Dependencies for ed25519 signature
 
@@ -127,6 +128,7 @@ config BOOT_ECDSA_PSA_DEPENDENCIES
 	select PSA_WANT_ALG_ECDSA
 	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT if !PSA_CORE_LITE
 	select PSA_WANT_ECC_SECP_R1_256
+	select MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS if BOOT_ENCRYPT_EC256
 	help
 	  Dependencies for ECDSA signature
 
@@ -289,6 +291,10 @@ config BOOT_SIGNATURE_TYPE_ECDSA_P256
 	bool "Elliptic curve digital signatures with curve P-256"
 	select BOOT_ENCRYPTION_SUPPORT
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
+	# Enable nrf_security for include paths to oberon-psa-crypto which has mbedtls headers
+	# (e.g. crypto_oid.h), needed also in cases other than BOOT_ECDSA_PSA.
+	select NRF_SECURITY
+	imply MBEDTLS_ASN1_PARSE_C
 
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice BOOT_ECDSA_IMPLEMENTATION
@@ -329,6 +335,9 @@ config BOOT_SIGNATURE_TYPE_ED25519
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !BOOT_SIGNATURE_TYPE_PURE
 	# The SHA is used only for key hashing, not for images.
 	select BOOT_SIGNATURE_TYPE_PURE_ALLOW
+	# Enable nrf_security for include paths to oberon-psa-crypto which has mbedtls headers
+	# (e.g. crypto_oid.h), needed also in cases other than BOOT_ED25519_PSA.
+	select NRF_SECURITY
 	help
 	  This is ed25519 signature calculated over SHA512 of SHA256 of application
 	  image.
@@ -357,6 +366,14 @@ config BOOT_ED25519_TINYCRYPT
 	select BOOT_USE_TINYCRYPT
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
+
+if BOOT_ED25519_TINYCRYPT
+	# config-ed25519.h defines MBEDTLS_MPI_MAX_SIZE as 64, so
+	# set the correct Kconfig value too to avoid differing definitions
+	config MBEDTLS_MPI_MAX_SIZE
+	range 64 2048
+	default 64
+endif
 
 config BOOT_ED25519_MBEDTLS
 	bool "Use mbedTLS"
