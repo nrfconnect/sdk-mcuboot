@@ -60,13 +60,10 @@
 #ifdef MCUBOOT_SHA512
 #include <mbedtls/sha512.h>
 #else
-#include <mbedtls/sha256.h>
+#include <mbedtls/private/sha256.h>
 #endif
 
-#include <mbedtls/version.h>
-#if MBEDTLS_VERSION_NUMBER >= 0x03000000
-#include <mbedtls/compat-2.x.h>
-#endif
+#include "mbedtls-compat-2.x.h"
 
 #endif /* MCUBOOT_USE_MBED_TLS */
 

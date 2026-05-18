@@ -57,15 +57,13 @@ add_subdirectory(uuid)
 # Include the IronSide-based HW counters implementation
 add_subdirectory_ifdef(CONFIG_NRF_MCUBOOT_IRONSIDE_COUNTERS ironside_counters)
 
+if(CONFIG_NRF_SECURITY)
+  zephyr_library_link_libraries(mbedcrypto)
+endif()
+
 zephyr_library_include_directories(
   include
   )
-
-if(DEFINED CONFIG_MBEDTLS)
-  zephyr_library_include_directories(
-    ${ZEPHYR_MBEDTLS_MODULE_DIR}/include
-  )
-endif()
 
 # Zephyr port-specific sources.
 zephyr_library_sources(
@@ -239,7 +237,7 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
   # When ECDSA PSA is used, do not pull in additional ASN.1 include
   # directories or sources, as it would cause incorrect header files
   # to be included.
-  if(MBEDTLS_ASN1_DIR AND NOT CONFIG_BOOT_ECDSA_PSA)
+  if(MBEDTLS_ASN1_DIR AND NOT CONFIG_NRF_SECURITY)
     zephyr_library_include_directories(
       ${MBEDTLS_ASN1_DIR}/include
     )
@@ -341,7 +339,7 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
   else()
     if(MBEDTLS_ASN1_DIR)
       zephyr_library_sources(
-        ${MBEDTLS_ASN1_DIR}/src/asn1parse.c
+        ${ZEPHYR_OBERON_PSA_CRYPTO_MODULE_DIR}/utilities/asn1parse.c
       )
     endif()
     if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_NCS_BOOT_SIGNATURE_USING_ITS)

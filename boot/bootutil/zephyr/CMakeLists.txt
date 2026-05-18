@@ -13,6 +13,11 @@ target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
 )
 
 zephyr_library_named(mcuboot_util)
+
+if(CONFIG_NRF_SECURITY)
+  zephyr_library_link_libraries(mbedcrypto)
+endif()
+
 zephyr_library_sources(
   ../src/bootutil_public.c
     )

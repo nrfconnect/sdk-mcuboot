@@ -18,7 +18,7 @@
 #endif
 
 #if defined(MCUBOOT_USE_MBED_TLS)
-    #include <mbedtls/aes.h>
+    #include <mbedtls/private/aes.h>
     #include <mbedtls/nist_kw.h>
 #endif /* MCUBOOT_USE_MBED_TLS */
 

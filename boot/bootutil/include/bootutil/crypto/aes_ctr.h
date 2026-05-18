@@ -22,7 +22,7 @@
 #include "bootutil/enc_key_public.h"
 
 #if defined(MCUBOOT_USE_MBED_TLS)
-    #include <mbedtls/aes.h>
+    #include <mbedtls/private/aes.h>
     #define BOOT_ENC_BLOCK_SIZE (16)
 #endif /* MCUBOOT_USE_MBED_TLS */
 
