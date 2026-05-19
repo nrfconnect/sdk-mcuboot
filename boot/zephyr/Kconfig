@@ -303,23 +303,26 @@ choice BOOT_ECDSA_IMPLEMENTATION
 	default BOOT_ECDSA_TINYCRYPT
 
 config BOOT_ECDSA_NRF_OBERON
-  bool "use nrf oberon SW crypto."
-  select BOOT_USE_NRF_OBERON
+	bool "use nrf oberon SW crypto. [DEPRECATED]"
+	select DEPRECATED
+	select BOOT_USE_NRF_OBERON
 
 config BOOT_ECDSA_TINYCRYPT
-	bool "Use tinycrypt"
+	bool "Use tinycrypt [DEPRECATED]"
+	select DEPRECATED
 	select BOOT_USE_TINYCRYPT
 
 config BOOT_ECDSA_CC310
-	bool "Use CC310"
+	bool "Use CC310 [DEPRECATED]"
 	depends on HAS_HW_NRF_CC310
+	select DEPRECATED
 	select BOOT_USE_NRF_CC310_BL
 	select NRF_CC310_BL
 	select NRFXLIB_CRYPTO
 	select BOOT_USE_CC310
 
 config BOOT_ECDSA_PSA
-	bool "Use psa cryptoo"
+	bool "Use PSA Crypto"
 	depends on PSA_CRYPTO
 	select BOOT_USE_PSA_CRYPTO
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !PSA_CORE_LITE
@@ -362,7 +365,8 @@ choice BOOT_ED25519_IMPLEMENTATION
 	default BOOT_ED25519_TINYCRYPT
 
 config BOOT_ED25519_TINYCRYPT
-	bool "Use tinycrypt"
+	bool "Use tinycrypt [DEPRECATED]"
+	select DEPRECATED
 	select BOOT_USE_TINYCRYPT
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
@@ -376,7 +380,8 @@ if BOOT_ED25519_TINYCRYPT
 endif
 
 config BOOT_ED25519_MBEDTLS
-	bool "Use mbedTLS"
+	bool "Use mbedTLS [DEPRECATED]"
+	select DEPRECATED
 	select BOOT_USE_MBEDTLS
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
@@ -386,7 +391,7 @@ config BOOT_ED25519_MBEDTLS
 	select BOOT_AES_MBEDTLS_DEPENDENCIES if MBEDTLS_BUILTIN && BOOT_ENCRYPT_IMAGE
 
 config BOOT_ED25519_PSA
-	bool "Use PSA crypto"
+	bool "Use PSA Crypto"
 	depends on PSA_CRYPTO
 	select BOOT_USE_PSA_CRYPTO
 	select MBEDTLS_ASN1_PARSE_C
