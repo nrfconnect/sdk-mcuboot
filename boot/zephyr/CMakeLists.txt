@@ -849,7 +849,7 @@ if(NOT CONFIG_PARTITION_MANAGER_ENABLED AND CONFIG_SOC_NRF5340_CPUAPP)
     # Really this dependency if set for MCUboot, but it will also cover s1 image,
     # since contition that let us here checks for `CONFIG_MCUBOOT` which is only
     # set for MCUboot builds.
-    add_dependencies(${TARGET_NAME} b0n_target)
+    add_dependencies(app b0n_target)
 
     dt_nodelabel(s0_partition_path NODELABEL s0_partition REQUIRED TARGET b0n_target)
     dt_reg_addr(s0_partition_address PATH ${s0_partition_path} TARGET b0n_target)
