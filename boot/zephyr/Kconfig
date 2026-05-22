@@ -22,9 +22,19 @@ config MCUBOOT
 	select MCUBOOT_BOOTUTIL_LIB
 	select REBOOT if SECURE_BOOT
 
+config BOOT_USE_MBEDTLS_INCLUDES
+	bool
+	# Hidden option
+	select NRF_SECURITY
+	help
+	  Hidden option set if Mbed TLS includes are needed. The includes comes
+	  from Oberon PSA crypto. This is required for ASN.1 encoding information
+	  via the include <mbedtls_oid.h> which is used regardless of implementation.
+
 config BOOT_USE_MBEDTLS
 	bool
 	# Hidden option
+	select BOOT_USES_MBEDTLS_INCLUDES
 	help
 	  Use mbedTLS for crypto primitives.
 
@@ -258,26 +268,15 @@ choice BOOT_SIGNATURE_TYPE
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
 	select BOOT_USE_TINYCRYPT if !SOC_SERIES_NRF54L
-	select BOOT_USE_PSA_CRYPTO if SOC_SERIES_NRF54L
+	select BOOT_USE_PSA_CRYPTO
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 
 config BOOT_SIGNATURE_TYPE_RSA
 	bool "RSA signatures"
-	select BOOT_USE_MBEDTLS
-	select PSA_CRYPTO
-	select PSA_WANT_KEY_TYPE_AES
-	select PSA_WANT_ALG_CTR
-	select MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
-	select MBEDTLS_ASN1_PARSE_C
-	select MBEDTLS_MD_C
-	select MBEDTLS_SHA256_C
-	select MBEDTLS_RSA_C
-	select MBEDTLS_PKCS1_V15
-	select MBEDTLS_PKCS1_V21
-	select MBEDTLS_KEY_EXCHANGE_RSA_ENABLED if NRF_SECURITY
-	select MBEDTLS_PLATFORM_NO_STD_FUNCTIONS
-	select MBEDTLS_PLATFORM_SNPRINTF_ALT
-	select BOOT_ENCRYPTION_SUPPORT
+	select BOOT_USE_PSA_CRYPTO
+	select PSA_WANT_ALG_SHA_256
+	select PSA_WANT_ALG_RSA_PSS
+	select PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 
 if BOOT_SIGNATURE_TYPE_RSA
@@ -291,9 +290,7 @@ config BOOT_SIGNATURE_TYPE_ECDSA_P256
 	bool "Elliptic curve digital signatures with curve P-256"
 	select BOOT_ENCRYPTION_SUPPORT
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
-	# Enable nrf_security for include paths to oberon-psa-crypto which has mbedtls headers
-	# (e.g. crypto_oid.h), needed also in cases other than BOOT_ECDSA_PSA.
-	select NRF_SECURITY
+	select BOOT_USE_MBEDTLS_INCLUDES
 	imply MBEDTLS_ASN1_PARSE_C
 
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
@@ -336,11 +333,9 @@ config BOOT_SIGNATURE_TYPE_ED25519
 	bool "Edwards curve digital signatures using ed25519"
 	select BOOT_ENCRYPTION_SUPPORT if !BOOT_SIGNATURE_TYPE_PURE
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW if !BOOT_SIGNATURE_TYPE_PURE
+	select BOOT_USE_MBEDTLS_INCLUDES
 	# The SHA is used only for key hashing, not for images.
 	select BOOT_SIGNATURE_TYPE_PURE_ALLOW
-	# Enable nrf_security for include paths to oberon-psa-crypto which has mbedtls headers
-	# (e.g. crypto_oid.h), needed also in cases other than BOOT_ED25519_PSA.
-	select NRF_SECURITY
 	help
 	  This is ed25519 signature calculated over SHA512 of SHA256 of application
 	  image.
