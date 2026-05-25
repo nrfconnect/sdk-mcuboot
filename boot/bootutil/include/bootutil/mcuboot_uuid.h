@@ -57,6 +57,21 @@ fih_ret boot_uuid_vid_match(const struct flash_area *fap, const struct image_uui
  */
 fih_ret boot_uuid_cid_match(const struct flash_area *fap, const struct image_uuid *uuid_cid);
 
+/**
+ * @brief Find the image index and partition index for a given class ID and vendor ID.
+ *
+ * @param[in]  cid              The class ID to search for.
+ * @param[in]  vid              The vendor ID to search for.
+ * @param[out] image_index      The index of the image found.
+ * @param[out] partition_index  The index of the partition found.
+ *
+ * @retval 0 on success,
+ * @retval -EINVAL if the input parameters are invalid.
+ * @retval -ENOENT if the image or partition is not found.
+ */
+int boot_uuid_find_image(const struct image_uuid *cid, const struct image_uuid *vid,
+			 size_t *image_index, size_t *partition_index);
+
 #ifdef __cplusplus
 }
 #endif
