@@ -92,6 +92,18 @@ int pcd_version_cmp_net(const struct flash_area *fap, struct image_header *hdr);
 #include <load_ironside_se_conf.h>
 #endif
 
+#if defined(CONFIG_MCUBOOT_UUID_CID)
+#include "bootutil/mcuboot_uuid.h"
+
+#ifdef SECOND_STAGE_MCUBOOT_RUNNING_FROM_S0
+#define MCUBOOT_INACTIVE_PARTITION_INDEX 1
+#define MCUBOOT_ACTIVE_PARTITION_INDEX 0
+#else
+#define MCUBOOT_INACTIVE_PARTITION_INDEX 0
+#define MCUBOOT_ACTIVE_PARTITION_INDEX 1
+#endif
+#endif
+
 #ifdef CONFIG_SOC_EARLY_RESET_HOOK
 void s2ram_designate_slot(uint8_t slot);
 #endif
@@ -605,9 +617,15 @@ boot_rom_address_check(struct boot_loader_state *state)
 }
 #endif
 
-#if (((defined(MCUBOOT_VERIFY_IMG_ADDRESS) && !defined(MCUBOOT_ENC_IMAGES)) \
-  || defined(MCUBOOT_CHECK_HEADER_LOAD_ADDRESS)) ||\
-  defined(MCUBOOT_IS_SECOND_STAGE))
+#if (CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1) && !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) \
+    && defined(CONFIG_PCD_APP)
+#define INCLUDE_NETWORK_CORE_IMAGE_CHECK
+#endif
+
+#if ((defined(MCUBOOT_VERIFY_IMG_ADDRESS) && !defined(MCUBOOT_ENC_IMAGES)) || \
+     defined(MCUBOOT_CHECK_HEADER_LOAD_ADDRESS)) || \
+    (!defined(CONFIG_MCUBOOT_UUID_CID) && (defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) || \
+     defined(MCUBOOT_IS_SECOND_STAGE)))
 static void
 get_image_perspective_flash_area_bounds(const struct flash_area *fa, uint32_t *start, uint32_t *end)
 {
@@ -1048,6 +1066,56 @@ static inline void sec_slot_cleanup_if_unusable(void)
 #endif /* defined(CONFIG_MCUBOOT_CLEANUP_UNUSABLE_SECONDARY) &&\
           defined(MCUBOOT_IS_SECOND_STAGE) || defined(CONFIG_SOC_NRF5340_CPUAPP) */
 
+#ifdef CONFIG_MCUBOOT_UUID_CID
+/**
+ * Read the image UUID from the TLV.
+ *
+ * @param[in]  fap       Pointer to the flash area structure.
+ * @param[in]  hdr       Pointer to the image header structure.
+ * @param[in]  tlv_type  The type of the TLV to read.
+ * @param[out] uuid      Pointer to the image UUID structure.
+ *
+ * @return 0       on success,
+ * @retval -EINVAL if the input parameters are invalid.
+ * @retval -EIO    if the TLV cannot be read.
+ * @retval -ENOENT if the TLV cannot be found.
+ */
+int read_image_uuid_tlv(const struct flash_area *fap,
+			            const struct image_header *hdr,
+			            uint16_t tlv_type,
+			            struct image_uuid *uuid)
+{
+	struct image_tlv_iter it;
+	uint32_t off;
+	uint16_t len;
+	int rc;
+
+	if ((fap == NULL) || (hdr == NULL) || (uuid == NULL)) {
+		return -EINVAL;
+	}
+
+	rc = bootutil_tlv_iter_begin(&it, hdr, fap, tlv_type, false);
+	if (rc != 0) {
+		return -ENOENT;
+	}
+
+	rc = bootutil_tlv_iter_next(&it, &off, &len, NULL);
+	if (rc != 0) {
+		return -ENOENT;
+	}
+
+	if (len != sizeof(uuid->raw)) {
+		return -EINVAL;
+	}
+
+	if (flash_area_read(fap, off, uuid->raw, len) != 0) {
+		return -EIO;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_MCUBOOT_UUID_CID */
+
 /**
  * Determines which swap operation to perform, if any.  If it is determined
  * that a swap operation is required, the image in the secondary slot is checked
@@ -1062,19 +1130,24 @@ boot_validated_swap_type(struct boot_loader_state *state,
 {
     int swap_type;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
+#ifdef INCLUDE_NETWORK_CORE_IMAGE_CHECK
     bool upgrade_valid = false;
-
-#if defined(MCUBOOT_IS_SECOND_STAGE) \
-    || (CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 \
-        && (!defined(MCUBOOT_CHECK_HEADER_LOAD_ADDRESS) \
-            || (!defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP))))
-    int rc;
-    const struct flash_area *secondary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
 #endif
 
-#if defined(MCUBOOT_IS_SECOND_STAGE) || CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#if defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) || defined(MCUBOOT_IS_SECOND_STAGE)
+    const struct flash_area *secondary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
+    int rc = 0;
+#ifdef CONFIG_MCUBOOT_UUID_CID
+    struct image_uuid img_uuid_cid;
+#ifdef MCUBOOT_UUID_VID
+    struct image_uuid img_uuid_vid;
+#endif
+    size_t target_image = 0;
+    size_t target_partition = 0;
+#else
     uint32_t internal_img_addr = 0;
+#endif
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
      * whether the update candidate in the secondary slot is intended for
@@ -1085,6 +1158,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
      */
     NSIB_OWNED_UNSET(BOOT_CURR_IMG(state));
 
+#if !defined(CONFIG_MCUBOOT_UUID_CID) && (defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) || \
+    defined(MCUBOOT_IS_SECOND_STAGE))
     if (hdr->ih_magic == IMAGE_MAGIC) {
 #ifdef MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
         internal_img_addr = hdr->ih_load_addr;
@@ -1102,7 +1177,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         sec_slot_touch(state);
 
 #ifdef  MCUBOOT_IS_SECOND_STAGE
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#ifdef INCLUDE_NETWORK_CORE_IMAGE_CHECK
         if (!(internal_img_addr >= NETCPU_APP_SLOT_OFFSET &&
               internal_img_addr < NETCPU_APP_SLOT_END))
 #endif
@@ -1158,7 +1233,62 @@ boot_validated_swap_type(struct boot_loader_state *state,
         sec_slot_mark_assigned(state);
     }
 
-#endif /* MCUBOOT_IS_SECOND_STAGE || CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 */
+#elif defined(CONFIG_MCUBOOT_UUID_CID)
+    if (hdr->ih_magic == IMAGE_MAGIC) {
+        rc = read_image_uuid_tlv(secondary_fa, hdr, IMAGE_TLV_UUID_CID, &img_uuid_cid);
+        if (rc != 0) {
+            return BOOT_SWAP_TYPE_NONE;
+        }
+#ifdef MCUBOOT_UUID_VID
+        rc = read_image_uuid_tlv(secondary_fa, hdr, IMAGE_TLV_UUID_VID, &img_uuid_vid);
+        if (rc != 0) {
+            return BOOT_SWAP_TYPE_NONE;
+        }
+#endif
+
+        sec_slot_touch(state);
+
+        rc = boot_uuid_find_image(&img_uuid_cid,
+#ifdef MCUBOOT_UUID_VID
+                                  &img_uuid_vid,
+#else
+                                  NULL,
+#endif
+                                  &target_image, &target_partition);
+        if (rc != 0) {
+            /* Unable to find a matching image index. */
+            BOOT_LOG_ERR("Image in slot does not match any known UUID");
+            flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+            sec_slot_untouch(state);
+            BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
+            return BOOT_SWAP_TYPE_FAIL;
+        }
+
+        if (target_image == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+            /* This is a valid network core update candidate. */
+#ifdef  MCUBOOT_IS_SECOND_STAGE
+        } else if ((target_image == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) &&
+                   (target_partition == MCUBOOT_INACTIVE_PARTITION_INDEX)) {
+            /* This is a valid MCUboot update candidate. */
+            NSIB_OWNED_SET(BOOT_CURR_IMG(state));
+        } else if ((target_image == CONFIG_MCUBOOT_MCUBOOT_IMAGE_NUMBER) &&
+                   (target_partition == MCUBOOT_ACTIVE_PARTITION_INDEX)) {
+            /* NSIB upgrade but for the wrong slot, must be erased */
+            BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
+            flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+            sec_slot_untouch(state);
+            BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
+            return BOOT_SWAP_TYPE_FAIL;
+#endif /* MCUBOOT_IS_SECOND_STAGE */
+        } else {
+            /* The image in the secondary slot is not intended for any */
+            return BOOT_SWAP_TYPE_NONE;
+        }
+
+        sec_slot_mark_assigned(state);
+    }
+#endif /* CONFIG_MCUBOOT_UUID_CID */
+#endif /* defined(MCUBOOT_IS_SECOND_STAGE) || defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) */
 
     swap_type = boot_swap_type_multi(BOOT_CURR_IMG(state));
     if (BOOT_IS_UPGRADE(swap_type)) {
@@ -1172,18 +1302,25 @@ boot_validated_swap_type(struct boot_loader_state *state,
             } else {
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             }
+#ifdef INCLUDE_NETWORK_CORE_IMAGE_CHECK
         } else {
             upgrade_valid = true;
+#endif
         }
 
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 \
-    && !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP)
+#ifdef INCLUDE_NETWORK_CORE_IMAGE_CHECK
         /* If the update is valid, and it targets the network core: perform the
          * update and indicate to the caller of this function that no update is
          * available
          */
-        if (upgrade_valid && internal_img_addr >= NETCPU_APP_SLOT_OFFSET &&
-            internal_img_addr < NETCPU_APP_SLOT_END) {
+        if (upgrade_valid
+#if defined(CONFIG_MCUBOOT_UUID_CID)
+            && (target_image == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER)
+#else
+            && (internal_img_addr >= NETCPU_APP_SLOT_OFFSET)
+            && (internal_img_addr < NETCPU_APP_SLOT_END)
+#endif
+            ) {
             struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
@@ -1205,12 +1342,12 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
         }
-#endif /* CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && \
-          !CONFIG_NRF53_MULTI_IMAGE_UPDATE && CONFIG_PCD_APP */
+#endif /* INCLUDE_NETWORK_CORE_IMAGE_CHECK */
     }
 
     return swap_type;
 }
+
 #endif
 
 #if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
