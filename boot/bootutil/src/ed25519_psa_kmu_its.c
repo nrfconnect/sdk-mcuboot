@@ -118,7 +118,9 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
             BOOT_LOG_INF("ED25519_verify: trying manufacturing application key ID 0x%" PRIx32,
                 (uint32_t)manufacturing_app_key_id);
             /* Do not revoke application keys - pretend as if the first generation key was used */
+#if defined(CONFIG_BOOT_KMU_KEYS_REVOCATION)
             validated_with = 0;
+#endif
             status = psa_verify_message(manufacturing_app_key_id, PSA_ALG_PURE_EDDSA, message,
                                         message_len, signature,
                                         EDDSA_SIGNAGURE_LENGTH);
