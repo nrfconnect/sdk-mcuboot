@@ -1043,43 +1043,49 @@ boot_validated_swap_type(struct boot_loader_state *state,
 #if defined(MCUBOOT_IS_SECOND_STAGE) || CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
     const struct flash_area *secondary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
     struct image_header *hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
-    uint32_t reset_addr = 0;
+    uint32_t internal_img_addr = 0;
     int rc = 0;
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
      * whether the update candidate in the secondary slot is intended for
-     * image 0 or image 1 primary by looking at the address of the reset
-     * vector. Note that there are good reasons for not using img_num from
-     * the swap info.
+     * image 0 or image 1 primary. With MCUBOOT_CHECK_HEADER_LOAD_ADDRESS the
+     * image header load address is used; otherwise the reset vector is read
+     * from the image. Note that there are good reasons for not using img_num
+     * from the swap info.
      */
     NSIB_OWNED_UNSET(BOOT_CURR_IMG(state));
 
     if (hdr->ih_magic == IMAGE_MAGIC) {
-        rc = flash_area_read(secondary_fa, hdr->ih_hdr_size +
-                             sizeof(uint32_t), &reset_addr,
-                             sizeof(reset_addr));
+#ifdef MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
+        internal_img_addr = hdr->ih_load_addr;
+#else
+        rc = flash_area_read(secondary_fa, hdr->ih_hdr_size + RESET_OFFSET,
+                             &internal_img_addr, sizeof(internal_img_addr));
         if (rc != 0) {
             return BOOT_SWAP_TYPE_FAIL;
         }
+#endif
+
+        BOOT_LOG_DBG("boot_validated_swap_type: image %d addr 0x%x",
+                     BOOT_CURR_IMG(state), internal_img_addr);
 
         sec_slot_touch(state);
 
 #ifdef  MCUBOOT_IS_SECOND_STAGE
 #if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
-        if(!(reset_addr >= NETCPU_APP_SLOT_OFFSET && reset_addr < NETCPU_APP_SLOT_END))
+        if (!(internal_img_addr >= NETCPU_APP_SLOT_OFFSET &&
+              internal_img_addr < NETCPU_APP_SLOT_END))
 #endif
         {
-            const struct flash_area *primary_fa;
-            rc = flash_area_open(flash_area_id_from_multi_image_slot(
-                    BOOT_CURR_IMG(state),
-                    BOOT_SLOT_PRIMARY),
-                &primary_fa);
-            if (rc != 0) {
-                return BOOT_SWAP_TYPE_FAIL;
-            }
+            const struct flash_area *primary_fa =
+                BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY);
+            const uint32_t pri_off = flash_area_get_off(primary_fa);
+            const uint32_t pri_end = pri_off + flash_area_get_size(primary_fa);
+
             /* Check start and end of primary slot for current image */
-            if (reset_addr >= SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET &&
-                reset_addr <= (SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET + SECOND_STAGE_INACTIVE_MCUBOOT_SIZE)) {
+            if (internal_img_addr >= SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET &&
+                internal_img_addr < (SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET +
+                                     SECOND_STAGE_INACTIVE_MCUBOOT_SIZE)) {
                 if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
                     /* This is not the s0/s1 upgrade image but the application image, pretend
                      * there is no image so the NSIB update can be loaded
@@ -1088,21 +1094,21 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 }
 
                 NSIB_OWNED_SET(BOOT_CURR_IMG(state));
-            } else if (reset_addr >= SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET &&
-                       reset_addr <= (SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET + SECOND_STAGE_ACTIVE_MCUBOOT_SIZE)) {
+            } else if (internal_img_addr >= SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET &&
+                       internal_img_addr < (SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET +
+                                            SECOND_STAGE_ACTIVE_MCUBOOT_SIZE)) {
                 /* NSIB upgrade but for the wrong slot, must be erased */
                 BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
-                flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
                 sec_slot_untouch(state);
                 BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
                 return BOOT_SWAP_TYPE_FAIL;
-            } else if (reset_addr < primary_fa->fa_off || reset_addr > (primary_fa->fa_off + primary_fa->fa_size)) {
+            } else if (internal_img_addr < pri_off || internal_img_addr >= pri_end) {
                 /* The image in the secondary slot is not intended for any */
                 return BOOT_SWAP_TYPE_NONE;
             }
 
-            if ((primary_fa->fa_off == SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET) ||
-                (primary_fa->fa_off == SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET)) {
+            if ((pri_off == SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET) ||
+                (pri_off == SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET)) {
                 NSIB_OWNED_SET(BOOT_CURR_IMG(state));
             }
         }
@@ -1134,8 +1140,8 @@ boot_validated_swap_type(struct boot_loader_state *state,
          * update and indicate to the caller of this function that no update is
          * available
          */
-        if (upgrade_valid && reset_addr >= NETCPU_APP_SLOT_OFFSET &&
-            reset_addr < NETCPU_APP_SLOT_END) {
+        if (upgrade_valid && internal_img_addr >= NETCPU_APP_SLOT_OFFSET &&
+            internal_img_addr < NETCPU_APP_SLOT_END) {
             struct image_header *hdr = (struct image_header *)secondary_fa->fa_off;
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
