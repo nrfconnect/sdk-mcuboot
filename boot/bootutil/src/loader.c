@@ -1718,8 +1718,8 @@ boot_perform_update(struct boot_loader_state *state, struct boot_status *bs)
      * swap was finished to avoid a new revert.
      */
     swap_type = BOOT_SWAP_TYPE(state);
-    if (swap_type == BOOT_SWAP_TYPE_REVERT ||
-            swap_type == BOOT_SWAP_TYPE_PERM) {
+    if ((swap_type == BOOT_SWAP_TYPE_REVERT || swap_type == BOOT_SWAP_TYPE_PERM)
+        && (!IS_NSIB_OWNED(BOOT_CURR_IMG(state)))) {
         rc = swap_set_image_ok(BOOT_CURR_IMG(state));
         if (rc != 0) {
             BOOT_SWAP_TYPE(state) = swap_type = BOOT_SWAP_TYPE_PANIC;
@@ -1746,7 +1746,7 @@ boot_perform_update(struct boot_loader_state *state, struct boot_status *bs)
     }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT */
 
-    if (BOOT_IS_UPGRADE(swap_type)) {
+    if (BOOT_IS_UPGRADE(swap_type) && (!IS_NSIB_OWNED(BOOT_CURR_IMG(state)))) {
         rc = swap_set_copy_done(BOOT_CURR_IMG(state));
         if (rc != 0) {
             BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_PANIC;
@@ -1782,8 +1782,8 @@ boot_complete_partial_swap(struct boot_loader_state *state,
     /* The following states need image_ok be explicitly set after the
      * swap was finished to avoid a new revert.
      */
-    if (bs->swap_type == BOOT_SWAP_TYPE_REVERT ||
-        bs->swap_type == BOOT_SWAP_TYPE_PERM) {
+    if ((bs->swap_type == BOOT_SWAP_TYPE_REVERT || bs->swap_type == BOOT_SWAP_TYPE_PERM)
+        && (!IS_NSIB_OWNED(BOOT_CURR_IMG(state)))) {
         rc = swap_set_image_ok(BOOT_CURR_IMG(state));
         if (rc != 0) {
             BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_PANIC;
@@ -2332,10 +2332,12 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
              * pretending we just reverted back to primary slot.
              */
 #ifndef MCUBOOT_OVERWRITE_ONLY
-            /* image_ok needs to be explicitly set to avoid a new revert. */
-            rc = swap_set_image_ok(BOOT_CURR_IMG(state));
-            if (rc != 0) {
-                BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_PANIC;
+            if (!IS_NSIB_OWNED(BOOT_CURR_IMG(state))) {
+                /* image_ok needs to be explicitly set to avoid a new revert. */
+                rc = swap_set_image_ok(BOOT_CURR_IMG(state));
+                if (rc != 0) {
+                    BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_PANIC;
+                }
             }
 #endif /* !MCUBOOT_OVERWRITE_ONLY */
             break;
