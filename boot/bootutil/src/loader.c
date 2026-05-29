@@ -147,7 +147,7 @@ static const struct image_version mcuboot_s0_s1_image_version = {
 #endif
 
 /* Valid only for ARM Cortext M */
-#define RESET_OFFSET    (2 * sizeof(uint32_t))
+#define RESET_OFFSET sizeof(uint32_t)
 
 #if BOOT_MAX_ALIGN > 1024
 #define BUF_SZ BOOT_MAX_ALIGN
