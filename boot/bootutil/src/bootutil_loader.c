@@ -132,6 +132,14 @@ boot_check_header_valid(struct boot_loader_state *state, int slot)
     }
 #endif
 
+#ifdef MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
+    if ((hdr->ih_flags & (IMAGE_F_ROM_FIXED | IMAGE_F_RAM_LOAD)) == 0) {
+        BOOT_LOG_ERR("IMAGE_F_ROM_FIXED | IMAGE_F_RAM_LOAD is not set for image %d slot %d",
+            BOOT_CURR_IMG(state), slot);
+        return false;
+    }
+#endif
+
     return true;
 }
 
