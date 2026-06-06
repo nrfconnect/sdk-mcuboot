@@ -1503,6 +1503,8 @@ config MCUBOOT_BOOTUTIL_LIB_OWN_LOG
 
 config MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
         bool "Use load address to verify application is in proper slot"
+		default y if UPDATEABLE_IMAGE_NUMBER > 1
+		default y if MCUBOOT_NETWORK_CORE_IMAGE_NUMBER > 0
         help
           The bootloader will use the load address, from the image header,
           to verify that binary is in slot designated for its execution.
@@ -1519,7 +1521,7 @@ config MCUBOOT_VERIFY_IMG_ADDRESS
 	depends on UPDATEABLE_IMAGE_NUMBER > 1
 	depends on !BOOT_ENCRYPT_IMAGE
 	depends on ARM
-	default y if BOOT_UPGRADE_ONLY
+	default y if BOOT_UPGRADE_ONLY && !MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
 	help
           This option is deprecated, please use MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
           instead.
