@@ -810,8 +810,11 @@ check_validity:
     if (fap == BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY)) {
         struct image_header *secondary_hdr = boot_img_hdr(state, slot);
         uint32_t internal_img_addr = 0; /* either the reset handler addres or the image beginning addres */
-        uint32_t min_addr;
-        uint32_t max_addr;
+        /* min and max addresses for the image are assigned for suppres compiller warnings,
+         * although flow may check them only when they are assigned with other values.
+         */
+        uint32_t min_addr = 0;
+        uint32_t max_addr = 0;
         bool check_addresses = false;
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
