@@ -814,7 +814,7 @@ check_validity:
         uint32_t max_addr;
         bool check_addresses = false;
 
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
         /* The primary slot for the network core is emulated in RAM.
          * Its flash_area hasn't got relevant boundaries.
          * Therfore need to override its boundaries for the check.
