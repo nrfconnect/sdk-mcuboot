@@ -291,7 +291,7 @@ boot_slots_compatible(struct boot_loader_state *state)
      * partition manager is in use, and since we have the same sector size
      * in all of our flash.
      */
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && defined(CONFIG_SOC_NRF5340_CPUAPP)
     if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
         return 1;
     }
