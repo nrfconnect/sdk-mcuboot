@@ -1040,11 +1040,17 @@ boot_validated_swap_type(struct boot_loader_state *state,
     FIH_DECLARE(fih_rc, FIH_FAILURE);
     bool upgrade_valid = false;
 
-#if defined(MCUBOOT_IS_SECOND_STAGE) || CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#if defined(MCUBOOT_IS_SECOND_STAGE) \
+    || (CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 \
+        && (!defined(MCUBOOT_CHECK_HEADER_LOAD_ADDRESS) \
+            || (!defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP))))
+    int rc;
     const struct flash_area *secondary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
+#endif
+
+#if defined(MCUBOOT_IS_SECOND_STAGE) || CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
     struct image_header *hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
     uint32_t internal_img_addr = 0;
-    int rc = 0;
     /* Patch needed for NCS. Since image 0 (the app) and image 1 (the other
      * B1 slot S0 or S1) share the same secondary slot, we need to check
      * whether the update candidate in the secondary slot is intended for
