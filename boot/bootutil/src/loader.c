@@ -785,7 +785,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
 #endif
 
         if (rc < 0 &&
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && \
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && defined(CONFIG_SOC_NRF5340_CPUAPP) && \
     !defined(CONFIG_MCUBOOT_DOWNGRADE_PREVENTION) || !defined(CONFIG_PCD_READ_NETCORE_APP_VERSION)
             CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != BOOT_CURR_IMG(state) &&
 #endif
@@ -1738,13 +1738,13 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
          */
         hdr = boot_img_hdr(state, BOOT_SLOT_PRIMARY);
         if (hdr->ih_magic == IMAGE_MAGIC) {
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && defined(CONFIG_SOC_NRF5340_CPUAPP)
             if (image_index == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
                 rc = boot_read_image_size(state, BOOT_SLOT_SECONDARY, &copy_size);
             } else {
 #endif
                 rc = boot_read_image_size(state, BOOT_SLOT_PRIMARY, &copy_size);
-#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+#if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && defined(CONFIG_SOC_NRF5340_CPUAPP)
             }
 #endif
             assert(rc == 0);
