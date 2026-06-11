@@ -605,6 +605,27 @@ boot_rom_address_check(struct boot_loader_state *state)
 }
 #endif
 
+#if (((defined(MCUBOOT_VERIFY_IMG_ADDRESS) && !defined(MCUBOOT_ENC_IMAGES)) \
+  || defined(MCUBOOT_CHECK_HEADER_LOAD_ADDRESS)) ||\
+  defined(MCUBOOT_IS_SECOND_STAGE))
+static void
+get_image_perspective_flash_area_bounds(const struct flash_area *fa, uint32_t *start, uint32_t *end)
+{
+    *start = flash_area_get_off(fa);
+    *end = *start + flash_area_get_size(fa);
+
+    /* For nRF54H20 in a direct-xip mode use relative bounds due to backwards compatibility
+     * For other platforms and modes use absolute bounds.
+     */
+
+    uintptr_t flash_base = 0;
+
+    if (flash_device_base(flash_area_get_device_id(fa), &flash_base) == 0) {
+        *start += (uint32_t)flash_base;
+        *end += (uint32_t)flash_base;
+    }
+}
+#endif
 /*
  * Check that there is a valid image in a slot
  *
@@ -836,8 +857,8 @@ check_validity:
         } else
 #endif
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
-            min_addr = flash_area_get_off(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
-            max_addr = flash_area_get_size(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY)) + min_addr;
+            get_image_perspective_flash_area_bounds(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY),
+                                                    &min_addr, &max_addr);
 
 #ifdef MCUBOOT_IS_SECOND_STAGE
             min_addr = MIN(min_addr, SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET);
@@ -1095,8 +1116,11 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 return BOOT_SWAP_TYPE_FAIL;
             }
 
-            const uint32_t pri_off = flash_area_get_off(primary_fa);
-            const uint32_t pri_end = pri_off + flash_area_get_size(primary_fa);
+            const uint32_t pri_fa_off = flash_area_get_off(primary_fa);
+            uint32_t pri_off;
+            uint32_t pri_end;
+
+            get_image_perspective_flash_area_bounds(primary_fa, &pri_off, &pri_end);
 
             /* Check start and end of primary slot for current image */
             if (internal_img_addr >= SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET &&
@@ -1124,8 +1148,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 return BOOT_SWAP_TYPE_NONE;
             }
 
-            if ((pri_off == SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET) ||
-                (pri_off == SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET)) {
+            /* SECOND_STAGE_*_OFFSET is PARTITION_OFFSET (fa_off space), not absolute. */
+            if ((pri_fa_off == SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET) ||
+                (pri_fa_off == SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET)) {
                 NSIB_OWNED_SET(BOOT_CURR_IMG(state));
             }
         }
