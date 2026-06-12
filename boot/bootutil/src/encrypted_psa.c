@@ -200,6 +200,8 @@ void bootutil_aes_ctr_init(bootutil_aes_ctr_context *ctx)
 
 #if defined(MCUBOOT_ENC_IMAGES)
 extern const struct bootutil_key bootutil_enc_key;
+
+#if defined(MCUBOOT_ENCRYPT_EC256) || defined(MCUBOOT_ENCRYPT_X25519)
 /*
  * Decrypt an encryption key TLV.
  *
@@ -388,6 +390,8 @@ boot_decrypt_key(const uint8_t *buf, uint8_t *enckey)
 
     return 0;
 }
+
+#endif /* defined(MCUBOOT_ENCRYPT_EC256) || defined(MCUBOOT_ENCRYPT_X25519) */
 
 int bootutil_aes_ctr_encrypt(bootutil_aes_ctr_context *ctx, uint8_t *counter,
         const uint8_t *m, uint32_t mlen, size_t blk_off, uint8_t *c)
