@@ -1574,4 +1574,7 @@ config NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER
 	help
 	  Manufacturing application key identifier.
 
+configdefault PSA_CRYPTO
+	  default y if SOC_NRF54H20 && BOOT_SIGNATURE_TYPE_ED25519
+
 source "Kconfig.zephyr"
