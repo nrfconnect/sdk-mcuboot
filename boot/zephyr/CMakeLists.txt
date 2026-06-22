@@ -592,43 +592,50 @@ set(image 0)
 set(auto_min_sectors 0)
 
 while(${image} LESS ${CONFIG_UPDATEABLE_IMAGE_NUMBER})
-  set(slot1_flash)
-  set(slot1_size)
-  set(erase_size_slot1)
-  set(write_size_slot1)
+  set(secondary_slot_flash)
+  set(secondary_slot_size)
+  set(erase_size_secondary_slot)
+  set(write_size_secondary_slot)
   math(EXPR primary_slot "${image} * 2")
 
-  dt_nodelabel(slot0_flash NODELABEL "slot${primary_slot}_partition")
-  if(NOT DEFINED slot0_flash)
+  dt_nodelabel(primary_slot_flash NODELABEL "slot${primary_slot}_partition")
+  if(NOT DEFINED primary_slot_flash)
     message(STATUS "slot${primary_slot}_partition not found. Skip reading erase/write block sizes.")
     math(EXPR image "${image} + 1")
     continue()
   endif()
 
-  dt_get_erase_write_block_sizes(${slot0_flash} erase_size_slot0 write_size_slot0)
+  dt_get_erase_write_block_sizes(${primary_slot_flash} erase_size_primary_slot
+    write_size_primary_slot)
 
   if(CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET)
-    if(DEFINED erase_size_slot0)
+    if(DEFINED erase_size_primary_slot)
+      if(${image} EQUAL 0)
+        set(erase_size_slot0 ${erase_size_primary_slot})
+      endif()
       zephyr_compile_definitions(
-        "MCUBOOT_SLOT${primary_slot}_EXPECTED_ERASE_SIZE=${erase_size_slot0}")
+        "MCUBOOT_SLOT${primary_slot}_EXPECTED_ERASE_SIZE=${erase_size_primary_slot}")
     endif()
 
-    if(DEFINED write_size_slot0)
+    if(DEFINED write_size_primary_slot)
+      if(${image} EQUAL 0)
+        set(write_size_slot0 ${write_size_primary_slot})
+      endif()
       zephyr_compile_definitions(
-        "MCUBOOT_SLOT${primary_slot}_EXPECTED_WRITE_SIZE=${write_size_slot0}")
+        "MCUBOOT_SLOT${primary_slot}_EXPECTED_WRITE_SIZE=${write_size_primary_slot}")
     endif()
   endif()
 
   if(CONFIG_BOOT_MAX_IMG_SECTORS_AUTO)
-    dt_prop(slot0_size PATH "${slot0_flash}" PROPERTY "reg" INDEX 1)
-    if(DEFINED slot0_size AND DEFINED erase_size_slot0)
-      math(EXPR remainder "${slot0_size} % ${erase_size_slot0}")
+    dt_prop(primary_slot_size PATH "${primary_slot_flash}" PROPERTY "reg" INDEX 1)
+    if(DEFINED primary_slot_size AND DEFINED erase_size_primary_slot)
+      math(EXPR remainder "${primary_slot_size} % ${erase_size_primary_slot}")
       if(NOT remainder EQUAL 0)
-        message(FATAL_ERROR "slot${primary_slot}_partition size (${slot0_size}) is not divisible "
-          "by erase block size (${erase_size_slot0})"
+        message(FATAL_ERROR "slot${primary_slot}_partition size (${primary_slot_size}) is not "
+          "divisible by erase block size (${erase_size_primary_slot})"
         )
       endif()
-      math(EXPR slot_min_sectors "${slot0_size} / ${erase_size_slot0}")
+      math(EXPR slot_min_sectors "${primary_slot_size} / ${erase_size_primary_slot}")
 
       if(${slot_min_sectors} GREATER ${auto_min_sectors})
         set(auto_min_sectors ${slot_min_sectors})
@@ -641,38 +648,44 @@ while(${image} LESS ${CONFIG_UPDATEABLE_IMAGE_NUMBER})
   if(NOT CONFIG_SINGLE_APPLICATION_SLOT AND NOT CONFIG_SINGLE_APPLICATION_SLOT_RAM_LOAD)
     math(EXPR secondary_slot "${primary_slot} + 1")
 
-    dt_nodelabel(slot1_flash NODELABEL "slot${secondary_slot}_partition")
-    if(NOT DEFINED slot1_flash)
+    dt_nodelabel(secondary_slot_flash NODELABEL "slot${secondary_slot}_partition")
+    if(NOT DEFINED secondary_slot_flash)
       message(STATUS
         "slot${secondary_slot}_partition not found. Skip reading erase/write block sizes.")
       math(EXPR image "${image} + 1")
       continue()
     endif()
 
-    dt_get_erase_write_block_sizes(${slot1_flash} erase_size_slot1 write_size_slot1)
+    dt_get_erase_write_block_sizes(${secondary_slot_flash} erase_size_secondary_slot write_size_secondary_slot)
 
     if(CONFIG_BOOT_SWAP_USING_MOVE OR CONFIG_BOOT_SWAP_USING_OFFSET)
-      if(DEFINED erase_size_slot1)
+      if(DEFINED erase_size_secondary_slot)
+        if(${image} EQUAL 0)
+          set(erase_size_slot1 ${erase_size_secondary_slot})
+        endif()
         zephyr_compile_definitions(
-          "MCUBOOT_SLOT${secondary_slot}_EXPECTED_ERASE_SIZE=${erase_size_slot1}")
+          "MCUBOOT_SLOT${secondary_slot}_EXPECTED_ERASE_SIZE=${erase_size_secondary_slot}")
       endif()
 
-      if(DEFINED write_size_slot1)
+      if(DEFINED write_size_secondary_slot)
+        if(${image} EQUAL 0)
+          set(write_size_slot1 ${write_size_secondary_slot})
+        endif()
         zephyr_compile_definitions(
-          "MCUBOOT_SLOT${secondary_slot}_EXPECTED_WRITE_SIZE=${write_size_slot1}")
+          "MCUBOOT_SLOT${secondary_slot}_EXPECTED_WRITE_SIZE=${write_size_secondary_slot}")
       endif()
     endif()
 
     if(CONFIG_BOOT_MAX_IMG_SECTORS_AUTO)
-      dt_prop(slot1_size PATH "${slot1_flash}" PROPERTY "reg" INDEX 1)
-      if(DEFINED slot1_size AND DEFINED erase_size_slot1)
-        math(EXPR remainder "${slot1_size} % ${erase_size_slot1}")
+      dt_prop(secondary_slot_size PATH "${secondary_slot_flash}" PROPERTY "reg" INDEX 1)
+      if(DEFINED secondary_slot_size AND DEFINED erase_size_secondary_slot)
+        math(EXPR remainder "${secondary_slot_size} % ${erase_size_secondary_slot}")
         if(NOT remainder EQUAL 0)
-          message(FATAL_ERROR "slot${secondary_slot}_partition size (${slot1_size}) is not "
-            "divisible by erase block size (${erase_size_slot1})"
+          message(FATAL_ERROR "slot${secondary_slot}_partition size (${secondary_slot_size}) is not "
+            "divisible by erase block size (${erase_size_secondary_slot})"
           )
         endif()
-        math(EXPR slot_min_sectors "${slot1_size} / ${erase_size_slot1}")
+        math(EXPR slot_min_sectors "${secondary_slot_size} / ${erase_size_secondary_slot}")
 
         if(${slot_min_sectors} GREATER ${auto_min_sectors})
           set(auto_min_sectors ${slot_min_sectors})
