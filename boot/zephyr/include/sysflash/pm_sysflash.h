@@ -151,7 +151,8 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
  */
 #ifdef CONFIG_FPROTECT
 #define FPROTECT_REGION_OFFSET  (PM_S0_ADDRESS)
-#define FPROTECT_REGION_SIZE    (PM_MCUBOOT_PRIMARY_ADDRESS - FPROTECT_REGION_OFFSET)
+#define FPROTECT_REGION_SIZE    \
+    FPROTECT_ALIGN_UP(PM_MCUBOOT_PRIMARY_ADDRESS - FPROTECT_REGION_OFFSET)
 #endif
 
 /* RWX protection regions: the currently executing MCUboot is protecting itself */
