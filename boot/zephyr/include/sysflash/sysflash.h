@@ -110,7 +110,8 @@
 #ifdef CONFIG_FPROTECT
 #define FPROTECT_REGION_OFFSET  PARTITION_OFFSET(s0_partition)
 #define FPROTECT_REGION_SIZE    \
-    (PARTITION_SIZE(s0_partition) + PARTITION_SIZE(s1_partition))
+    FPROTECT_ALIGN_UP(PARTITION_SIZE(s0_partition) + \
+                      PARTITION_SIZE(s1_partition))
 #endif
 
 /* RWX protection regions: the currently executing MCUboot is protecting itself */
@@ -184,7 +185,7 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 /* Protecting MCUboot partition */
 #ifdef CONFIG_FPROTECT
 #define FPROTECT_REGION_OFFSET  PARTITION_OFFSET(boot_partition)
-#define FPROTECT_REGION_SIZE    PARTITION_SIZE(boot_partition)
+#define FPROTECT_REGION_SIZE    FPROTECT_ALIGN_UP(PARTITION_SIZE(boot_partition))
 #endif
 
 /* RWX protection regions, MCUboot is protecting itself */
