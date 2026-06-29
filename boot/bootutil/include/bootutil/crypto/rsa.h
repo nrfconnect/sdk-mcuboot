@@ -121,6 +121,11 @@ bootutil_rsa_parse_private_key(bootutil_rsa_context *ctx, uint8_t **p, uint8_t *
     psa_set_key_usage_flags(&key_attributes, PSA_KEY_USAGE_DECRYPT);
     psa_set_key_algorithm(&key_attributes, PSA_ALG_RSA_OAEP(PSA_ALG_SHA_256));
     psa_set_key_type(&key_attributes, PSA_KEY_TYPE_RSA_KEY_PAIR);
+#if defined(MCUBOOT_SIGN_RSA_LEN)
+    psa_set_key_bits(&key_attributes, MCUBOOT_SIGN_RSA_LEN);
+#else
+    psa_set_key_bits(&key_attributes, 2048);
+#endif
 
     status = psa_import_key(&key_attributes, *p, (end - *p), &ctx->key_id);
     return (int)status;
