@@ -29,9 +29,9 @@
 
 
 #include <string.h>
+#include <zephyr/devicetree.h>
 
-#if defined(NRF_UARTE0) || defined(NRF_UARTE1) || defined(NRF_UARTE00) ||   \
-    defined(NRF_UARTE20) || defined(NRF_UARTE30) || defined(NRF_UARTE136) 
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_uarte)
 #define NRF_UARTE_CLEANUP
 #endif
 
@@ -91,26 +91,11 @@ static inline void nrf_cleanup_grtc(void)
 #endif
 
 #if defined(NRF_UARTE_CLEANUP)
+#define NRF_UARTE_PTR(node_id) (NRF_UARTE_Type *)(uintptr_t)DT_REG_ADDR(node_id),
 static NRF_UARTE_Type *nrf_uarte_to_clean[] = {
-#if defined(NRF_UARTE0)
-    NRF_UARTE0,
-#endif
-#if defined(NRF_UARTE1)
-    NRF_UARTE1,
-#endif
-#if defined(NRF_UARTE00)
-    NRF_UARTE00,
-#endif
-#if defined(NRF_UARTE20)
-    NRF_UARTE20,
-#endif
-#if defined(NRF_UARTE30)
-    NRF_UARTE30,
-#endif
-#if defined(NRF_UARTE136)
-    NRF_UARTE136,
-#endif
+    DT_FOREACH_STATUS_OKAY(nordic_nrf_uarte, NRF_UARTE_PTR)
 };
+#undef NRF_UARTE_PTR
 #endif
 
 #if defined(CONFIG_NRFX_CLOCK)
@@ -169,10 +154,13 @@ void nrf_cleanup_peripheral(void)
         nrfy_uarte_int_disable(current, 0xFFFFFFFF);
         nrfy_uarte_int_uninit(current);
         nrfy_uarte_task_trigger(current, NRF_UARTE_TASK_STOPRX);
+        nrfy_uarte_task_trigger(current, NRF_UARTE_TASK_STOPTX);
 
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXSTARTED);
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_ENDRX);
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXTO);
+        nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_ENDTX);
+        nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_TXSTOPPED);
         nrfy_uarte_disable(current);
 
         uint32_t pin[4];
