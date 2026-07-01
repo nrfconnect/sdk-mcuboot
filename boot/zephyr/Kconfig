@@ -557,19 +557,24 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED
 	default y if SOC_NRF54LV10A_CPUAPP || SOC_NRF54LC10A_CPUAPP
 	default y if SOC_NRF54LM20A_CPUAPP || SOC_NRF54LM20B_CPUAPP
 	default y if SOC_NRF54LS05B_CPUAPP
+	default y if SOC_NRF7120_ENGA_CPUAPP
 
 config NCS_MCUBOOT_DISABLE_SELF_RWX
 	bool "Disable read and execution on self NVM"
 	depends on NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED && !FPROTECT
 	help
-	  Sets RRAMC's region no.4 protection before jumping to application.
-	  It disables reads writes and execution memory area which holds MCUBOOT.
+	  Sets the NVM controller region protection before jumping to application.
+	  It disables reads, writes and execution of the memory area which holds
+	  MCUboot. On nRF54L (RRAMC) this uses region no.4. On nRF71 (MRAMC) a single
+	  region covers at most 31 KiB, so regions no.4 and no.5 are chained to cover
+	  the full MCUboot slot.
 
 config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
 	hex
 	depends on NCS_MCUBOOT_DISABLE_SELF_RWX
 	depends on !PARTITION_MANAGER_ENABLED
 	default 0x800 if SOC_SERIES_NRF54L
+	default 0x800 if SOC_SERIES_NRF71
 	help
 	  Size of region, at the beginning of the partition, that does not require
 	  protections. This is used, for example, when MCUboot type image is protected
