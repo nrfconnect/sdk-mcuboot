@@ -178,49 +178,118 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #define CLEANUP_RAM_GAP_SIZE ((int) (__ramfunc_end - __ramfunc_region_start))
 
 #if defined(CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX)
-/* Disabling R_X has to be done while running from RAM for obvious reasons.
- * Moreover as a last step before jumping to application it must work even after
- * RAM has been cleared, therefore these operations are performed while executing from RAM.
- * RAM cleanup ommits portion of the memory where code lives.
+/* MCUboot disables read/write/execute on its own NVM region(s) before jumping to
+ * the application. This has to run from RAM: once EXECUTE (and READ) are cleared
+ * on the MCUboot slot, any further fetch or read from it faults. It is therefore
+ * a __ramfunc and is invoked from jump_in() before RAM cleanup, while the MCUboot
+ * stack is still valid.
+ *
+ * nRF54L uses RRAMC, nRF71 uses MRAMC. Both controllers expose an identical
+ * REGION[n].CONFIG bit layout (READ=0, WRITE=1, EXECUTE=2, LOCK=13, SIZE=16..20)
+ * and a separate REGION[n].ADDRESS, so only the peripheral base, the register
+ * field macros and the maximum single-region size differ between them.
  */
+#if defined(CONFIG_SOC_SERIES_NRF71)
+#include <hal/nrf_mramc.h>
+#define NVM_REGION               NRF_MRAMC->REGION
+#define NVM_CONFIG_READ_Msk      MRAMC_REGION_CONFIG_READ_Msk
+#define NVM_CONFIG_WRITE_Msk     MRAMC_REGION_CONFIG_WRITE_Msk
+#define NVM_CONFIG_EXECUTE_Msk   MRAMC_REGION_CONFIG_EXECUTE_Msk
+#define NVM_CONFIG_LOCK_Msk      MRAMC_REGION_CONFIG_LOCK_Msk
+#define NVM_CONFIG_SIZE_Msk      MRAMC_REGION_CONFIG_SIZE_Msk
+#define NVM_CONFIG_SIZE_Pos      MRAMC_REGION_CONFIG_SIZE_Pos
+/* A single MRAMC region covers at most 31 KiB (5-bit SIZE), so region no.4 and
+ * no.5 are chained to protect the whole MCUboot slot.
+ */
+#define NVM_REGION_MAX_SIZE_KB   31
+#define NVM_SELF_REGION_COUNT    2
+#else
 #include <hal/nrf_rramc.h>
-
-#define RRAMC_REGION_RWX_LSB 0
-#define RRAMC_REGION_RWX_WIDTH 3
-
-#define RRAMC_REGION_NUMBER 4
-#define NRF_RRAM_REGION_SIZE_UNIT 0x400
-#define NRF_RRAM_REGION_ADDRESS_RESOLUTION 0x400
-
+#define NVM_REGION               NRF_RRAMC->REGION
+#define NVM_CONFIG_READ_Msk      RRAMC_REGION_CONFIG_READ_Msk
+#define NVM_CONFIG_WRITE_Msk     RRAMC_REGION_CONFIG_WRITE_Msk
+#define NVM_CONFIG_EXECUTE_Msk   RRAMC_REGION_CONFIG_EXECUTE_Msk
+#define NVM_CONFIG_LOCK_Msk      RRAMC_REGION_CONFIG_LOCK_Msk
+#define NVM_CONFIG_SIZE_Msk      RRAMC_REGION_CONFIG_SIZE_Msk
+#define NVM_CONFIG_SIZE_Pos      RRAMC_REGION_CONFIG_SIZE_Pos
 #if defined(CONFIG_SOC_NRF54L15_CPUAPP) || defined(CONFIG_SOC_NRF54L05_CPUAPP) ||                  \
 	defined(CONFIG_SOC_NRF54L10_CPUAPP)
-#define MAX_PROTECTED_REGION_SIZE (31 * 1024)
+#define NVM_REGION_MAX_SIZE_KB   31
 #elif defined(CONFIG_SOC_NRF54LV10A_CPUAPP) || defined(CONFIG_SOC_NRF54LC10A_CPUAPP) ||            \
-    defined(CONFIG_SOC_NRF54LM20A_CPUAPP) || defined(CONFIG_SOC_NRF54LM20B_CPUAPP)
-#define MAX_PROTECTED_REGION_SIZE (127 * 1024)
+	defined(CONFIG_SOC_NRF54LM20A_CPUAPP) || defined(CONFIG_SOC_NRF54LM20B_CPUAPP)
+#define NVM_REGION_MAX_SIZE_KB   127
 #elif defined(CONFIG_SOC_NRF54LS05B_CPUAPP)
-#define MAX_PROTECTED_REGION_SIZE (1023 * 1024)
+#define NVM_REGION_MAX_SIZE_KB   1023
+#endif
+/* nRF54L fits the whole MCUboot slot in a single region. */
+#define NVM_SELF_REGION_COUNT    1
 #endif
 
-#define RRAMC_REGION_CONFIG NRF_RRAMC->REGION[RRAMC_REGION_NUMBER].CONFIG
-#define RRAMC_REGION_CONFIG_H (((uint32_t)(&(RRAMC_REGION_CONFIG))) >> 16)
-#define RRAMC_REGION_CONFIG_L (((uint32_t)(&(RRAMC_REGION_CONFIG))) & 0x0000fffful)
+/* MCUboot self-lock uses region no.4 first (and no.5 when chained). */
+#define NVM_SELF_REGION_FIRST    4
+#define NVM_REGION_SIZE_UNIT     0x400
+#define NVM_REGION_ADDRESS_RESOLUTION 0x400
 
-#define RRAMC_REGION_ADDRESS NRF_RRAMC->REGION[RRAMC_REGION_NUMBER].ADDRESS
-#define RRAMC_REGION_ADDRESS_H (((uint32_t)(&(RRAMC_REGION_ADDRESS))) >> 16)
-#define RRAMC_REGION_ADDRESS_L (((uint32_t)(&(RRAMC_REGION_ADDRESS))) & 0x0000fffful)
-
-BUILD_ASSERT((PROTECTED_REGION_START % NRF_RRAM_REGION_ADDRESS_RESOLUTION) == 0,
+BUILD_ASSERT((PROTECTED_REGION_START % NVM_REGION_ADDRESS_RESOLUTION) == 0,
 	"Start of protected region is not aligned - not possible to protect");
 
-BUILD_ASSERT((PROTECTED_REGION_SIZE % NRF_RRAM_REGION_SIZE_UNIT) == 0,
+BUILD_ASSERT((PROTECTED_REGION_SIZE % NVM_REGION_SIZE_UNIT) == 0,
 	"Size of protected region is not aligned - not possible to protect");
 
-BUILD_ASSERT(PROTECTED_REGION_SIZE <= MAX_PROTECTED_REGION_SIZE,
-    "Size of protected region is too big for protection");
+BUILD_ASSERT(PROTECTED_REGION_SIZE <=
+	     (NVM_SELF_REGION_COUNT * NVM_REGION_MAX_SIZE_KB * 1024),
+	"Size of protected region is too big for protection");
 
-#define PROTECTED_REGION_START_H ((PROTECTED_REGION_START) >> 16)
-#define PROTECTED_REGION_START_L ((PROTECTED_REGION_START) & 0x0000fffful)
+/* Lock one NVM region read/write/execute-disabled. Only compile-time-constant
+ * register addresses and masks are used, so no read of the (about to be locked)
+ * MCUboot flash is emitted.
+ */
+static void __ramfunc nvm_region_lock(uint32_t region, uint32_t start, uint32_t size_kb)
+{
+	volatile uint32_t *config = &NVM_REGION[region].CONFIG;
+	volatile uint32_t *address = &NVM_REGION[region].ADDRESS;
+	uint32_t cfg = *config;
+
+	/* If a previous stage (NSIB) already provisioned the region the SIZE
+	 * field is non-zero; otherwise set the address and size ourselves. The
+	 * address register is left untouched when already configured, as the
+	 * region may already be locked.
+	 */
+	if ((cfg & NVM_CONFIG_SIZE_Msk) == 0) {
+		cfg &= ~NVM_CONFIG_SIZE_Msk;
+		cfg |= (size_kb << NVM_CONFIG_SIZE_Pos) & NVM_CONFIG_SIZE_Msk;
+		*address = start;
+		__DSB();
+	}
+
+	/* Clear read/write/execute and lock against re-enabling. A locked region
+	 * can still be made stricter, which is what happens here.
+	 */
+	cfg &= ~(NVM_CONFIG_READ_Msk | NVM_CONFIG_WRITE_Msk | NVM_CONFIG_EXECUTE_Msk);
+	cfg |= NVM_CONFIG_LOCK_Msk;
+	*config = cfg;
+	__DSB();
+}
+
+/* Lock the whole MCUboot slot, chaining consecutive regions when a single one
+ * cannot cover it (nRF71). nRF54L fits in one region and loops once.
+ */
+static void __ramfunc disable_self_rwx(void)
+{
+	uint32_t remaining_kb = PROTECTED_REGION_SIZE / NVM_REGION_SIZE_UNIT;
+	uint32_t start = PROTECTED_REGION_START;
+	uint32_t region = NVM_SELF_REGION_FIRST;
+
+	while (remaining_kb) {
+		uint32_t chunk_kb = (remaining_kb < NVM_REGION_MAX_SIZE_KB) ?
+				     remaining_kb : NVM_REGION_MAX_SIZE_KB;
+
+		nvm_region_lock(region, start, chunk_kb);
+		start += chunk_kb * NVM_REGION_SIZE_UNIT;
+		remaining_kb -= chunk_kb;
+		region++;
+	}
+}
 
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 
@@ -274,6 +343,15 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
     if (rc) {
         handle_late_fatal_error();
     }
+#endif
+
+#if defined(CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX)
+        /* Lock MCUboot's own NVM here, from RAM and while still on the MCUboot
+         * stack (i.e. before any RAM cleanup). Everything executed afterwards
+         * lives in RAM (__ramfunc), so the now non-readable/executable MCUboot
+         * slot is never fetched or read again.
+         */
+        disable_self_rwx();
 #endif
 
 #ifdef CONFIG_CPU_CORTEX_M
@@ -335,39 +413,6 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
 #endif /* CONFIG_MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP */
 #endif /* CONFIG_MCUBOOT_CLEANUP_RAM */
 
-#ifdef CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
-                ".thumb_func\n"
-                "region_disable_rwx:\n"
-                "   movw r1, %6\n"
-                "   movt r1, %7\n"
-                "   ldr  r2, [r1]\n"
-                /* Size of the region should be set at this point
-                 * by NSIB's DISABLE_NEXT_W.
-                 * If not, the region has not been configured yet.
-                 * Set the size and address to the partition size and address.
-                 */
-                "   ldr r5, =%12\n"
-                "   ands r4, r2, r5\n"
-                "   cbnz r4, clear_rwx\n"
-                /* Set the size of the protected region */
-                "   movt r2, %8\n"
-                /* Set the address of the protected region */
-                "   movw r5, %13\n"
-                "   movt r5, %14\n"
-                "   movw r6, %15\n"
-                "   movt r6, %16\n"
-                "   str  r6, [r5]\n"
-                "   dsb\n"
-                "clear_rwx:\n"
-                "   bfc  r2, %9, %10\n"
-                /* Disallow further modifications */
-                "   orr  r2, %11\n"
-                "   str  r2, [r1]\n"
-                "   dsb\n"
-                /* Next assembly line is important for current function */
-
- #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
-
                 /* Jump to reset vector of an app */
                 "   bx   r0\n"
                 :
@@ -377,19 +422,6 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
                   "r" (CLEANUP_RAM_GAP_START),
                   "r" (CLEANUP_RAM_GAP_SIZE),
                   "i" (0)
-#ifdef CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
-                  , "i" (RRAMC_REGION_CONFIG_L),
-                  "i" (RRAMC_REGION_CONFIG_H),
-                  "i" ((PROTECTED_REGION_SIZE) / (NRF_RRAM_REGION_SIZE_UNIT)),
-                  "i" (RRAMC_REGION_RWX_LSB),
-                  "i" (RRAMC_REGION_RWX_WIDTH),
-                  "i" (RRAMC_REGION_CONFIG_LOCK_Msk),
-                  "i" (RRAMC_REGION_CONFIG_SIZE_Msk),
-                  "i" (RRAMC_REGION_ADDRESS_L),
-                  "i" (RRAMC_REGION_ADDRESS_H),
-                  "i" (PROTECTED_REGION_START_L),
-                  "i" (PROTECTED_REGION_START_H)
-#endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
                 : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "memory"
         );
 }
