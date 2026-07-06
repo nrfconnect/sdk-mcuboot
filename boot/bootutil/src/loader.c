@@ -1197,6 +1197,14 @@ boot_validated_swap_type(struct boot_loader_state *state,
 
             get_image_perspective_flash_area_bounds(primary_fa, &pri_off, &pri_end);
 
+#if !defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) && (CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1) && defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+            if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+                /* Return PCD offset and size instead of the flash_sim area bounds */
+                pri_off = NETCPU_APP_SLOT_OFFSET;
+                pri_end = NETCPU_APP_SLOT_END;
+            }
+#endif
+
             /* Check start and end of primary slot for current image */
             if (internal_img_addr >= SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET &&
                 internal_img_addr < (SECOND_STAGE_INACTIVE_MCUBOOT_OFFSET +
