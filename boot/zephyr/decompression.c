@@ -1210,25 +1210,26 @@ int boot_copy_region_decompress(struct boot_loader_state *state, const struct fl
     }
 
 #ifndef CONFIG_PARTITION_MANAGER_ENABLED
-    /* The image digest is calculated on a binary, that has the area between header and the image
-     * binary filled with zeros.
-     * The zeros are a result of building the image with the CONFIG_ROM_START_OFFSET option set to
-     * the ih_hdr_size.
-     * The configuration with partition manager leaves this area uninitialized and signs
-     * the image using the --pad-header option, which fills the gap with the erase value
-     * (usually 0xFF) instead of zeros.
+    /* Mirror the header padding present in the secondary slot so that the
+     * decompressed primary image matches the hash computed during signing.
+     * Images signed with --pad-header use the flash erase value (0xFF on
+     * Nordic RRAM), while ROM_START_OFFSET builds use zeros.
      */
-
-    /* Reuse decompression buffer to write zeros. */
-    memset(decomp_buf, 0x00, sizeof(decomp_buf));
     hdr_write_pos = sizeof(modified_hdr);
 
     while (hdr_write_pos < hdr->ih_hdr_size) {
         uint32_t set_size = hdr->ih_hdr_size - hdr_write_pos;
 
-        /* Assuming that sizeof(modified_hdr) is always aligned to write block size. */
-        if (set_size > sizeof(modified_hdr)) {
-            set_size = sizeof(modified_hdr);
+        if (set_size > decomp_buf_max_size) {
+            set_size = decomp_buf_max_size;
+        }
+
+        rc = flash_area_read(fap_src, off_src + hdr_write_pos, decomp_buf, set_size);
+        if (rc != 0) {
+            BOOT_LOG_ERR("Flash read failed at offset: 0x%x, size: 0x%x, area: %d, rc: %d",
+                         (off_src + hdr_write_pos), set_size, fap_src->fa_id, rc);
+            rc = BOOT_EFLASH;
+            goto finish;
         }
 
         rc = flash_area_write(fap_dst, off_dst + hdr_write_pos, decomp_buf, set_size);
