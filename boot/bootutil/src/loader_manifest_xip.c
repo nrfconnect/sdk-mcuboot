@@ -255,10 +255,8 @@ boot_get_slot_usage(struct boot_loader_state *state)
                 BOOT_LOG_IMAGE_INFO(slot, boot_img_hdr(state, slot));
             } else {
                 state->slot_usage[BOOT_CURR_IMG(state)].slot_available[slot] = false;
-                BOOT_LOG_INF("Image %d %s slot: Image not found",
-                             BOOT_CURR_IMG(state),
-                             (slot == BOOT_SLOT_PRIMARY)
-                             ? "Primary" : "Secondary");
+                BOOT_LOG_INF("Image %d %s slot: image not found", BOOT_CURR_IMG(state),
+                             (slot == BOOT_SLOT_PRIMARY) ? "primary" : "secondary");
             }
         }
 
@@ -319,10 +317,8 @@ print_loaded_images(struct boot_loader_state *state)
     IMAGES_ITER(BOOT_CURR_IMG(state)) {
         active_slot = state->slot_usage[BOOT_CURR_IMG(state)].active_slot;
 
-        BOOT_LOG_INF("Image %d loaded from the %s slot",
-                     BOOT_CURR_IMG(state),
-                     (active_slot == BOOT_SLOT_PRIMARY) ?
-                     "primary" : "secondary");
+        BOOT_LOG_INF("Image %d loaded from the %s slot", BOOT_CURR_IMG(state),
+                     (active_slot == BOOT_SLOT_PRIMARY) ? "primary" : "secondary");
     }
 }
 #endif
@@ -418,9 +414,8 @@ boot_select_or_erase(struct boot_loader_state *state)
              */
             rc = boot_write_copy_done(fap);
             if (rc != 0) {
-                BOOT_LOG_WRN("Failed to set copy_done flag of the image in "
-                             "the %s slot.", (active_slot == BOOT_SLOT_PRIMARY) ?
-                             "primary" : "secondary");
+                BOOT_LOG_WRN("Failed to set copy_done flag of the image in the %s slot.",
+                             (active_slot == BOOT_SLOT_PRIMARY) ? "primary" : "secondary");
                 rc = 0;
             }
         }
@@ -595,16 +590,16 @@ boot_update_hw_rollback_protection(struct boot_loader_state *state)
                                           state->slot_usage[BOOT_CURR_IMG(state)].active_slot,
                                           state->slot_usage[BOOT_CURR_IMG(state)].active_slot);
         if (rc != 0) {
-            BOOT_LOG_ERR("Security counter update failed after image %d validation.",
-                         BOOT_CURR_IMG(state));
+            BOOT_LOG_ERR("Security counter update failed after image %d validation: %d",
+                         BOOT_CURR_IMG(state), rc);
             return rc;
         }
 
 #ifdef MCUBOOT_HW_ROLLBACK_PROT_LOCK
         rc = boot_nv_security_counter_lock(BOOT_CURR_IMG(state));
         if (rc != 0) {
-            BOOT_LOG_ERR("Security counter lock failed after image %d validation.",
-                         BOOT_CURR_IMG(state));
+            BOOT_LOG_ERR("Security counter lock failed after image %d validation: %d",
+                         BOOT_CURR_IMG(state), rc);
             return rc;
         }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT_LOCK */
