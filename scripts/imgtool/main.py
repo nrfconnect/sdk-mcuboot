@@ -348,6 +348,11 @@ class BasedIntParamType(click.ParamType):
 @click.option('-R', '--erased-val', type=click.Choice(['0', '0xff']),
               required=False,
               help='The value that is read back from erased flash.')
+@click.option('--pad-value', type=click.Choice(['0', '0xff']),
+              required=False,
+              help='Byte value used for header and slot padding. When set, '
+                   'header padding is applied with this value regardless of '
+                   'whether --pad-header is used.')
 @click.option('-x', '--hex-addr', type=BasedIntParamType(), required=False,
               help='Adjust address in hex output file.')
 @click.option('-L', '--load-addr', type=BasedIntParamType(), required=False,
@@ -466,7 +471,7 @@ class BasedIntParamType(click.ParamType):
 def sign(key, public_key_format, align, version, pad_sig, header_size,
          pad_header, slot_size, pad, confirm, max_sectors, overwrite_only,
          endian, encrypt_keylen, encrypt, compression, infile, outfile,
-         dependencies, load_addr, hex_addr, erased_val, save_enctlv,
+         dependencies, load_addr, hex_addr, erased_val, pad_value, save_enctlv,
          security_counter, boot_record, custom_tlv, custom_tlv_file, rom_fixed, max_align,
          clear, fix_sig, fix_sig_pubkey, sig_out, user_sha, hmac_sha, is_pure,
          vector_to_sign, non_bootable, vid, cid, edt_config, manifest,
@@ -481,7 +486,8 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                       align=int(align), slot_size=slot_size,
                       max_sectors=max_sectors, overwrite_only=overwrite_only,
                       endian=endian, load_addr=load_addr, rom_fixed=rom_fixed,
-                      erased_val=erased_val, save_enctlv=save_enctlv,
+                      erased_val=erased_val, pad_value=pad_value,
+                      save_enctlv=save_enctlv,
                       security_counter=security_counter, max_align=max_align,
                       non_bootable=non_bootable, vid=vid, cid=cid,
                       edt_config=edt_config, manifest=manifest)
@@ -557,7 +563,8 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                   slot_size=slot_size, max_sectors=max_sectors,
                   overwrite_only=overwrite_only, endian=endian,
                   load_addr=load_addr, rom_fixed=rom_fixed,
-                  erased_val=erased_val, save_enctlv=save_enctlv,
+                  erased_val=erased_val, pad_value=pad_value,
+                  save_enctlv=save_enctlv,
                   security_counter=security_counter, max_align=max_align,
                   vid=vid, cid=cid, edt_config=edt_config, manifest=manifest)
         compression_filters = [

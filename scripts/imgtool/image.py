@@ -352,8 +352,8 @@ class Image:
                  pad_header=False, pad=False, confirm=False, align=1,
                  slot_size=0, max_sectors=DEFAULT_MAX_SECTORS,
                  overwrite_only=False, endian="little", load_addr=0,
-                 rom_fixed=None, erased_val=None, save_enctlv=False,
-                 security_counter=None, max_align=None,
+                 rom_fixed=None, erased_val=None, pad_value=None,
+                 save_enctlv=False, security_counter=None, max_align=None,
                  non_bootable=False, vid=None, cid=None,
                  edt_config=None, manifest=None):
 
@@ -376,7 +376,11 @@ class Image:
         self.base_addr = None
         self.load_addr = 0 if load_addr is None else load_addr
         self.rom_fixed = rom_fixed
-        self.erased_val = 0xff if erased_val is None else int(erased_val, 0)
+        self.pad_value = pad_value
+        if pad_value is not None:
+            self.erased_val = int(pad_value, 0)
+        else:
+            self.erased_val = 0xff if erased_val is None else int(erased_val, 0)
         self.payload = []
         self.infile_data = []
         self.enckey = None
@@ -455,13 +459,7 @@ class Image:
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
 
-        # Add the image header if needed.
-        if self.pad_header and self.header_size > 0:
-            if self.base_addr:
-                # Adjust base_addr for new header
-                self.base_addr -= self.header_size
-            self.payload = bytes([self.erased_val] * self.header_size) + \
-                self.payload
+        self._apply_header_padding()
 
         self.image_size = len(self.payload) - self.header_size
 
@@ -472,20 +470,7 @@ class Image:
         self.payload = compression_header + data
         self.image_size = len(self.payload)
 
-        # Add the image header if needed.
-        if self.header_size > 0:
-            if self.pad_header:
-                if self.base_addr:
-                    # Adjust base_addr for new header
-                    self.base_addr -= self.header_size
-                self.payload = bytes([self.erased_val] * self.header_size) + \
-                    self.payload
-            else:
-                # Fill header padding with zeros to align with what is expected
-                # for uncompressed images when no pad_header is requested
-                # (see self.check_header())
-                self.payload = bytes([0] * self.header_size) + \
-                    self.payload
+        self._apply_header_padding(default_zero_fill=True)
 
     def save(self, path, hex_addr=None):
         """Save an image from a given file"""
@@ -523,8 +508,31 @@ class Image:
             with open(path, 'wb') as f:
                 f.write(self.payload)
 
+    def _apply_header_padding(self, default_zero_fill=False):
+        """Apply header padding using the configured pad value."""
+        if self.header_size <= 0:
+            return
+
+        padding = bytes([self.erased_val] * self.header_size)
+
+        if self.pad_header:
+            if self.base_addr:
+                # Adjust base_addr for new header
+                self.base_addr -= self.header_size
+            self.payload = padding + self.payload
+        elif self.pad_value is not None:
+            if len(self.payload) >= self.header_size:
+                self.payload = padding + bytes(self.payload[self.header_size:])
+            else:
+                self.payload = padding + self.payload
+        elif default_zero_fill:
+            # Fill header padding with zeros to align with what is expected
+            # for uncompressed images when no pad_header is requested
+            # (see self.check_header())
+            self.payload = bytes([0] * self.header_size) + self.payload
+
     def check_header(self):
-        if self.header_size > 0 and not self.pad_header:
+        if self.header_size > 0 and not self.pad_header and self.pad_value is None:
             if any(v != 0 for v in self.payload[0:self.header_size]):
                 raise click.UsageError("Header padding was not requested and "
                                        "image does not start with zeros")
