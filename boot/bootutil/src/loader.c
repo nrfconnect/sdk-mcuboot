@@ -910,6 +910,24 @@ check_validity:
 #endif
 
         BOOT_LOG_DBG("Image %d expected load address 0x%x", BOOT_CURR_IMG(state), internal_img_addr);
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && \
+    !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+        /* If multi image updates are not enabled, the network core update candidate reuses the
+         * secondary slot of the application image.
+         *
+         * This part copies the condition dedicated for the application image (see below) instead of
+         * increasing the allowed range of addresses, so regardless of the partitioning, the
+         * logic will not extend the allowed range to the whole internal (and possibly even
+         * external) memory.
+         */
+        if (check_addresses == true &&
+           BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER &&
+           internal_img_addr >= NETCPU_APP_SLOT_OFFSET && internal_img_addr < NETCPU_APP_SLOT_END) {
+            BOOT_LOG_INF("Binary in secondary slot of image %d is destined for the network core",
+                         BOOT_CURR_IMG(state));
+            goto out;
+        }
+#endif
         BOOT_LOG_DBG("Check 0x%x is within [min_addr, max_addr] = [0x%x, 0x%x)",
                      internal_img_addr, min_addr, max_addr);
 
