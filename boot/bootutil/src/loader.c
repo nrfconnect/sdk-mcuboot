@@ -1322,6 +1322,17 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
             check_addresses = true;
         }
 
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && \
+    !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+        if (check_addresses == true &&
+           BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER &&
+           reset_value >= PM_CPUNET_APP_ADDRESS && reset_value < PM_CPUNET_APP_END_ADDRESS) {
+            BOOT_LOG_INF("Binary in secondary slot of image %d is destined for the network core",
+                         BOOT_CURR_IMG(state));
+            goto out;
+        }
+#endif
+
         if (check_addresses == true && (reset_value < min_addr || reset_value > max_addr)) {
             BOOT_LOG_ERR("Reset address of image in secondary slot is not in the primary slot");
             BOOT_LOG_ERR("Erasing image from secondary slot");
