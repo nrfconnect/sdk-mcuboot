@@ -1354,8 +1354,21 @@ boot_validated_swap_type(struct boot_loader_state *state,
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
             uint32_t fw_size = hdr->ih_img_size;
+
+#if defined(MCUBOOT_DOWNGRADE_PREVENTION) && defined(CONFIG_SOC_NRF5340_CPUAPP) && \
+    !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP) && \
+    defined(CONFIG_PCD_READ_NETCORE_APP_VERSION)
+            BOOT_LOG_INF("Checking network core version");
+            rc = pcd_version_cmp_net(secondary_fa, hdr);
+
+            if (rc >= 0) {
+                BOOT_LOG_INF("Starting network core update");
+                rc = pcd_network_core_update(net_core_fw_addr, fw_size);
+            }
+#else
             BOOT_LOG_INF("Starting network core update");
             rc = pcd_network_core_update(net_core_fw_addr, fw_size);
+#endif
 
             if (rc != 0) {
                 swap_type = BOOT_SWAP_TYPE_FAIL;
