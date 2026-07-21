@@ -1133,6 +1133,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
 #ifdef INCLUDE_NETWORK_CORE_IMAGE_CHECK
     bool upgrade_valid = false;
 #endif
+#if defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) && defined(MCUBOOT_OVERWRITE_ONLY)
+    size_t last_sector;
+#endif
 
 #if defined(INCLUDE_NETWORK_CORE_IMAGE_CHECK) || defined(MCUBOOT_IS_SECOND_STAGE)
     const struct flash_area *secondary_fa = BOOT_IMG_AREA(state, BOOT_SLOT_SECONDARY);
@@ -1340,15 +1343,34 @@ boot_validated_swap_type(struct boot_loader_state *state,
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             } else {
                 BOOT_LOG_INF("Done updating network core");
-#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE)
-                /* swap_erase_trailer_sectors is undefined if upgrade only
-                 * method is used. There is no need to erase sectors, because
-                 * the image cannot be reverted.
-                 */
-                rc = swap_erase_trailer_sectors(state, secondary_fa);
-#endif
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
+#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE) || \
+    defined(MCUBOOT_SWAP_USING_OFFSET)
+            /* swap_erase_trailer_sectors is undefined if upgrade only
+             * method is used. There is no need to erase sectors, because
+             * the image cannot be reverted.
+             */
+            rc = swap_erase_trailer_sectors(state, secondary_fa);
+#elif defined(MCUBOOT_OVERWRITE_ONLY)
+            /*
+             * Erases header and trailer. The trailer is erased because when a new
+             * image is written without a trailer as is the case when using newt, the
+             * trailer that was left might trigger a new upgrade.
+             */
+#ifndef MCUBOOT_OVERWRITE_ONLY_KEEP_BACKUP
+            BOOT_LOG_DBG("erasing secondary header");
+            rc = boot_scramble_region(secondary_fa,
+                                      boot_img_sector_off(state, BOOT_SLOT_SECONDARY, 0),
+                                      boot_img_sector_size(state, BOOT_SLOT_SECONDARY, 0), false);
+#endif
+            last_sector = boot_img_num_sectors(state, BOOT_SLOT_SECONDARY) - 1;
+            BOOT_LOG_DBG("erasing secondary trailer");
+            rc = boot_scramble_region(secondary_fa,
+                                      boot_img_sector_off(state, BOOT_SLOT_SECONDARY, last_sector),
+                                      boot_img_sector_size(state, BOOT_SLOT_SECONDARY, last_sector),
+                                      false);
+#endif
         }
 #endif /* INCLUDE_NETWORK_CORE_IMAGE_CHECK */
     }
