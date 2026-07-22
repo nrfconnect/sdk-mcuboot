@@ -8,7 +8,7 @@
  * This module provides a thin abstraction over some of the crypto
  * primitives to make it easier to swap out the used crypto library.
  *
- * At this point, the choices are: MCUBOOT_USE_TINYCRYPT, MCUBOOT_USE_CC310,
+ * At this point, the choices are: MCUBOOT_USE_CC310,
  * MCUBOOT_USE_MBED_TLS, MCUBOOT_USE_PSA_CRYPTO. Note that support for
  * MCUBOOT_USE_PSA_CRYPTO is still experimental and it might not support all
  * the crypto abstractions that MCUBOOT_USE_MBED_TLS supports. For this
@@ -32,18 +32,12 @@
     #error "P384 requires PSA_CRYPTO to be defined"
 #endif
 
-#if (defined(MCUBOOT_USE_TINYCRYPT) + \
-     defined(MCUBOOT_USE_CC310) + \
+#if (defined(MCUBOOT_USE_CC310) + \
      defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_PSA_OR_MBED_TLS) + \
      defined(MCUBOOT_USE_NRF_OBERON)) != 1
-    #error "One crypto backend must be defined: either CC310/TINYCRYPT/MBED_TLS/PSA_CRYPTO/NRF_OBERON"
+    #error "One crypto backend must be defined: either CC310/MBED_TLS/PSA_CRYPTO/NRF_OBERON"
 #endif
-
-#if defined(MCUBOOT_USE_TINYCRYPT)
-    #include <tinycrypt/ecc_dsa.h>
-    #include <tinycrypt/constants.h>
-#endif /* MCUBOOT_USE_TINYCRYPT */
 
 #if defined(MCUBOOT_USE_CC310)
     #include <cc310_glue.h>
@@ -88,7 +82,7 @@
 extern "C" {
 #endif
 
-#if (defined(MCUBOOT_USE_TINYCRYPT) || defined(MCUBOOT_USE_MBED_TLS) || \
+#if (defined(MCUBOOT_USE_MBED_TLS) || \
      defined(MCUBOOT_USE_CC310) || defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) || \
      defined(MCUBOOT_USE_NRF_OBERON)) \
      && !defined(MCUBOOT_USE_PSA_CRYPTO)
@@ -141,7 +135,7 @@ static int bootutil_import_key(uint8_t **cp, uint8_t *end)
 
     return 0;
 }
-#endif /* (MCUBOOT_USE_TINYCRYPT || MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310) && !MCUBOOT_USE_PSA_CRYPTO */
+#endif /* (MCUBOOT_USE_MBED_TLS || MCUBOOT_USE_CC310) && !MCUBOOT_USE_PSA_CRYPTO */
 
 #ifndef MCUBOOT_USE_PSA_CRYPTO
 /*
@@ -194,56 +188,6 @@ static int bootutil_decode_sig(uint8_t signature[NUM_ECC_BYTES * 2], uint8_t *cp
     return 0;
 }
 #endif /* !MCUBOOT_USE_PSA_CRYPTO */
-
-#if defined(MCUBOOT_USE_TINYCRYPT)
-typedef uintptr_t bootutil_ecdsa_context;
-static inline void bootutil_ecdsa_init(bootutil_ecdsa_context *ctx)
-{
-    (void)ctx;
-}
-
-static inline void bootutil_ecdsa_drop(bootutil_ecdsa_context *ctx)
-{
-    (void)ctx;
-}
-
-static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
-                                        uint8_t *pk, size_t pk_len,
-                                        uint8_t *hash, size_t hash_len,
-                                        uint8_t *sig, size_t sig_len)
-{
-    int rc;
-    (void)ctx;
-    (void)pk_len;
-    (void)sig_len;
-    (void)hash_len;
-
-    uint8_t signature[2 * NUM_ECC_BYTES];
-    rc = bootutil_decode_sig(signature, sig, sig + sig_len);
-    if (rc) {
-        return -1;
-    }
-
-    /* Only support uncompressed keys. */
-    if (pk[0] != 0x04) {
-        return -1;
-    }
-    pk++;
-
-    rc = uECC_verify(pk, hash, BOOTUTIL_CRYPTO_ECDSA_P256_HASH_SIZE, signature, uECC_secp256r1());
-    if (rc != TC_CRYPTO_SUCCESS) {
-        return -1;
-    }
-    return 0;
-}
-
-static inline int bootutil_ecdsa_parse_public_key(bootutil_ecdsa_context *ctx,
-                                                  uint8_t **cp,uint8_t *end)
-{
-    (void)ctx;
-    return bootutil_import_key(cp, end);
-}
-#endif /* MCUBOOT_USE_TINYCRYPT */
 
 #if defined(MCUBOOT_USE_CC310)
 typedef uintptr_t bootutil_ecdsa_context;
