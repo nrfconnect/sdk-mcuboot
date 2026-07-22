@@ -47,12 +47,6 @@ endif()
 zephyr_library_link_libraries(MCUBOOT_BOOTUTIL)
 target_link_libraries(MCUBOOT_BOOTUTIL INTERFACE zephyr_interface)
 
-if(CONFIG_BOOT_USE_TINYCRYPT)
-  target_include_directories(MCUBOOT_BOOTUTIL INTERFACE
-    ../../../ext/tinycrypt/lib/include
-  )
-endif()
-
 if(CONFIG_BOOT_USE_NRF_OBERON)
   target_include_directories(MCUBOOT_BOOTUTIL INTERFACE ${OBERON_BASE}/include)
   zephyr_link_libraries(nrfxlib_crypto)
