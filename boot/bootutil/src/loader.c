@@ -1322,6 +1322,17 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
             check_addresses = true;
         }
 
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && \
+    !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE)
+        if (check_addresses == true &&
+           BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER &&
+           reset_value >= PM_CPUNET_APP_ADDRESS && reset_value < PM_CPUNET_APP_END_ADDRESS) {
+            BOOT_LOG_INF("Binary in secondary slot of image %d is destined for the network core",
+                         BOOT_CURR_IMG(state));
+            goto out;
+        }
+#endif
+
         if (check_addresses == true && (reset_value < min_addr || reset_value > max_addr)) {
             BOOT_LOG_ERR("Reset address of image in secondary slot is not in the primary slot");
             BOOT_LOG_ERR("Erasing image from secondary slot");
@@ -1497,6 +1508,9 @@ boot_validated_swap_type(struct boot_loader_state *state,
 #if defined(PM_S1_ADDRESS)
     owner_nsib[BOOT_CURR_IMG(state)] = false;
 #endif
+#ifdef MCUBOOT_OVERWRITE_ONLY
+    size_t last_sector;
+#endif
 
 #if defined(PM_S1_ADDRESS) || defined(PM_CPUNET_B0N_ADDRESS)
     const struct flash_area *secondary_fa =
@@ -1601,23 +1615,54 @@ boot_validated_swap_type(struct boot_loader_state *state,
             uint32_t vtable_addr = (uint32_t)hdr + hdr->ih_hdr_size;
             uint32_t *net_core_fw_addr = (uint32_t *)(vtable_addr);
             uint32_t fw_size = hdr->ih_img_size;
+
+#if defined(MCUBOOT_DOWNGRADE_PREVENTION) && defined(CONFIG_SOC_NRF5340_CPUAPP) && \
+    !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) && defined(CONFIG_PCD_APP) && \
+    defined(CONFIG_PCD_READ_NETCORE_APP_VERSION)
+            BOOT_LOG_INF("Checking network core version");
+            rc = pcd_version_cmp_net(secondary_fa, hdr);
+
+            if (rc >= 0) {
+                BOOT_LOG_INF("Starting network core update");
+                rc = pcd_network_core_update(net_core_fw_addr, fw_size);
+            }
+#else
             BOOT_LOG_INF("Starting network core update");
             rc = pcd_network_core_update(net_core_fw_addr, fw_size);
+#endif
 
             if (rc != 0) {
                 swap_type = BOOT_SWAP_TYPE_FAIL;
             } else {
                 BOOT_LOG_INF("Done updating network core");
-#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE)
-                /* swap_erase_trailer_sectors is undefined if upgrade only
-                 * method is used. There is no need to erase sectors, because
-                 * the image cannot be reverted.
-                 */
-                rc = swap_erase_trailer_sectors(state,
-                        secondary_fa);
-#endif
                 swap_type = BOOT_SWAP_TYPE_NONE;
             }
+#if defined(MCUBOOT_SWAP_USING_SCRATCH) || defined(MCUBOOT_SWAP_USING_MOVE) || \
+    defined(MCUBOOT_SWAP_USING_OFFSET)
+            /* swap_erase_trailer_sectors is undefined if upgrade only
+             * method is used. There is no need to erase sectors, because
+             * the image cannot be reverted.
+             */
+            rc = swap_erase_trailer_sectors(state, secondary_fa);
+#elif defined(MCUBOOT_OVERWRITE_ONLY)
+            /*
+             * Erases header and trailer. The trailer is erased because when a new
+             * image is written without a trailer as is the case when using newt, the
+             * trailer that was left might trigger a new upgrade.
+             */
+#ifndef MCUBOOT_OVERWRITE_ONLY_KEEP_BACKUP
+            BOOT_LOG_DBG("erasing secondary header");
+            rc = boot_scramble_region(secondary_fa,
+                                      boot_img_sector_off(state, BOOT_SLOT_SECONDARY, 0),
+                                      boot_img_sector_size(state, BOOT_SLOT_SECONDARY, 0), false);
+#endif
+            last_sector = boot_img_num_sectors(state, BOOT_SLOT_SECONDARY) - 1;
+            BOOT_LOG_DBG("erasing secondary trailer");
+            rc = boot_scramble_region(secondary_fa,
+                                      boot_img_sector_off(state, BOOT_SLOT_SECONDARY, last_sector),
+                                      boot_img_sector_size(state, BOOT_SLOT_SECONDARY, last_sector),
+                                      false);
+#endif
         }
 #endif /* CONFIG_SOC_NRF5340_CPUAPP && PM_CPUNET_B0N_ADDRESS &&
 	  !CONFIG_NRF53_MULTI_IMAGE_UPDATE && CONFIG_PCD_APP */
