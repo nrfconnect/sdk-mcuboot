@@ -1288,7 +1288,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
             BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
             return BOOT_SWAP_TYPE_FAIL;
 #endif /* MCUBOOT_IS_SECOND_STAGE */
-        } else {
+        } else if (target_image != BOOT_CURR_IMG(state)) {
             /* The image in the secondary slot is not intended for any */
             return BOOT_SWAP_TYPE_NONE;
         }
