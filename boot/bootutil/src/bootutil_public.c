@@ -505,9 +505,11 @@ boot_swap_type_multi(int image_index)
     int rc;
     size_t i;
 
+#ifdef CONFIG_NRF53_MULTI_IMAGE_UPDATE
     rc = BOOT_HOOK_CALL(boot_read_swap_state_primary_slot_hook,
                         BOOT_HOOK_REGULAR, image_index, &primary_slot);
     if (rc == BOOT_HOOK_REGULAR)
+#endif
     {
         rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_PRIMARY(image_index),
                                         &primary_slot);
