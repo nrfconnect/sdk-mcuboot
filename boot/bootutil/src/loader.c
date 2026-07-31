@@ -617,8 +617,11 @@ boot_rom_address_check(struct boot_loader_state *state)
 }
 #endif
 
+/* Netcore slot checks in loader.c are not used with QSPI XIP split images
+ * (see MCUBOOT_QSPI_XIP_IMAGE_NUMBER / MCUBOOT_CHECK_HEADER_LOAD_ADDRESS).
+ */
 #if (CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1) && !defined(CONFIG_NRF53_MULTI_IMAGE_UPDATE) \
-    && defined(CONFIG_PCD_APP)
+    && defined(CONFIG_PCD_APP) && (CONFIG_MCUBOOT_QSPI_XIP_IMAGE_NUMBER < 0)
 #define INCLUDE_NETWORK_CORE_IMAGE_CHECK
 #endif
 
