@@ -313,8 +313,7 @@ choice BOOT_ECDSA_IMPLEMENTATION
 	default BOOT_ECDSA_TINYCRYPT
 
 config BOOT_ECDSA_NRF_OBERON
-	bool "use nrf oberon SW crypto. [DEPRECATED]"
-	select DEPRECATED
+	bool "use nrf oberon SW crypto"
 	select BOOT_USE_NRF_OBERON
 
 config BOOT_ECDSA_TINYCRYPT
