@@ -67,6 +67,17 @@ def gen_x25519(keyfile, passwd):
 valid_langs = ['c', 'rust']
 valid_hash_encodings = ['lang-c', 'raw']
 valid_encodings = ['lang-c', 'lang-rust', 'pem', 'raw']
+
+
+def _validate_name_suffix(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    if value and not re.match(r"^[A-Za-z0-9_]*$", value):
+        raise click.BadParameter(
+            f"{value!r} must contain only [A-Za-z0-9_]; it is appended "
+            f"directly to a C/Rust identifier."
+        )
+    return value
+
+
 keygens = {
     'rsa-2048':   gen_rsa2048,
     'rsa-3072':   gen_rsa3072,
@@ -134,12 +145,19 @@ def keygen(type, key, password):
 @click.option('-e', '--encoding', metavar='encoding',
               type=click.Choice(valid_encodings),
               help='Valid encodings: {}'.format(', '.join(valid_encodings)))
+@click.option('--name-suffix', 'name_suffix', metavar='SUFFIX', default='',
+              callback=_validate_name_suffix,
+              help='Append SUFFIX to the emitted C/Rust symbol names '
+                   '(e.g. `--name-suffix _2` emits `rsa_pub_key_2` / '
+                   '`rsa_pub_key_2_len`). Useful when embedding multiple '
+                   'signing keys in the same image. Rejected for PEM/raw '
+                   'encodings (those emit no identifiers).')
 @click.option('-k', '--key', metavar='filename', required=True)
 @click.option('-o', '--output', metavar='output', required=False,
               help='Specify the output file\'s name. \
                     The stdout is used if it is not provided.')
 @click.command(help='Dump public key from keypair')
-def getpub(key, encoding, lang, output):
+def getpub(key, encoding, lang, output, name_suffix):
     if encoding and lang:
         raise click.UsageError('Please use only one of `--encoding/-e` '
                                'or `--lang/-l`')
@@ -147,6 +165,9 @@ def getpub(key, encoding, lang, output):
         # Preserve old behavior defaulting to `c`. If `lang` is removed,
         # `default=valid_encodings[0]` should be added to `-e` param.
         lang = valid_langs[0]
+    if name_suffix and (encoding in ('pem', 'raw')):
+        raise click.UsageError(
+            '`--name-suffix` is only meaningful for lang-c / lang-rust encodings')
     key = load_key(key)
 
     if not output:
@@ -154,9 +175,9 @@ def getpub(key, encoding, lang, output):
     if key is None:
         print("Invalid passphrase")
     elif lang == 'c' or encoding == 'lang-c':
-        key.emit_c_public(file=output)
+        key.emit_c_public(file=output, name_suffix=name_suffix)
     elif lang == 'rust' or encoding == 'lang-rust':
-        key.emit_rust_public(file=output)
+        key.emit_rust_public(file=output, name_suffix=name_suffix)
     elif encoding == 'pem':
         key.emit_public_pem(file=output)
     elif encoding == 'raw':
@@ -171,14 +192,21 @@ def getpub(key, encoding, lang, output):
                    'Default value is {}.'
                    .format(', '.join(valid_hash_encodings),
                            valid_hash_encodings[0]))
+@click.option('--name-suffix', 'name_suffix', metavar='SUFFIX', default='',
+              callback=_validate_name_suffix,
+              help='Append SUFFIX to the emitted C symbol names (lang-c '
+                   'encoding only). Rejected for raw encoding.')
 @click.option('-k', '--key', metavar='filename', required=True)
 @click.option('-o', '--output', metavar='output', required=False,
               help='Specify the output file\'s name. \
                     The stdout is used if it is not provided.')
 @click.command(help='Dump the SHA256 hash of the public key')
-def getpubhash(key, output, encoding):
+def getpubhash(key, output, encoding, name_suffix):
     if not encoding:
         encoding = valid_hash_encodings[0]
+    if name_suffix and encoding == 'raw':
+        raise click.UsageError(
+            '`--name-suffix` is only meaningful for the lang-c encoding')
     key = load_key(key)
 
     if not output:
@@ -186,11 +214,38 @@ def getpubhash(key, output, encoding):
     if key is None:
         print("Invalid passphrase")
     elif encoding == 'lang-c':
-        key.emit_c_public_hash(file=output)
+        key.emit_c_public_hash(file=output, name_suffix=name_suffix)
     elif encoding == 'raw':
         key.emit_raw_public_hash(file=output)
     else:
         raise click.UsageError()
+
+
+@click.option('--require', 'require', type=click.Choice(['private', 'public']),
+              default=None,
+              help='Exit non-zero if the key kind does not match REQUIRE. '
+                   'Without this option, keyinfo always exits 0 and prints '
+                   'the detected kind on stdout.')
+@click.option('-k', '--key', metavar='filename', required=True)
+@click.command(help='Print whether KEY is a keypair PEM (`private`) or a '
+                    'public-only PEM (`public`). Intended for build-system '
+                    'use: pair with `--require` to gate the build on the '
+                    'expected key kind.')
+def keyinfo(key, require):
+    loaded = keys.load(key)
+    if loaded is None:
+        raise click.UsageError(
+            f"Cannot inspect {key}: key is password-protected or unreadable. "
+            f"keyinfo runs non-interactively and does not prompt for a "
+            f"passphrase."
+        )
+    key_obj = getattr(loaded, "key", None)
+    kind = "private" if (key_obj is not None and hasattr(key_obj, "private_bytes")) else "public"
+    click.echo(kind)
+    if require is not None and kind != require:
+        raise click.UsageError(
+            f"Key {key} is {kind}, but {require} was required."
+        )
 
 
 @click.option('--minimal', default=False, is_flag=True,
@@ -644,6 +699,7 @@ imgtool.add_command(keygen)
 imgtool.add_command(getpub)
 imgtool.add_command(getpubhash)
 imgtool.add_command(getpriv)
+imgtool.add_command(keyinfo)
 imgtool.add_command(verify)
 imgtool.add_command(sign)
 imgtool.add_command(version)
