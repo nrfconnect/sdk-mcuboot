@@ -10,7 +10,7 @@
  * This module provides a thin abstraction over some of the crypto
  * primitives to make it easier to swap out the used crypto library.
  *
- * At this point, the choices are: MCUBOOT_USE_MBED_TLS, MCUBOOT_USE_TINYCRYPT,
+ * At this point, the choices are: MCUBOOT_USE_MBED_TLS,
  * MCUBOOT_USE_PSA_CRYPTO, MCUBOOT_USE_CC310. Note that support for MCUBOOT_USE_PSA_CRYPTO
  * is still experimental and it might not support all the crypto abstractions
  * that MCUBOOT_USE_MBED_TLS supports. For this reason, it's allowed to have
@@ -29,11 +29,10 @@
 #endif /* MCUBOOT_USE_PSA_CRYPTO || MCUBOOT_USE_MBED_TLS */
 
 #if (defined(MCUBOOT_USE_PSA_OR_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT) + \
      defined(MCUBOOT_USE_NRF_EXTERNAL_CRYPTO) + \
      defined(MCUBOOT_USE_CC310) + \
      defined(MCUBOOT_USE_NRF_OBERON)) != 1
-    #error "One crypto backend must be defined: either CC310/MBED_TLS/TINYCRYPT/PSA_CRYPTO/NRF_OBERON"
+    #error "One crypto backend must be defined: either CC310/MBED_TLS/PSA_CRYPTO/NRF_OBERON"
 #endif
 
 #if defined(MCUBOOT_SHA512)
@@ -66,15 +65,6 @@
 #include "mbedtls-compat-2.x.h"
 
 #endif /* MCUBOOT_USE_MBED_TLS */
-
-#if defined(MCUBOOT_USE_TINYCRYPT)
-#if defined(MCUBOOT_SHA512)
-    #include <tinycrypt/sha512.h>
-#else
-    #include <tinycrypt/sha256.h>
-#endif
-    #include <tinycrypt/constants.h>
-#endif /* MCUBOOT_USE_TINYCRYPT */
 
 #if defined(MCUBOOT_USE_CC310)
     #include <cc310_glue.h>
@@ -197,51 +187,6 @@ static inline int bootutil_sha_finish(bootutil_sha_context *ctx,
 }
 
 #endif /* MCUBOOT_USE_MBED_TLS */
-
-#if defined(MCUBOOT_USE_TINYCRYPT)
-#if defined(MCUBOOT_SHA512)
-typedef struct tc_sha512_state_struct bootutil_sha_context;
-#else
-typedef struct tc_sha256_state_struct bootutil_sha_context;
-#endif
-
-static inline int bootutil_sha_init(bootutil_sha_context *ctx)
-{
-#if defined(MCUBOOT_SHA512)
-    tc_sha512_init(ctx);
-#else
-    tc_sha256_init(ctx);
-#endif
-    return 0;
-}
-
-static inline int bootutil_sha_drop(bootutil_sha_context *ctx)
-{
-    (void)ctx;
-    return 0;
-}
-
-static inline int bootutil_sha_update(bootutil_sha_context *ctx,
-                                      const void *data,
-                                      uint32_t data_len)
-{
-#if defined(MCUBOOT_SHA512)
-    return tc_sha512_update(ctx, data, data_len);
-#else
-    return tc_sha256_update(ctx, data, data_len);
-#endif
-}
-
-static inline int bootutil_sha_finish(bootutil_sha_context *ctx,
-                                      uint8_t *output)
-{
-#if defined(MCUBOOT_SHA512)
-    return tc_sha512_final(output, ctx);
-#else
-    return tc_sha256_final(output, ctx);
-#endif
-}
-#endif /* MCUBOOT_USE_TINYCRYPT */
 
 #if defined(MCUBOOT_USE_CC310)
 static inline int bootutil_sha_init(bootutil_sha_context *ctx)

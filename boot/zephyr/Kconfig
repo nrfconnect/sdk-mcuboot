@@ -44,16 +44,6 @@ config BOOT_USE_PSA_CRYPTO
 	help
 	  Hidden option set if using PSA crypt for cryptography functionality
 
-config BOOT_USE_TINYCRYPT
-	bool
-	# Hidden option
-	# When building for ECDSA, we use our own copy of mbedTLS, so the
-	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
-	# will collide.
-	select MBEDTLS_PROMPTLESS if ZEPHYR_MBEDTLS_MODULE
-	help
-	  Use TinyCrypt for crypto primitives.
-
 config BOOT_USE_CC310
 	bool
 	# Hidden option
@@ -278,7 +268,6 @@ choice BOOT_SIGNATURE_TYPE
 
 config BOOT_SIGNATURE_TYPE_NONE
 	bool "No signature; use only hash check"
-	select BOOT_USE_TINYCRYPT if !SOC_SERIES_NRF54L
 	select BOOT_USE_PSA_CRYPTO
 	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
 
@@ -309,17 +298,11 @@ config BOOT_SIGNATURE_TYPE_ECDSA_P256
 if BOOT_SIGNATURE_TYPE_ECDSA_P256
 choice BOOT_ECDSA_IMPLEMENTATION
 	prompt "Ecdsa implementation"
-	default BOOT_ECDSA_PSA if PSA_CRYPTO
-	default BOOT_ECDSA_TINYCRYPT
+	default BOOT_ECDSA_PSA
 
 config BOOT_ECDSA_NRF_OBERON
 	bool "use nrf oberon SW crypto"
 	select BOOT_USE_NRF_OBERON
-
-config BOOT_ECDSA_TINYCRYPT
-	bool "Use tinycrypt [DEPRECATED]"
-	select DEPRECATED
-	select BOOT_USE_TINYCRYPT
 
 config BOOT_ECDSA_CC310
 	bool "Use CC310 [DEPRECATED]"
@@ -368,23 +351,7 @@ config BOOT_SIGNATURE_TYPE_PURE
 
 choice BOOT_ED25519_IMPLEMENTATION
 	prompt "Ecdsa implementation"
-	default BOOT_ED25519_PSA if PSA_CRYPTO
-	default BOOT_ED25519_TINYCRYPT
-
-config BOOT_ED25519_TINYCRYPT
-	bool "Use tinycrypt [DEPRECATED]"
-	select DEPRECATED
-	select BOOT_USE_TINYCRYPT
-	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
-	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
-
-if BOOT_ED25519_TINYCRYPT
-	# config-ed25519.h defines MBEDTLS_MPI_MAX_SIZE as 64, so
-	# set the correct Kconfig value too to avoid differing definitions
-	config MBEDTLS_MPI_MAX_SIZE
-	range 64 2048
-	default 64
-endif
+	default BOOT_ED25519_PSA
 
 config BOOT_ED25519_MBEDTLS
 	bool "Use mbedTLS [DEPRECATED]"
@@ -592,7 +559,6 @@ config MBEDTLS_CONFIG_FILE
 	# It might be awkward to define an Mbed TLS header file when TinyCrypt
 	# is used, but the fact is that Mbed TLS' ASN1 parse module is used
 	# also when TinyCrypt is used as crypto backend.
-	default "mcuboot-mbedtls-cfg.h" if BOOT_USE_TINYCRYPT
 	default "mcuboot-mbedtls-cfg.h" if BOOT_USE_MBEDTLS && !MBEDTLS_BUILTIN
 
 config BOOT_HW_KEY

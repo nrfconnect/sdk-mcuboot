@@ -2,9 +2,7 @@
  * This module provides a thin abstraction over some of the crypto
  * primitives to make it easier to swap out the used crypto library.
  *
- * At this point, there are two choices: MCUBOOT_USE_MBED_TLS, or
- * MCUBOOT_USE_TINYCRYPT.  It is a compile error there is not exactly
- * one of these defined.
+ * At this point, there is only one choice: MCUBOOT_USE_MBED_TLS.
  */
 
 #ifndef __BOOTUTIL_CRYPTO_ECDH_P256_H_
@@ -12,9 +10,8 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
-#if (defined(MCUBOOT_USE_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT)) != 1
-    #error "One crypto backend must be defined: either MBED_TLS or TINYCRYPT"
+#if (defined(MCUBOOT_USE_MBED_TLS)) != 1
+    #error "One crypto backend must be defined: MBED_TLS"
 #endif
 
 #if defined(MCUBOOT_USE_MBED_TLS)
@@ -23,50 +20,9 @@
     #define EC256_PUBK_LEN (65)
 #endif /* MCUBOOT_USE_MBED_TLS */
 
-#if defined(MCUBOOT_USE_TINYCRYPT)
-    #include <tinycrypt/ecc_dh.h>
-    #include <tinycrypt/constants.h>
-    #define BOOTUTIL_CRYPTO_ECDH_P256_HASH_SIZE (4 * 8)
-#endif /* MCUBOOT_USE_TINYCRYPT */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#if defined(MCUBOOT_USE_TINYCRYPT)
-typedef uintptr_t bootutil_ecdh_p256_context;
-typedef bootutil_ecdh_p256_context bootutil_key_exchange_ctx;
-static inline void bootutil_ecdh_p256_init(bootutil_ecdh_p256_context *ctx)
-{
-    (void)ctx;
-}
-
-static inline void bootutil_ecdh_p256_drop(bootutil_ecdh_p256_context *ctx)
-{
-    (void)ctx;
-}
-
-static inline int bootutil_ecdh_p256_shared_secret(bootutil_ecdh_p256_context *ctx, const uint8_t *pk, const uint8_t *sk, uint8_t *z)
-{
-    int rc;
-    (void)ctx;
-
-    if (pk[0] != 0x04) {
-        return -1;
-    }
-
-    rc = uECC_valid_public_key(&pk[1], uECC_secp256r1());
-    if (rc != 0) {
-        return -1;
-    }
-
-    rc = uECC_shared_secret(&pk[1], sk, z, uECC_secp256r1());
-    if (rc != TC_CRYPTO_SUCCESS) {
-        return -1;
-    }
-    return 0;
-}
-#endif /* MCUBOOT_USE_TINYCRYPT */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
 #define NUM_ECC_BYTES 32
