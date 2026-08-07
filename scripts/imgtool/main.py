@@ -281,10 +281,24 @@ def validate_security_counter(ctx, param, value):
 
 def validate_header_size(ctx, param, value):
     min_hdr_size = image.IMAGE_HEADER_SIZE
-    if value < min_hdr_size:
+    if value.lower() == 'auto':
+        return min_hdr_size
+
+    if isinstance(value, int):
+       converted = value
+    else:
+       try:
+          converted = int(value, 0)
+       except ValueError:
+           raise click.BadParameter(
+                f"{value} is not a valid integer. Please use code literals "
+                 "prefixed with 0b/0B, 0o/0O, or 0x/0X as necessary."
+                )
+
+    if converted < min_hdr_size:
         raise click.BadParameter(
             f"Minimum value for -H/--header-size is {min_hdr_size}")
-    return value
+    return converted
 
 
 def get_dependencies(ctx, param, value):
@@ -401,8 +415,13 @@ class BasedIntParamType(click.ParamType):
 @click.option('--pad-header', default=False, is_flag=True,
               help='Add --header-size zeroed bytes at the beginning of the '
                    'image')
-@click.option('-H', '--header-size', callback=validate_header_size,
-              type=BasedIntParamType(), required=True)
+@click.option('-H', '--header-size', callback=validate_header_size, required=False,
+              default='auto',
+              help='Unsigned integer in hex, dec or oct format, or auto;'
+                   ' auto will use smallest possible value , rounded up to 32 bits,'
+                   ' capable of storing full header in current version. The auto'
+                   ' is preffered when no address/size requirement are needed for header,'
+                   ' and will give smallest image.')
 @click.option('--pad-sig', default=False, is_flag=True,
               help='Add 0-2 bytes of padding to ECDSA signature '
                    '(for mcuboot <1.5)')
