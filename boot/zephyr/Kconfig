@@ -1567,4 +1567,10 @@ config NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER
 configdefault PSA_CRYPTO
 	  default y if SOC_NRF54H20 && BOOT_SIGNATURE_TYPE_ED25519
 
+# Keeps Zephyr logging changes from using more resources. This is a default
+# rather than an assignment in prj.conf, because the board configurations that
+# build the bootloader without logging leave the symbol without a value.
+configdefault LOG_DEFAULT_LEVEL
+	  default 0
+
 source "Kconfig.zephyr"
