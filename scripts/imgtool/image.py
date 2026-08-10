@@ -459,7 +459,7 @@ class Image:
         except FileNotFoundError:
             raise click.UsageError("Input file not found")
 
-        self._apply_header_padding()
+        self._apply_header_padding(payload_reserves_header=not self.pad_header)
 
         self.image_size = len(self.payload) - self.header_size
 
@@ -470,7 +470,7 @@ class Image:
         self.payload = compression_header + data
         self.image_size = len(self.payload)
 
-        self._apply_header_padding(default_zero_fill=True)
+        self._apply_header_padding(payload_reserves_header=False)
 
     def save(self, path, hex_addr=None):
         """Save an image from a given file"""
@@ -508,28 +508,29 @@ class Image:
             with open(path, 'wb') as f:
                 f.write(self.payload)
 
-    def _apply_header_padding(self, default_zero_fill=False):
-        """Apply header padding using the configured pad value."""
+    def _apply_header_padding(self, payload_reserves_header):
+        """Apply header padding using the configured pad value""" 
         if self.header_size <= 0:
             return
 
-        padding = bytes([self.erased_val] * self.header_size)
-
-        if self.pad_header:
-            if self.base_addr:
-                # Adjust base_addr for new header
-                self.base_addr -= self.header_size
-            self.payload = padding + self.payload
-        elif self.pad_value is not None:
-            if len(self.payload) >= self.header_size:
-                self.payload = padding + bytes(self.payload[self.header_size:])
-            else:
-                self.payload = padding + self.payload
-        elif default_zero_fill:
+        if self.pad_header or self.pad_value is not None:
+            padding = bytes([self.erased_val] * self.header_size)
+        elif not payload_reserves_header:
             # Fill header padding with zeros to align with what is expected
             # for uncompressed images when no pad_header is requested
             # (see self.check_header())
-            self.payload = bytes([0] * self.header_size) + self.payload
+            padding = bytes(self.header_size)
+        else:
+            return
+
+        if self.pad_header and self.base_addr:
+            # Adjust base_addr for new header
+            self.base_addr -= self.header_size
+
+        if payload_reserves_header:
+            self.payload = padding + bytes(self.payload[self.header_size:])
+        else:
+            self.payload = padding + self.payload
 
     def check_header(self):
         if self.header_size > 0 and not self.pad_header and self.pad_value is None:
