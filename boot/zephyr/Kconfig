@@ -600,7 +600,7 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
 	hex
 	depends on NCS_MCUBOOT_DISABLE_SELF_RWX
 	depends on !PARTITION_MANAGER_ENABLED
-	default 0x800 if SOC_SERIES_NRF54L
+	default ROM_START_OFFSET if SOC_SERIES_NRF54L
 	help
 	  Size of region, at the beginning of the partition, that does not require
 	  protections. This is used, for example, when MCUboot type image is protected
