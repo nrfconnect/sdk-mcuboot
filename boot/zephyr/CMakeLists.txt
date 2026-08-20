@@ -405,10 +405,18 @@ if(CONFIG_MCUBOOT_SERIAL)
 endif()
 
 if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
+  # Extract primary key; split on comma only when BOOT_SIGNATURE_KEY_FILE_MULTI is enabled.
+  if(CONFIG_BOOT_SIGNATURE_KEY_FILE_MULTI)
+    string(REPLACE "," ";" _mcuboot_key_files "${CONFIG_BOOT_SIGNATURE_KEY_FILE}")
+  else()
+    set(_mcuboot_key_files "${CONFIG_BOOT_SIGNATURE_KEY_FILE}")
+  endif()
+  list(GET _mcuboot_key_files 0 _primary_key_path)
+
   # CONF_FILE points to the KConfig configuration files of the bootloader.
   foreach (filepath ${CONF_FILE})
     file(READ ${filepath} temp_text)
-    string(FIND "${temp_text}" ${CONFIG_BOOT_SIGNATURE_KEY_FILE} match)
+    string(FIND "${temp_text}" ${_primary_key_path} match)
     if (${match} GREATER_EQUAL 0)
       if (NOT DEFINED CONF_DIR)
         get_filename_component(CONF_DIR ${filepath} DIRECTORY)
@@ -418,13 +426,17 @@ if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_BOOT_SIGNATURE_KEY_FILE ST
     endif()
   endforeach()
 
-  if(IS_ABSOLUTE ${CONFIG_BOOT_SIGNATURE_KEY_FILE})
-    set(KEY_FILE ${CONFIG_BOOT_SIGNATURE_KEY_FILE})
+  # Expand CMake variables (e.g. ${CMAKE_CURRENT_LIST_DIR}) after scanning
+  # CONF_FILE with the raw text, so the scan still matches the .conf content.
+  string(CONFIGURE "${_primary_key_path}" _primary_key_path)
+
+  if(IS_ABSOLUTE ${_primary_key_path})
+    set(KEY_FILE ${_primary_key_path})
   elseif((DEFINED CONF_DIR) AND
-	 (EXISTS ${CONF_DIR}/${CONFIG_BOOT_SIGNATURE_KEY_FILE}))
-    set(KEY_FILE ${CONF_DIR}/${CONFIG_BOOT_SIGNATURE_KEY_FILE})
+	 (EXISTS ${CONF_DIR}/${_primary_key_path}))
+    set(KEY_FILE ${CONF_DIR}/${_primary_key_path})
   else()
-    set(KEY_FILE ${MCUBOOT_DIR}/${CONFIG_BOOT_SIGNATURE_KEY_FILE})
+    set(KEY_FILE ${MCUBOOT_DIR}/${_primary_key_path})
   endif()
   message("MCUBoot bootloader key file: ${KEY_FILE}")
 
@@ -463,6 +475,45 @@ if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_BOOT_SIGNATURE_KEY_FILE ST
     DEPENDS ${KEY_FILE}
     )
   zephyr_library_sources(${GENERATED_PUBKEY})
+
+  list(LENGTH _mcuboot_key_files _mcuboot_key_count)
+  target_compile_definitions(app PRIVATE MCUBOOT_SIGN_KEY_COUNT=${_mcuboot_key_count})
+
+  if(_mcuboot_key_count GREATER 1)
+    # Additional verification keys (index >= 1) from comma-separated list.
+    # Keys are comma-separated (semicolons do not survive sysbuild).
+    list(SUBLIST _mcuboot_key_files 1 -1 _extra_keys)
+    set(_key_index 1)
+    foreach(_key_path IN LISTS _extra_keys)
+      string(CONFIGURE "${_key_path}" _key_path)
+      if(IS_ABSOLUTE ${_key_path})
+        set(_resolved_key_path ${_key_path})
+      elseif((DEFINED CONF_DIR) AND (EXISTS ${CONF_DIR}/${_key_path}))
+        set(_resolved_key_path ${CONF_DIR}/${_key_path})
+      else()
+        set(_resolved_key_path ${MCUBOOT_DIR}/${_key_path})
+      endif()
+      set(_generated_pubkey ${ZEPHYR_BINARY_DIR}/autogen-pubkey-${_key_index}.c)
+      add_custom_command(
+        OUTPUT ${_generated_pubkey}
+        COMMAND ${PYTHON_EXECUTABLE} ${MCUBOOT_DIR}/scripts/imgtool.py
+          keyinfo --key ${_resolved_key_path} --require public
+        COMMAND
+        ${PYTHON_EXECUTABLE}
+        ${MCUBOOT_DIR}/scripts/imgtool.py
+        getpub
+        -k
+        ${_resolved_key_path}
+        --name-suffix _${_key_index}
+        > ${_generated_pubkey}
+        DEPENDS ${_resolved_key_path}
+      )
+      zephyr_library_sources(${_generated_pubkey})
+      math(EXPR _key_index "${_key_index} + 1")
+    endforeach()
+  endif()
+else()
+  target_compile_definitions(app PRIVATE MCUBOOT_SIGN_KEY_COUNT=1)
 endif()
 
 if(CONFIG_BOOT_ENCRYPTION_KEY_FILE AND NOT CONFIG_BOOT_ENCRYPTION_KEY_FILE STREQUAL "")
