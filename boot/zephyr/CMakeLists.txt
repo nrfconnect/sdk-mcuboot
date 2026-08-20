@@ -405,8 +405,12 @@ if(CONFIG_MCUBOOT_SERIAL)
 endif()
 
 if(NOT CONFIG_BOOT_SIGNATURE_USING_KMU AND NOT CONFIG_BOOT_SIGNATURE_KEY_FILE STREQUAL "")
-  # Extract primary key from a potentially comma-separated list.
-  string(REPLACE "," ";" _mcuboot_key_files "${CONFIG_BOOT_SIGNATURE_KEY_FILE}")
+  # Extract primary key; split on comma only when BOOT_SIGNATURE_KEY_FILE_MULTI is enabled.
+  if(CONFIG_BOOT_SIGNATURE_KEY_FILE_MULTI)
+    string(REPLACE "," ";" _mcuboot_key_files "${CONFIG_BOOT_SIGNATURE_KEY_FILE}")
+  else()
+    set(_mcuboot_key_files "${CONFIG_BOOT_SIGNATURE_KEY_FILE}")
+  endif()
   list(GET _mcuboot_key_files 0 _primary_key_path)
 
   # CONF_FILE points to the KConfig configuration files of the bootloader.

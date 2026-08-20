@@ -503,7 +503,7 @@ config NCS_BOOT_SIGNATURE_USING_ITS
 if !BOOT_SIGNATURE_USING_KMU && !NCS_BOOT_SIGNATURE_USING_ITS
 
 config BOOT_SIGNATURE_KEY_FILE
-	string "PEM key file (or comma-separated list)"
+	string "PEM key file (or comma-separated list on nrf91)"
 	depends on !BOOT_SIGNATURE_TYPE_NONE
 	default "root-ec-p256.pem" if BOOT_SIGNATURE_TYPE_ECDSA_P256
 	default "root-ed25519.pem" if BOOT_SIGNATURE_TYPE_ED25519
@@ -515,7 +515,8 @@ config BOOT_SIGNATURE_KEY_FILE
 	  list of PEMs (e.g. "prod_pub.pem,dev_pub.pem") to embed multiple
 	  verification keys in the bootloader. Only the public-key bytes are
 	  ever embedded in the bootloader image regardless of which form is
-	  passed in.
+	  passed in. Comma-separated lists are only supported on nrf91 series
+	  (requires BOOT_SIGNATURE_KEY_FILE_MULTI).
 
 	  The first entry may be either a keypair PEM or a public-only PEM.
 	  A keypair is required only if the same file is also used with
@@ -540,6 +541,14 @@ config BOOT_SIGNATURE_KEY_FILE
 	  MCUboot repository root. Each file is parsed by imgtool's getpub
 	  command and a .c source with the public key information is written
 	  in a format expected by MCUboot.
+
+config BOOT_SIGNATURE_KEY_FILE_MULTI
+	bool
+	default y
+	depends on SOC_SERIES_NRF91
+	help
+	  Enable comma-separated multi-key support in BOOT_SIGNATURE_KEY_FILE.
+	  Restricted to nrf91 series; cannot be enabled for other SoC families.
 
 endif
 
