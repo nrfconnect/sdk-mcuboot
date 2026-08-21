@@ -579,7 +579,7 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
 	hex
 	depends on NCS_MCUBOOT_DISABLE_SELF_RWX
 	depends on !PARTITION_MANAGER_ENABLED
-	default 0x800 if SOC_SERIES_NRF54L
+	default ROM_START_OFFSET if SOC_SERIES_NRF54L
 	help
 	  Size of region, at the beginning of the partition, that does not require
 	  protections. This is used, for example, when MCUboot type image is protected
@@ -1585,6 +1585,18 @@ config NCS_MCUBOOT_MANUFACTURING_APP_KEY_IDENTIFIER
 	default 0
 	help
 	  Manufacturing application key identifier.
+
+
+config NCS_MCUBOOT_DISCARDS_HEADER_IN_SECONDARY_MCUBOOT
+	bool "Discard MCUboot header in second stage MCUboot bootloader image" if !PARTITION_MANAGER_ENABLED
+	depends on MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+	help
+	  Default n to keep compatibility with PM built MCUboot images.
+	  When selected, the MCUboot header, attached to MCUboot image for DFU,
+	  will be discarded while MCUboot will be copied to s0/s1 slots, leaving
+	  more space within slot for the MCUboot image.
+	  When unselected the MCUboot header will be kept and copied with
+	  MCUboot image to the s0/s1 slot.
 
 configdefault PSA_CRYPTO
 	  default y if SOC_NRF54H20 && BOOT_SIGNATURE_TYPE_ED25519
