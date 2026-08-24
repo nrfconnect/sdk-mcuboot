@@ -266,6 +266,8 @@ if(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256 OR CONFIG_BOOT_ENCRYPT_EC256)
     zephyr_library_sources(${MCUBOOT_NRF_EXT_DIR}/cc310_glue.c)
     zephyr_library_include_directories(${MCUBOOT_NRF_EXT_DIR})
     zephyr_link_libraries(nrfxlib_crypto)
+  elseif(CONFIG_BOOT_USE_NRF_OBERON)
+    zephyr_link_libraries(nrfxlib_crypto)
   elseif(CONFIG_BOOT_USE_NRF_EXTERNAL_CRYPTO)
     zephyr_include_directories(${BL_CRYPTO_DIR}/../include)
   endif()
@@ -357,17 +359,19 @@ endif()
 
 if(NOT CONFIG_BOOT_ED25519_PSA AND NOT CONFIG_BOOT_ECDSA_PSA)
   if(CONFIG_BOOT_ENCRYPT_EC256 OR CONFIG_BOOT_ENCRYPT_X25519)
-    zephyr_library_sources(
-      ${TINYCRYPT_DIR}/source/aes_encrypt.c
-      ${TINYCRYPT_DIR}/source/aes_decrypt.c
-      ${TINYCRYPT_DIR}/source/ctr_mode.c
-      ${TINYCRYPT_DIR}/source/hmac.c
-      ${TINYCRYPT_DIR}/source/ecc_dh.c
-    )
+    if(CONFIG_BOOT_USE_TINYCRYPT)
+      zephyr_library_sources(
+        ${TINYCRYPT_DIR}/source/aes_encrypt.c
+        ${TINYCRYPT_DIR}/source/aes_decrypt.c
+        ${TINYCRYPT_DIR}/source/ctr_mode.c
+        ${TINYCRYPT_DIR}/source/hmac.c
+        ${TINYCRYPT_DIR}/source/ecc_dh.c
+      )
+    endif()
   endif()
 endif()
 
-if(CONFIG_BOOT_ENCRYPT_EC256 AND NOT CONFIG_BOOT_ECDSA_PSA)
+if(CONFIG_BOOT_ENCRYPT_EC256 AND NOT CONFIG_BOOT_ECDSA_PSA AND CONFIG_BOOT_USE_TINYCRYPT)
   zephyr_library_sources(
     ${TINYCRYPT_DIR}/source/ecc_dh.c
     )
