@@ -13,8 +13,9 @@
 #include "mcuboot_config/mcuboot_config.h"
 
 #if (defined(MCUBOOT_USE_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT)) != 1
-    #error "One crypto backend must be defined: either MBED_TLS or TINYCRYPT"
+     defined(MCUBOOT_USE_TINYCRYPT) + \
+     defined(MCUBOOT_USE_NRF_OBERON)) != 1
+    #error "One crypto backend must be defined: either MBED_TLS, TINYCRYPT, or NRF_OBERON"
 #endif
 
 #if defined(MCUBOOT_USE_MBED_TLS)
@@ -28,6 +29,11 @@
     #include <tinycrypt/constants.h>
     #define BOOTUTIL_CRYPTO_ECDH_P256_HASH_SIZE (4 * 8)
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+    #include <ocrypto_ecdh_p256.h>
+    #define NUM_ECC_BYTES 32
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,6 +73,46 @@ static inline int bootutil_ecdh_p256_shared_secret(bootutil_ecdh_p256_context *c
     return 0;
 }
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+typedef uintptr_t bootutil_ecdh_p256_context;
+typedef bootutil_ecdh_p256_context bootutil_key_exchange_ctx;
+
+static inline void bootutil_ecdh_p256_init(bootutil_ecdh_p256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline void bootutil_ecdh_p256_drop(bootutil_ecdh_p256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline int bootutil_ecdh_p256_shared_secret(bootutil_ecdh_p256_context *ctx,
+                                                   const uint8_t *pk, const uint8_t *sk,
+                                                   uint8_t *z)
+{
+    (void)ctx;
+
+    if (pk[0] != 0x04) {
+        return -1;
+    }
+
+    if (ocrypto_ecdh_p256_public_key_check(&pk[1]) != 0) {
+        return -1;
+    }
+
+    if (ocrypto_ecdh_p256_secret_key_check(sk) != 0) {
+        return -1;
+    }
+
+    if (ocrypto_ecdh_p256_common_secret(z, sk, &pk[1]) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
 #define NUM_ECC_BYTES 32
