@@ -15,8 +15,10 @@
 #include "mcuboot_config/mcuboot_config.h"
 
 #if (defined(MCUBOOT_USE_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT) + defined(MCUBOOT_USE_PSA_CRYPTO)) != 1
-    #error "One crypto backend must be defined: either MBED_TLS or TINYCRYPT or PSA"
+     defined(MCUBOOT_USE_TINYCRYPT) + \
+     defined(MCUBOOT_USE_PSA_CRYPTO) + \
+     defined(MCUBOOT_USE_NRF_OBERON)) != 1
+    #error "One crypto backend must be defined: either MBED_TLS, TINYCRYPT, PSA, or NRF_OBERON"
 #endif
 
 #include "bootutil/enc_key_public.h"
@@ -36,6 +38,11 @@
     #endif
     #define BOOT_ENC_BLOCK_SIZE TC_AES_BLOCK_SIZE
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+    #include <ocrypto_aes_ctr.h>
+    #define BOOT_ENC_BLOCK_SIZE (16)
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #if defined(MCUBOOT_USE_PSA_CRYPTO)
     #include <psa/crypto.h>
@@ -146,6 +153,70 @@ static inline int bootutil_aes_ctr_decrypt(bootutil_aes_ctr_context *ctx, uint8_
     return _bootutil_aes_ctr_crypt(ctx, counter, c, clen, blk_off, m);
 }
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+typedef struct {
+    uint8_t key[BOOT_ENC_KEY_SIZE];
+} bootutil_aes_ctr_context;
+
+static inline void bootutil_aes_ctr_init(bootutil_aes_ctr_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline void bootutil_aes_ctr_drop(bootutil_aes_ctr_context *ctx)
+{
+    memset(ctx, 0, sizeof(*ctx));
+}
+
+static inline int bootutil_aes_ctr_set_key(bootutil_aes_ctr_context *ctx, const uint8_t *k)
+{
+    memcpy(ctx->key, k, BOOT_ENC_KEY_SIZE);
+    return 0;
+}
+
+static int _bootutil_aes_ctr_crypt(bootutil_aes_ctr_context *ctx, uint8_t *counter,
+                                   const uint8_t *in, uint32_t inlen, uint32_t blk_off,
+                                   uint8_t *out)
+{
+    ocrypto_aes_ctr_ctx octx;
+    uint8_t nonce[BOOT_ENC_BLOCK_SIZE];
+    uint8_t skip[BOOT_ENC_BLOCK_SIZE];
+    uint32_t n = blk_off;
+
+    if (inlen == 0) {
+        return 0;
+    }
+
+    memcpy(nonce, counter, BOOT_ENC_BLOCK_SIZE);
+    ocrypto_aes_ctr_init(&octx, ctx->key, BOOT_ENC_KEY_SIZE, nonce);
+
+    while (n > 0) {
+        uint32_t chunk = (n > BOOT_ENC_BLOCK_SIZE) ? BOOT_ENC_BLOCK_SIZE : n;
+
+        memset(skip, 0, chunk);
+        ocrypto_aes_ctr_update(&octx, skip, skip, chunk);
+        n -= chunk;
+    }
+
+    ocrypto_aes_ctr_update(&octx, out, in, inlen);
+    return 0;
+}
+
+static inline int bootutil_aes_ctr_encrypt(bootutil_aes_ctr_context *ctx, uint8_t *counter,
+                                           const uint8_t *m, uint32_t mlen, uint32_t blk_off,
+                                           uint8_t *c)
+{
+    return _bootutil_aes_ctr_crypt(ctx, counter, m, mlen, blk_off, c);
+}
+
+static inline int bootutil_aes_ctr_decrypt(bootutil_aes_ctr_context *ctx, uint8_t *counter,
+                                           const uint8_t *c, uint32_t clen, uint32_t blk_off,
+                                           uint8_t *m)
+{
+    return _bootutil_aes_ctr_crypt(ctx, counter, c, clen, blk_off, m);
+}
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #ifdef __cplusplus
 }

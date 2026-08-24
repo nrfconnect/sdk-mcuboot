@@ -332,6 +332,7 @@ config BOOT_ECDSA_NRF_OBERON
 	bool "use nrf oberon SW crypto"
 	select BOOT_USE_NRF_OBERON
 	select NRF_OBERON
+	select MBEDTLS_ASN1_PARSE_C if BOOT_ENCRYPT_IMAGE
 
 config BOOT_ECDSA_TINYCRYPT
 	bool "Use tinycrypt [DEPRECATED]"
