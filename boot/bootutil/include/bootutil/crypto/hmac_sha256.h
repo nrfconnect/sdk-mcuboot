@@ -13,8 +13,9 @@
 #include "mcuboot_config/mcuboot_config.h"
 
 #if (defined(MCUBOOT_USE_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT)) != 1
-    #error "One crypto backend must be defined: either MBED_TLS or TINYCRYPT"
+     defined(MCUBOOT_USE_TINYCRYPT) + \
+     defined(MCUBOOT_USE_NRF_OBERON)) != 1
+    #error "One crypto backend must be defined: either MBED_TLS, TINYCRYPT, or NRF_OBERON"
 #endif
 
 #if defined(MCUBOOT_USE_MBED_TLS)
@@ -30,6 +31,10 @@
     #include <tinycrypt/constants.h>
     #include <tinycrypt/hmac.h>
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+    #include <ocrypto_hmac_sha256.h>
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #include <stdint.h>
 
@@ -83,6 +88,42 @@ static inline int bootutil_hmac_sha256_finish(bootutil_hmac_sha256_context *ctx,
     return 0;
 }
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#if defined(MCUBOOT_USE_NRF_OBERON)
+typedef ocrypto_hmac_sha256_ctx bootutil_hmac_sha256_context;
+
+static inline void bootutil_hmac_sha256_init(bootutil_hmac_sha256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline void bootutil_hmac_sha256_drop(bootutil_hmac_sha256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline int bootutil_hmac_sha256_set_key(bootutil_hmac_sha256_context *ctx,
+                                               const uint8_t *key, unsigned int key_size)
+{
+    ocrypto_hmac_sha256_init(ctx, key, key_size);
+    return 0;
+}
+
+static inline int bootutil_hmac_sha256_update(bootutil_hmac_sha256_context *ctx,
+                                              const void *data, unsigned int data_length)
+{
+    ocrypto_hmac_sha256_update(ctx, data, data_length);
+    return 0;
+}
+
+static inline int bootutil_hmac_sha256_finish(bootutil_hmac_sha256_context *ctx,
+                                              uint8_t *tag, unsigned int taglen)
+{
+    (void)taglen;
+    ocrypto_hmac_sha256_final(ctx, tag);
+    return 0;
+}
+#endif /* MCUBOOT_USE_NRF_OBERON */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
 /**
