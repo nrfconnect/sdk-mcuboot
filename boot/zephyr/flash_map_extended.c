@@ -35,6 +35,14 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #endif
 #define EXT_FLASH_DEVICE_ID SPI_FLASH_0_ID
 #define EXT_FLASH_DEVICE_BASE 0
+
+#elif (DT_NODE_EXISTS(DT_INST(0, jedec_nor)))
+#define EXT_FLASH_DEVICE_NODE DT_INST(0, jedec_nor)
+#if defined(CONFIG_FLASH_MSPI_NOR)
+#define EXT_FLASH_DEVICE DEVICE_DT_GET(EXT_FLASH_DEVICE_NODE)
+#endif
+#define EXT_FLASH_DEVICE_ID SPI_FLASH_0_ID
+#define EXT_FLASH_DEVICE_BASE 0
 #endif
 
 #if (DT_HAS_CHOSEN(zephyr_flash_controller))
