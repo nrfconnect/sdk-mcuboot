@@ -1043,6 +1043,20 @@ static inline void sec_slot_mark_assigned(struct boot_loader_state *state)
     sec_slot_assignment[BOOT_CURR_IMG(state)] = SEC_SLOT_ASSIGNED;
 }
 
+static int
+erase_full_slot(const struct flash_area *fa)
+{
+#ifdef MCUBOOT_WATCHDOG_FEED
+    /* NOTE: erasing the whole secondary slot in ONE call might take too long,
+     * far beyond watchdog timeout, so use boot_erase_region() to erase per
+     * flash sector and feed the watchdog between sectors.
+     */
+    return boot_scramble_region(fa, 0, fa->fa_size, false);
+#else
+    return flash_area_erase(fa, 0, fa->fa_size);
+#endif
+}
+
 /**
  * Cleanup up all secondary slot which couldn't be assigned to any primary slot.
  *
@@ -1064,7 +1078,7 @@ static void sec_slot_cleanup_if_unusable(void)
             rc = flash_area_open(flash_area_id_from_multi_image_slot(idx, BOOT_SLOT_SECONDARY),
                                  &secondary_fa);
             if (!rc) {
-                rc = flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+                rc = erase_full_slot(secondary_fa);
             }
 
             BOOT_LOG_ERR("Erase secondary: img %d: %d", idx, rc);
@@ -1246,7 +1260,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
                                             SECOND_STAGE_ACTIVE_MCUBOOT_SIZE)) {
                 /* NSIB upgrade but for the wrong slot, must be erased */
                 BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
-                flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+                (void)erase_full_slot(secondary_fa);
                 sec_slot_untouch(state);
                 BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
                 return BOOT_SWAP_TYPE_FAIL;
@@ -1290,7 +1304,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         if (rc != 0) {
             /* Unable to find a matching image index. */
             BOOT_LOG_ERR("Image in slot does not match any known UUID");
-            flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+            (void)erase_full_slot(secondary_fa);
             sec_slot_untouch(state);
             BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
             return BOOT_SWAP_TYPE_FAIL;
@@ -1307,7 +1321,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
                    (target_partition == MCUBOOT_ACTIVE_PARTITION_INDEX)) {
             /* NSIB upgrade but for the wrong slot, must be erased */
             BOOT_LOG_ERR("Image in slot is for wrong s0/s1 image");
-            flash_area_erase(secondary_fa, 0, secondary_fa->fa_size);
+            (void)erase_full_slot(secondary_fa);
             sec_slot_untouch(state);
             BOOT_LOG_ERR("Cleaned-up secondary slot of image %d", BOOT_CURR_IMG(state));
             return BOOT_SWAP_TYPE_FAIL;

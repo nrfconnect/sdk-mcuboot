@@ -161,6 +161,7 @@ swap_read_status_bytes(const struct flash_area *fap,
     write_sz = BOOT_WRITE_SZ(state);
     off = boot_status_off(fap);
     for (i = max_entries; i > 0; i--) {
+        MCUBOOT_WATCHDOG_FEED();
         rc = flash_area_read(fap, off + (i - 1) * write_sz, &status, 1);
         if (rc < 0) {
             return BOOT_EFLASH;
@@ -560,6 +561,7 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
     if (bs->op == BOOT_STATUS_OP_MOVE) {
         idx = last_idx;
         while (idx > 0) {
+            MCUBOOT_WATCHDOG_FEED();
             if (idx <= (last_idx - bs->idx + 1)) {
                 boot_move_sector_up(idx, sector_sz, state, bs, fap_pri, fap_sec);
             }
@@ -572,6 +574,7 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
 
     idx = 1;
     while (idx <= last_idx) {
+        MCUBOOT_WATCHDOG_FEED();
         if (idx >= bs->idx) {
             boot_swap_sectors(idx, sector_sz, state, bs, fap_pri, fap_sec);
         }
