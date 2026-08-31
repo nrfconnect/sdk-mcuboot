@@ -143,6 +143,7 @@ bootutil_img_hash(struct boot_loader_state *state,
                         size);
 #else
     for (off = 0; off < size; off += blk_sz) {
+        MCUBOOT_WATCHDOG_FEED();
         blk_sz = size - off;
         if (blk_sz > tmp_buf_sz) {
             blk_sz = tmp_buf_sz;
