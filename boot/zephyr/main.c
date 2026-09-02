@@ -188,7 +188,12 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #define RRAMC_REGION_RWX_LSB 0
 #define RRAMC_REGION_RWX_WIDTH 3
 
+#if defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+#define RRAMC_REGION_NUMBER 3
+#else
 #define RRAMC_REGION_NUMBER 4
+#endif
+
 #define NRF_RRAM_REGION_SIZE_UNIT 0x400
 #define NRF_RRAM_REGION_ADDRESS_RESOLUTION 0x400
 
@@ -206,9 +211,11 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #define RRAMC_REGION_CONFIG_H (((uint32_t)(&(RRAMC_REGION_CONFIG))) >> 16)
 #define RRAMC_REGION_CONFIG_L (((uint32_t)(&(RRAMC_REGION_CONFIG))) & 0x0000fffful)
 
+#if !defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
 #define RRAMC_REGION_ADDRESS NRF_RRAMC->REGION[RRAMC_REGION_NUMBER].ADDRESS
 #define RRAMC_REGION_ADDRESS_H (((uint32_t)(&(RRAMC_REGION_ADDRESS))) >> 16)
 #define RRAMC_REGION_ADDRESS_L (((uint32_t)(&(RRAMC_REGION_ADDRESS))) & 0x0000fffful)
+#endif
 
 BUILD_ASSERT((PROTECTED_REGION_START % NRF_RRAM_REGION_ADDRESS_RESOLUTION) == 0,
 	"Start of protected region is not aligned - not possible to protect");
@@ -336,6 +343,22 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
 #endif /* CONFIG_MCUBOOT_CLEANUP_RAM */
 
 #ifdef CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
+#if defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+                ".thumb_func\n"
+                "region_disable_rwx:\n"
+                "   movw r1, %6\n"
+                "   movt r1, %7\n"
+                "   ldr  r2, [r1]\n"
+                /* Size should be set by bootconf.hex at reset. */
+                "   ands r4, r2, %12\n"
+                "   cbnz r4, clear_rwx\n"
+                "   movt r2, %8\n"
+                "clear_rwx:\n"
+                "   bfc  r2, %9, %10\n"
+                "   orr  r2, %11\n"
+                "   str  r2, [r1]\n"
+                "   dsb\n"
+#else
                 ".thumb_func\n"
                 "region_disable_rwx:\n"
                 "   movw r1, %6\n"
@@ -364,6 +387,7 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
                 "   orr  r2, %11\n"
                 "   str  r2, [r1]\n"
                 "   dsb\n"
+#endif /* CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES */
                 /* Next assembly line is important for current function */
 
  #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
@@ -383,12 +407,16 @@ static void __ramfunc jump_in(struct arm_vector_table *vt)
                   "i" ((PROTECTED_REGION_SIZE) / (NRF_RRAM_REGION_SIZE_UNIT)),
                   "i" (RRAMC_REGION_RWX_LSB),
                   "i" (RRAMC_REGION_RWX_WIDTH),
-                  "i" (RRAMC_REGION_CONFIG_LOCK_Msk),
-                  "i" (RRAMC_REGION_CONFIG_SIZE_Msk),
+                  "i" (RRAMC_REGION_CONFIG_LOCK_Msk)
+#if !defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+                  , "i" (RRAMC_REGION_CONFIG_SIZE_Msk),
                   "i" (RRAMC_REGION_ADDRESS_L),
                   "i" (RRAMC_REGION_ADDRESS_H),
                   "i" (PROTECTED_REGION_START_L),
                   "i" (PROTECTED_REGION_START_H)
+#else
+                  , "i" (RRAMC_REGION_CONFIG_SIZE_Msk)
+#endif
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
                 : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "memory"
         );
