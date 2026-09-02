@@ -877,6 +877,15 @@ check_validity:
             check_addresses = true;
         } else
 #endif
+
+#if defined(CONFIG_SOC_NRF54H20) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
+        if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
+            get_image_perspective_flash_area_bounds(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY),
+                                                    &min_addr, &max_addr);
+            check_addresses = true;
+        }
+#endif
+
         if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_APPLICATION_IMAGE_NUMBER) {
             get_image_perspective_flash_area_bounds(BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY),
                                                     &min_addr, &max_addr);
