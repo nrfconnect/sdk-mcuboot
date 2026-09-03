@@ -655,6 +655,41 @@ config BOOT_VALIDATE_SLOT0_ONCE
 	  low end devices with as a compromise lowering the security level.
 	  If unsure, leave at the default value.
 
+config BOOT_OPTIONAL_IMAGES
+	bool "Boot the application even if an optional image is invalid"
+	depends on UPDATEABLE_IMAGE_NUMBER > 1
+	depends on !BOOT_DIRECT_XIP && !BOOT_RAM_LOAD && !BOOT_FIRMWARE_LOADER
+	help
+	  If y, the images selected by BOOT_OPTIONAL_IMAGES_MASK are treated as
+	  optional. When such an image fails validation, the bootloader reports
+	  the failure and carries on booting image 0 instead of halting.
+
+	  Use this for images that hold data consumed by the application, such
+	  as a machine learning model, where a missing or corrupted image
+	  degrades functionality but must not stop the device from starting.
+
+	  Image 0 is the image that MCUboot boots, so it is always mandatory and
+	  is never affected by this option.
+
+config BOOT_OPTIONAL_IMAGES_MASK
+	hex "Bitmask of optional images"
+	depends on BOOT_OPTIONAL_IMAGES
+	default 0x0
+	help
+	  Bit N set marks image N as optional. Bit 0 is ignored because image 0
+	  must always be valid. For example, 0x2 marks image 1 as optional, and
+	  0x6 marks images 1 and 2 as optional.
+
+config BOOT_OPTIONAL_IMAGES_SCRUB
+	bool "Scrub an optional image that fails validation"
+	depends on BOOT_OPTIONAL_IMAGES
+	default y
+	help
+	  If y, the bootloader erases the first sector of the primary slot of an
+	  optional image that failed validation. Erasing the sector removes the
+	  image header, so the application sees the partition as empty rather
+	  than parsing content that MCUboot has rejected.
+
 config BOOT_PREFER_SWAP_OFFSET
 	bool "Prefer the newer swap offset algorithm"
 	default y if !$(dt_nodelabel_enabled,scratch_partition) && !SOC_FAMILY_STM32
