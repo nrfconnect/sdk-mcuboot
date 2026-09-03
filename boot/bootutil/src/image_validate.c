@@ -766,9 +766,14 @@ skip_security_counter_read:
 #if defined(CONFIG_NCS_MCUBOOT_LOAD_PERIPHCONF)
         default:
         {
-            /* Validate custom/vendor TLVs. */
-            rc = nrf_validate_custom_tlv_data(hdr, fap, boot_img_slot_off(state, slot),
-                                              type, off, len);
+            /* Validate custom/vendor TLVs.
+             *
+             * Take the slot offset from the flash area being validated rather than from
+             * the boot state: this function is also reached with state == NULL (the
+             * single-slot and firmware-loader boot paths) and with a state whose per-slot
+             * flash areas are not populated (serial recovery image listing).
+             */
+            rc = nrf_validate_custom_tlv_data(hdr, fap, flash_area_get_off(fap), type, off, len);
             if (rc) {
                 BOOT_LOG_ERR("Slot %d image %d has invalid custom TLV data, error %d",
                              slot, image_index, rc);
