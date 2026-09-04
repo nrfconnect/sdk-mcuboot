@@ -1224,6 +1224,17 @@ boot_validated_swap_type(struct boot_loader_state *state,
         sec_slot_touch(state);
 
 #ifdef  MCUBOOT_IS_SECOND_STAGE
+        bool img_addr_usable = !IS_ENCRYPTED(hdr);
+
+#ifdef MCUBOOT_CHECK_HEADER_LOAD_ADDRESS
+        img_addr_usable = true;
+#endif
+
+        if (!img_addr_usable && IMAGE_IS_SECOND_STAGE_MCUBOOT(state)) {
+            return BOOT_SWAP_TYPE_NONE;
+        }
+
+        if (img_addr_usable)
 #ifdef INCLUDE_NETWORK_CORE_IMAGE_CHECK
         if (!(internal_img_addr >= NETCPU_APP_SLOT_OFFSET &&
               internal_img_addr < NETCPU_APP_SLOT_END))
