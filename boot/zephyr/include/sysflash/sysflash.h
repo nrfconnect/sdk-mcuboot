@@ -34,6 +34,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/util_macro.h>
+#include <assert.h>
 
 #ifndef SOC_FLASH_0_ID
 #define SOC_FLASH_0_ID 0
@@ -163,6 +164,16 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
         SECOND_STAGE_INACTIVE_MCUBOOT_ID, PARTITION_ID(slot1_partition)
 #endif
     };
+#ifdef CONFIG_ASSERT
+    assert(img * 2 + slot < ARRAY_SIZE(all_slots));
+#else
+    /* Since there is no way to indicate a misuse of this function,
+     * return the first partition to avoid undefined behavior.
+     */
+    if (img * 2 + slot >= ARRAY_SIZE(all_slots)) {
+        return all_slots[0];
+    }
+#endif
     return all_slots[img * 2 + slot];
 };
 
