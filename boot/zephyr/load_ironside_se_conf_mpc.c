@@ -26,17 +26,27 @@ BUILD_ASSERT(MCUBOOT_IMAGE_NUMBER <= 4,
 
 #define ACCESSIBLE_MRAM_START PARTITION_NODE_ADDRESS(DT_CHOSEN(zephyr_code_partition))
 
+#if defined(CONFIG_SOC_SERIES_NRF92)
+/* The application does not own the top of MRAM on the nRF92 Series. From 0x0E4AF000 the
+ * Common DFU Area is shared with the Cellular domain, and IronSide SE grants that area RWX
+ * through override 5, which MCUboot is not permitted to program. MPC permissions are OR-ed
+ * across overlapping overrides, so write protection cannot be enforced above this address.
+ */
+#define APP_MRAM_END 0x0E4AF000
+#else
+#define APP_MRAM_END (DT_REG_ADDR(DT_NODELABEL(mram1x)) + DT_REG_SIZE(DT_NODELABEL(mram1x)))
+#endif
+
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(secure_storage_partition))
 BUILD_ASSERT((PARTITION_ADDRESS(secure_storage_partition) +
-	      PARTITION_SIZE(secure_storage_partition)) ==
-		     (DT_REG_ADDR(DT_NODELABEL(mram1x)) + DT_REG_SIZE(DT_NODELABEL(mram1x))),
+	      PARTITION_SIZE(secure_storage_partition)) == APP_MRAM_END,
 	     "The MPC override configuration used to provide write protection for the image "
 	     "partitions currently requires that the secure storage partitions are placed at the "
-	     "end of MRAM.");
+	     "end of the MRAM owned by the application.");
 
 #define ACCESSIBLE_MRAM_END PARTITION_ADDRESS(secure_storage_partition)
 #else
-#define ACCESSIBLE_MRAM_END (DT_REG_ADDR(DT_NODELABEL(mram1x)) + DT_REG_SIZE(DT_NODELABEL(mram1x)))
+#define ACCESSIBLE_MRAM_END APP_MRAM_END
 #endif
 
 #define BOOT_PARTITION_END                                                                         \
@@ -272,6 +282,30 @@ CHECK_MPC_ADDRESS_ALIGNMENT("At least one secondary image partition", SECONDARY_
  * default configuration - therefore overwriting those overwrites the defaults.
  */
 
+#if defined(CONFIG_SOC_SERIES_NRF92)
+
+/* IronSide SE allow-lists MPC110 overrides 4, 5, 6, 7 and 29 on nRF92.
+ * For now, we use only 4, 7 and 29, which are the only ones that are both allow-listed and unused.
+ * Override 5 grants the Common DFU Area and the MRAM above it, and 6 grants all application RAM
+ * including the Cellular IPC windows, so neither may be overwritten. See APP_MRAM_END above.
+ */
+BUILD_ASSERT(MCUBOOT_IMAGE_NUMBER == 1, "On nRF92, only a single image is supported");
+
+#define MPC110_OVERRIDE_DEFAULT_RX                       (uintptr_t)&NRF_MPC110->OVERRIDE[4]
+#define MPC110_OVERRIDE_INITIAL_END_TO_ACTIVE0_START_RWX (uintptr_t)&NRF_MPC110->OVERRIDE[29]
+#define MPC110_OVERRIDE_LAST_ACTIVE_END_TO_ACCESSIBLE_MRAM_END_RWX                                 \
+	(uintptr_t)&NRF_MPC110->OVERRIDE[7]
+
+/* Master port 2 is the one IronSide SE uses for every override it programs on this part. */
+#define MASTERPORT_DEFAULT BIT(2)
+
+/* The owner of these overrides is fixed to the application core in hardware, and IronSide SE
+ * refuses NRF_OWNER_NONE for a fixed-owner override.
+ */
+#define MPCCONF_OWNER NRF_OWNER_APPLICATION
+
+#else /* nRF54H20 */
+
 /* Override used for assigning R_X perms as a default. */
 #define MPC110_OVERRIDE_DEFAULT_RX (uintptr_t)&NRF_MPC110->OVERRIDE[1]
 
@@ -304,6 +338,10 @@ CHECK_MPC_ADDRESS_ALIGNMENT("At least one secondary image partition", SECONDARY_
 
 /* Default masterport settings for the above MPC110 overrides. */
 #define MASTERPORT_DEFAULT (BIT(2) | BIT(3) | BIT(6))
+
+#define MPCCONF_OWNER NRF_OWNER_NONE
+
+#endif /* CONFIG_SOC_SERIES_NRF92 */
 
 /* The 3 (2 if !DIRECT_XIP) tables below this implement the access permissions at the different
  * stages of the boot:
@@ -345,7 +383,7 @@ static const struct mpcconf_entry uicr_entries[] __used Z_GENERIC_DOT_SECTION(mp
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ false,
 					    /* X */ true,
 					    /* S */ false, ACCESSIBLE_MRAM_START),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, BOOT_PARTITION_END),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, BOOT_PARTITION_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 
@@ -358,7 +396,7 @@ static const struct mpcconf_entry uicr_entries[] __used Z_GENERIC_DOT_SECTION(mp
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ false,
 					    /* S */ false, BOOT_PARTITION_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, ACCESSIBLE_MRAM_END),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, ACCESSIBLE_MRAM_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -404,7 +442,7 @@ static const struct mpcconf_entry primary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ false,
 					    /* X */ true,
 					    /* S */ false, ACCESSIBLE_MRAM_START),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, ACCESSIBLE_MRAM_END),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, ACCESSIBLE_MRAM_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 
@@ -416,7 +454,7 @@ static const struct mpcconf_entry primary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, BOOT_PARTITION_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, PRIMARY_ACTIVE_0_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, PRIMARY_ACTIVE_0_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -430,7 +468,7 @@ static const struct mpcconf_entry primary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, PRIMARY_ACTIVE_0_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, PRIMARY_ACTIVE_1_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, PRIMARY_ACTIVE_1_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -445,7 +483,7 @@ static const struct mpcconf_entry primary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, PRIMARY_ACTIVE_1_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, PRIMARY_ACTIVE_2_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, PRIMARY_ACTIVE_2_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -460,7 +498,7 @@ static const struct mpcconf_entry primary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, PRIMARY_ACTIVE_2_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, PRIMARY_ACTIVE_3_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, PRIMARY_ACTIVE_3_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -475,7 +513,7 @@ static const struct mpcconf_entry primary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, PRIMARY_ACTIVE_3_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, ACCESSIBLE_MRAM_END),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, ACCESSIBLE_MRAM_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -490,7 +528,7 @@ static const struct mpcconf_entry secondary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ false,
 					    /* X */ true,
 					    /* S */ false, ACCESSIBLE_MRAM_START),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, ACCESSIBLE_MRAM_END),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, ACCESSIBLE_MRAM_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 
@@ -502,7 +540,7 @@ static const struct mpcconf_entry secondary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, BOOT_PARTITION_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, SECONDARY_ACTIVE_0_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, SECONDARY_ACTIVE_0_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -516,7 +554,7 @@ static const struct mpcconf_entry secondary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(
 			/* R */ true, /* W */ true, /* X */ true,
 			/* S */ false, SECONDARY_ACTIVE_0_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, SECONDARY_ACTIVE_1_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, SECONDARY_ACTIVE_1_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -531,7 +569,7 @@ static const struct mpcconf_entry secondary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(
 			/* R */ true, /* W */ true, /* X */ true,
 			/* S */ false, SECONDARY_ACTIVE_1_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, SECONDARY_ACTIVE_2_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, SECONDARY_ACTIVE_2_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -546,7 +584,7 @@ static const struct mpcconf_entry secondary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(
 			/* R */ true, /* W */ true, /* X */ true,
 			/* S */ false, SECONDARY_ACTIVE_2_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, SECONDARY_ACTIVE_3_START),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, SECONDARY_ACTIVE_3_START),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
@@ -561,7 +599,7 @@ static const struct mpcconf_entry secondary_entries[] = {
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
 					    /* S */ false, SECONDARY_ACTIVE_3_END),
-		MPCCONF_ENTRY_CONFIG2_VALUE(NRF_OWNER_NONE, ACCESSIBLE_MRAM_END),
+		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, ACCESSIBLE_MRAM_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
 #endif
