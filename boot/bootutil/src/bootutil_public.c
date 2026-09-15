@@ -505,6 +505,10 @@ boot_swap_type_multi(int image_index)
     int rc;
     size_t i;
 
+    if (image_index >= BOOT_IMAGE_NUMBER) {
+        return BOOT_SWAP_TYPE_PANIC;
+    }
+
 #ifdef CONFIG_NRF53_MULTI_IMAGE_UPDATE
     rc = BOOT_HOOK_CALL(boot_read_swap_state_primary_slot_hook,
                         BOOT_HOOK_REGULAR, image_index, &primary_slot);
