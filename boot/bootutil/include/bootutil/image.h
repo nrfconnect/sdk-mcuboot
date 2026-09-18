@@ -135,6 +135,7 @@ extern "C" {
 #define IMAGE_TLV_UUID_VID          0x74    /* Vendor unique identifier */
 #define IMAGE_TLV_UUID_CID          0x75    /* Device class unique identifier */
 #define IMAGE_TLV_MANIFEST          0x76    /* Transaction manifest */
+#define IMAGE_TLV_INSTALLER_IMAGE   0xA0    /* Firmware loader installer image */
                                             /*
                                              * vendor reserved TLVs at xxA0-xxFF,
                                              * where xx denotes the upper byte
