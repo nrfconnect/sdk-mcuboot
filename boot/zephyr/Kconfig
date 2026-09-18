@@ -589,11 +589,21 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED
 	default y if SOC_NRF54LM20A_CPUAPP || SOC_NRF54LM20B_CPUAPP
 	default y if SOC_NRF54LS05A_CPUAPP || SOC_NRF54LS05B_CPUAPP
 
+config NCS_MCUBOOT_BOOTCONF_LOCK_WRITES
+	bool "Use BOOTCONF-backed MCUboot write protection"
+	depends on NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED
+	select NCS_MCUBOOT_DISABLE_SELF_RWX
+	help
+	  MCUboot is protected using UICR BOOTCONF programmed by bootconf.hex.
+	  This option is enabled by sysbuild when
+	  SB_CONFIG_MCUBOOT_BOOTCONF_LOCK_WRITES is set.
+
 config NCS_MCUBOOT_DISABLE_SELF_RWX
 	bool "Disable read and execution on self NVM"
-	depends on NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED && !FPROTECT
+	depends on NCS_MCUBOOT_DISABLE_SELF_RWX_SUPPORTED
+	depends on !FPROTECT || NCS_MCUBOOT_BOOTCONF_LOCK_WRITES
 	help
-	  Sets RRAMC's region no.4 protection before jumping to application.
+	  Sets RRAMC region protection before jumping to application.
 	  It disables reads writes and execution memory area which holds MCUBOOT.
 
 config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
