@@ -273,6 +273,37 @@ CHECK_MPC_ADDRESS_ALIGNMENT("At least one secondary image partition", SECONDARY_
 CHECK_MPC_ADDRESS_ALIGNMENT("At least one secondary image partition", SECONDARY_ACTIVE_3_START);
 CHECK_MPC_ADDRESS_ALIGNMENT("At least one secondary image partition", SECONDARY_ACTIVE_3_END);
 
+/* Define a region to write protect above the highest addressed image. The trailing region
+ * covers partitions placed above the slots that must not be writable by the booted image,
+ * such as a PERIPHCONF or MPCCONF partition.
+ *
+ * It only moves the start of the RWX range that already begins at the last slot end, so no
+ * additional MPC override is needed. The size defaults to zero, leaving only the slot
+ * partitions write protected.
+ */
+#define TRAILING_WP_SIZE CONFIG_NCS_MCUBOOT_MPCCONF_STATIC_WRITE_PROTECTION_TRAILING_REGION_SIZE
+
+#define PRIMARY_WP_END (PRIMARY_ACTIVE_3_END + TRAILING_WP_SIZE)
+
+CHECK_MPC_ADDRESS_ALIGNMENT("Trailing write protected region", TRAILING_WP_SIZE);
+
+/* Write permissions above the highest addressed slot are granted from the end of its write
+ * protected region. A trailing region reaching past the end of the accessible MRAM would leave
+ * that range without the entry that grants them, silently write protecting partitions that are
+ * meant to stay writable, such as a settings partition.
+ */
+BUILD_ASSERT(PRIMARY_WP_END <= ACCESSIBLE_MRAM_END,
+	     "The trailing write protected region extends past the end of the accessible MRAM");
+
+/* Only primary_entries grants write permissions from the write protected end. The entries
+ * used when direct XIP boots an image from its upper slot (slot1, slot3, ...) are not
+ * covered, so the protection would depend on which slot was booted.
+ */
+#if defined(MCUBOOT_DIRECT_XIP)
+BUILD_ASSERT(TRAILING_WP_SIZE == 0,
+	     "The trailing write protected region is not supported together with direct XIP.");
+#endif
+
 /* MPC overrides used to implement image write protection.
  *
  * See the explanations on the various tables below to understand how they are used.
@@ -432,6 +463,12 @@ static const struct mpcconf_entry uicr_entries[] __used Z_GENERIC_DOT_SECTION(mp
  * Override 10: RWX | [ACTIVE_2 end - ACTIVE_3 start] (third inter-image gap when N > 3)
  * Override 11: RWX | [last active partition end - end of accessible MRAM]
  *
+ * The override numbers above are the ones used on the nRF54H20. Other SoCs assign the same
+ * roles to different overrides, see the MPC110_OVERRIDE_* definitions above.
+ *
+ * The last of the ranges above starts at the write protected end of the last active partition,
+ * so a configured trailing region shrinks it, see TRAILING_WP_SIZE above.
+ *
  * Note that the effect of overlapping the R_X with RWX is RWX (perms are OR-ed).
  */
 static const struct mpcconf_entry primary_entries[] = {
@@ -504,15 +541,15 @@ static const struct mpcconf_entry primary_entries[] = {
 #endif
 #endif /* MCUBOOT_IMAGE_NUMBER > 3 */
 
-#if ACCESSIBLE_MRAM_END > PRIMARY_ACTIVE_3_END
-	/* RWX | [ACTIVE_3 end - user end] */
+#if ACCESSIBLE_MRAM_END > PRIMARY_WP_END
+	/* RWX | [ACTIVE_3 write protected end - user end] */
 	{
 		MPCCONF_ENTRY_CONFIG0_VALUE(
 			/* LOCK */ true, /* ENABLE */ true,
 			MPC110_OVERRIDE_LAST_ACTIVE_END_TO_ACCESSIBLE_MRAM_END_RWX),
 		MPCCONF_ENTRY_CONFIG1_VALUE(/* R */ true, /* W */ true,
 					    /* X */ true,
-					    /* S */ false, PRIMARY_ACTIVE_3_END),
+					    /* S */ false, PRIMARY_WP_END),
 		MPCCONF_ENTRY_CONFIG2_VALUE(MPCCONF_OWNER, ACCESSIBLE_MRAM_END),
 		MPCCONF_ENTRY_CONFIG3_VALUE(MASTERPORT_DEFAULT),
 	},
