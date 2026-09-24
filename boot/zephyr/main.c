@@ -698,7 +698,8 @@ void zephyr_boot_log_stop(void)
         */
 
 #if defined(CONFIG_BOOT_SERIAL_ENTRANCE_GPIO) || defined(CONFIG_BOOT_SERIAL_PIN_RESET) \
-    || defined(CONFIG_BOOT_SERIAL_BOOT_MODE) || defined(CONFIG_BOOT_SERIAL_NO_APPLICATION)
+    || defined(CONFIG_BOOT_SERIAL_BOOT_MODE) || defined(CONFIG_BOOT_SERIAL_NO_APPLICATION) \
+    || defined (CONFIG_NRF_BOOT_SERIAL_BOOT_REQ)
 static void boot_serial_enter()
 {
     int rc;
@@ -830,6 +831,8 @@ int main(void)
 #ifdef CONFIG_NRF_BOOT_SERIAL_BOOT_REQ
     if (boot_request_detect_recovery()) {
         BOOT_LOG_DBG("Staying in serial recovery");
+        /* Clear the boot request to avoid infinite recovery loop */
+        (void) boot_request_clear();
         boot_serial_enter();
     }
 #endif
