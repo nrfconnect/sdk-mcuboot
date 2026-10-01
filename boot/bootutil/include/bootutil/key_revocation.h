@@ -19,6 +19,11 @@ extern "C" {
 #define BOOT_KEY_REVOKE_FAILED 2
 
 
+/* Not disallowing it, jus resetting the flag to 0, like there
+ * were not allow_revoke calls made yet.
+ */
+void unallow_revoke(void);
+
 void allow_revoke(void);
 
 int revoke(void);

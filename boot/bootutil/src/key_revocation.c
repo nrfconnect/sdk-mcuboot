@@ -10,6 +10,11 @@ extern int exec_revoke(void);
 
 static uint8_t ready_to_revoke;
 
+void unallow_revoke(void)
+{
+	ready_to_revoke = 0;
+}
+
 void allow_revoke(void)
 {
 	ready_to_revoke = 1;
