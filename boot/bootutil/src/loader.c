@@ -2674,8 +2674,12 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
     }
 
 #if defined(CONFIG_BOOT_KEYS_REVOCATION)
-    if (BOOT_SWAP_TYPE(state) == BOOT_SWAP_TYPE_NONE) {
-        allow_revoke();
+    /* Allow key revocation, unless any state of images do not agree on that */
+    allow_revoke();
+    IMAGES_ITER(BOOT_CURR_IMG(state)) {
+        if (BOOT_SWAP_TYPE(state) != BOOT_SWAP_TYPE_NONE) {
+            unallow_revoke();
+        }
     }
 #endif
     /* Iterate over all the images. At this point all required update operations
