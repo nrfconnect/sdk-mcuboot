@@ -1167,9 +1167,11 @@ bs_upload(char *buf, int len)
             /* Check whether it was erased during previous upload. */
             off_t start = flash_sector_get_off(&status_sector);
 
-            if (erase_range(fap, start, start) < 0) {
-                rc = MGMT_ERR_EUNKNOWN;
-                goto out;
+            if (not_yet_erased <= start) {
+                if (erase_range(fap, start, start) < 0) {
+                    rc = MGMT_ERR_EUNKNOWN;
+                    goto out;
+                }
             }
 #endif
             rc = BOOT_HOOK_CALL(boot_serial_uploaded_hook, 0, img_num, fap,
