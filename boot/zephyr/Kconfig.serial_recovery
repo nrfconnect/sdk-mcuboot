@@ -157,6 +157,16 @@ config BOOT_SERIAL_DETECT_DELAY
 	  Useful for powering on when using the same button as
 	  the one used to place the device in bootloader mode.
 
+config BOOT_SERIAL_RECOVERY_TIMEOUT_MS
+	int "Serial recovery first command timeout in milliseconds"
+	default 0
+	range 0 2147483647
+	help
+	  Maximum time MCUboot waits for the first valid MCUmgr command after
+	  entering serial recovery mode. If no command is received, MCUboot
+	  leaves serial recovery and continues booting. Once a command is
+	  received, serial recovery stays active. Set to 0 to wait indefinitely.
+
 menuconfig BOOT_SERIAL_WAIT_FOR_DFU
 	bool "Wait a prescribed duration to see if DFU is invoked by receiving a MCUmgr comand"
 	depends on BOOT_SERIAL_UART || BOOT_SERIAL_CDC_ACM
