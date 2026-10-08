@@ -1603,8 +1603,12 @@ boot_serial_start(const struct boot_uart_funcs *f)
 void
 boot_serial_check_start(const struct boot_uart_funcs *f, int timeout_in_ms)
 {
-    bs_entry = false;
-    boot_serial_read_console(f,timeout_in_ms);
+	if (timeout_in_ms) {
+		bs_entry = false;
+	} else {
+		bs_entry = true;
+	}
+	boot_serial_read_console(f, timeout_in_ms);
 }
 #endif
 
