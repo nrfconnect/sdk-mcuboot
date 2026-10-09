@@ -272,9 +272,9 @@ By default, the serial recovery GPIO pin active state enters the serial recovery
 Use the ``mcuboot_button0`` devicetree button alias to assign the GPIO pin to the MCUboot.
 
 By default, MCUboot waits indefinitely for an MCUmgr command after entering serial recovery mode.
-Set ``CONFIG_BOOT_SERIAL_RECOVERY_TIMEOUT_MS`` to a nonzero value to limit how long MCUboot waits
-for the first valid command. If the timeout expires, MCUboot leaves serial recovery and continues
-booting. After a valid command is received, MCUboot remains in serial recovery mode.
+Set ``CONFIG_BOOT_SERIAL_RECOVERY_TIMEOUT_MS`` to a nonzero value to limit how long MCUboot waits for the first valid command.
+If the timeout expires, MCUboot leaves serial recovery mode and continues booting.
+After MCUboot receives a valid command, it remains in serial recovery mode.
 
 Alternatively, MCUboot can wait for a limited time to check if DFU is invoked by receiving an MCUmgr command.
 Select ``CONFIG_BOOT_SERIAL_WAIT_FOR_DFU=y`` to use this mode. ``CONFIG_BOOT_SERIAL_WAIT_FOR_DFU_TIMEOUT`` option defines
