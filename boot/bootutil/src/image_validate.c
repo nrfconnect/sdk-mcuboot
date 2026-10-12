@@ -288,6 +288,12 @@ bootutil_img_validate(struct boot_loader_state *state,
 #endif
 
     BOOT_LOG_DBG("bootutil_img_validate: flash area %p", fap);
+
+    if (!bootutil_image_hdr_sizes_valid(hdr, fap, state == NULL ? 0 : BOOT_CURR_IMG(state))) {
+        rc = -1;
+        goto out;
+    }
+
 #ifdef MCUBOOT_DECOMPRESS_IMAGES
     /* If the image is compressed, the integrity of the image must also be validated */
     if (MUST_DECOMPRESS(fap, image_index, hdr)) {
