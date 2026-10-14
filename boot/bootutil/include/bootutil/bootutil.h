@@ -122,12 +122,6 @@ void boot_fetch_slot_state_sizes(void);
 uint32_t boot_get_state_secondary_offset(struct boot_loader_state *state,
                                          const struct flash_area *fap);
 
-#define SPLIT_GO_OK                 (0)
-#define SPLIT_GO_NON_MATCHING       (-1)
-#define SPLIT_GO_ERR                (-2)
-
-fih_ret split_go(int loader_slot, int split_slot, void **entry);
-
 #ifdef __cplusplus
 }
 #endif

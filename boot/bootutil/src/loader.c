@@ -547,39 +547,6 @@ boot_write_status(const struct boot_loader_state *state, struct boot_status *bs)
 #endif /* !MCUBOOT_RAM_LOAD */
 #endif /* !MCUBOOT_DIRECT_XIP */
 
-#if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
-static fih_ret
-split_image_check(struct image_header *app_hdr,
-                  const struct flash_area *app_fap,
-                  struct image_header *loader_hdr,
-                  const struct flash_area *loader_fap)
-{
-    static void *tmpbuf;
-    uint8_t loader_hash[32];
-    FIH_DECLARE(fih_rc, FIH_FAILURE);
-
-    if (!tmpbuf) {
-        tmpbuf = malloc(BOOT_TMPBUF_SZ);
-        if (!tmpbuf) {
-            goto out;
-        }
-    }
-
-    FIH_CALL(bootutil_img_validate, fih_rc, NULL, loader_hdr, loader_fap,
-             tmpbuf, BOOT_TMPBUF_SZ, NULL, 0, loader_hash);
-
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        FIH_RET(fih_rc);
-    }
-
-    FIH_CALL(bootutil_img_validate, fih_rc, NULL, app_hdr, app_fap,
-             tmpbuf, BOOT_TMPBUF_SZ, loader_hash, 32, NULL);
-
-out:
-    FIH_RET(fih_rc);
-}
-#endif /* !MCUBOOT_DIRECT_XIP && !MCUBOOT_RAM_LOAD */
-
 #if defined(MCUBOOT_DIRECT_XIP)
 /**
  * Check if image in slot has been set with specific ROM address to run from
@@ -2820,72 +2787,6 @@ out:
 #endif
 
     boot_close_all_flash_areas(state);
-    FIH_RET(fih_rc);
-}
-
-fih_ret
-split_go(int loader_slot, int split_slot, void **entry)
-{
-    struct boot_sector_buffer *sectors;
-    uintptr_t entry_val;
-    int loader_flash_id;
-    int split_flash_id;
-    int rc;
-    FIH_DECLARE(fih_rc, FIH_FAILURE);
-
-    sectors = malloc(sizeof(struct boot_sector_buffer));
-    if (sectors == NULL) {
-        FIH_RET(FIH_FAILURE);
-    }
-
-    loader_flash_id = flash_area_id_from_image_slot(loader_slot);
-    rc = flash_area_open(loader_flash_id,
-                         &BOOT_IMG_AREA(&boot_data, loader_slot));
-    assert(rc == 0);
-    split_flash_id = flash_area_id_from_image_slot(split_slot);
-    rc = flash_area_open(split_flash_id,
-                         &BOOT_IMG_AREA(&boot_data, split_slot));
-    assert(rc == 0);
-
-    /* Determine the sector layout of the image slots and scratch area. */
-    rc = boot_read_sectors(&boot_data, sectors);
-    if (rc != 0) {
-        rc = SPLIT_GO_ERR;
-        goto done;
-    }
-
-    rc = boot_read_image_headers(&boot_data, true, NULL);
-    if (rc != 0) {
-        goto done;
-    }
-
-    /* Don't check the bootable image flag because we could really call a
-     * bootable or non-bootable image.  Just validate that the image check
-     * passes which is distinct from the normal check.
-     */
-    FIH_CALL(split_image_check, fih_rc,
-             boot_img_hdr(&boot_data, split_slot),
-             BOOT_IMG_AREA(&boot_data, split_slot),
-             boot_img_hdr(&boot_data, loader_slot),
-             BOOT_IMG_AREA(&boot_data, loader_slot));
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        goto done;
-    }
-
-    entry_val = boot_img_slot_off(&boot_data, split_slot) +
-                boot_img_hdr(&boot_data, split_slot)->ih_hdr_size;
-    *entry = (void *) entry_val;
-    rc = SPLIT_GO_OK;
-
-done:
-    flash_area_close(BOOT_IMG_AREA(&boot_data, split_slot));
-    flash_area_close(BOOT_IMG_AREA(&boot_data, loader_slot));
-    free(sectors);
-
-    if (rc) {
-        FIH_SET(fih_rc, FIH_FAILURE);
-    }
-
     FIH_RET(fih_rc);
 }
 
