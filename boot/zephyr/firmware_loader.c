@@ -9,6 +9,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/util.h>
 #include "bootutil/image.h"
 #include "bootutil_priv.h"
 #include "bootutil/bootutil_log.h"
@@ -20,12 +21,86 @@
 #ifdef CONFIG_NRF_MCUBOOT_BOOT_REQUEST
 #include <bootutil/boot_request.h>
 #endif /* CONFIG_NRF_MCUBOOT_BOOT_REQUEST */
+#if defined(CONFIG_FPROTECT) && defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+#include <fprotect.h>
+#endif
+
+#define IMAGE_TLV_INSTALLER_IMAGE 0xa0
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 /* Variables passed outside of unit via poiters. */
 static const struct flash_area *_fa_p;
 static struct image_header _hdr = { 0 };
+
+#if defined(CONFIG_FPROTECT) && defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+static bool boot_image_is_installer(const struct flash_area *fa_p,
+                                    const struct image_header *hdr)
+{
+    struct image_tlv_iter it;
+    uint32_t off;
+    uint16_t len;
+    uint8_t installer = 0;
+    int rc;
+
+    if (hdr->ih_protect_tlv_size == 0) {
+        return false;
+    }
+
+    rc = bootutil_tlv_iter_begin(&it, hdr, fa_p, IMAGE_TLV_INSTALLER_IMAGE, true);
+    if (rc != 0) {
+        return false;
+    }
+
+    rc = bootutil_tlv_iter_next(&it, &off, &len, NULL);
+    if (rc != 0 || len != sizeof(installer)) {
+        return false;
+    }
+
+    rc = LOAD_IMAGE_DATA(hdr, fa_p, off, &installer, sizeof(installer));
+
+    return rc == 0 && installer == 1;
+}
+
+static int protect_firmware_loader(void)
+{
+    const struct flash_area *fa_p;
+    struct image_header hdr;
+    struct image_tlv_iter it;
+    size_t image_size;
+    int rc;
+
+    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(0), &fa_p);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = boot_image_load_header(fa_p, &hdr);
+    if (rc != 0) {
+        goto out;
+    }
+
+    rc = bootutil_tlv_iter_begin(&it, &hdr, fa_p, IMAGE_TLV_ANY, false);
+    if (rc != 0) {
+        goto out;
+    }
+
+    image_size = ROUND_UP(it.tlv_end, CONFIG_FPROTECT_BLOCK_SIZE);
+    if (image_size > flash_area_get_size(fa_p)) {
+        rc = BOOT_EBADIMAGE;
+        goto out;
+    }
+
+    rc = fprotect_area(flash_area_get_off(fa_p), image_size);
+
+out:
+    flash_area_close(fa_p);
+
+    return rc;
+}
+#else
+#define boot_image_is_installer(_fa_p, _hdr) false
+#endif
 
 #if defined(MCUBOOT_VALIDATE_PRIMARY_SLOT) || defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
 /**
@@ -110,7 +185,7 @@ boot_image_validate_once(const struct flash_area *fa_p,
  *
  * @return		FIH_SUCCESS on success; non-zero on failure.
  */
-static fih_ret validate_image_slot(int slot, struct boot_rsp *rsp)
+static fih_ret validate_image_slot(int slot, struct boot_rsp *rsp, bool *is_installer)
 {
     int rc = -1;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
@@ -142,6 +217,7 @@ static fih_ret validate_image_slot(int slot, struct boot_rsp *rsp)
     rsp->br_flash_dev_id = flash_area_get_device_id(_fa_p);
     rsp->br_image_off = flash_area_get_off(_fa_p);
     rsp->br_hdr = &_hdr;
+    *is_installer = boot_image_is_installer(_fa_p, &_hdr);
 
 other:
     flash_area_close(_fa_p);
@@ -163,6 +239,7 @@ fih_ret
 boot_go(struct boot_rsp *rsp)
 {
     bool boot_firmware_loader = false;
+    bool booting_installer = false;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
     BOOT_LOG_DBG("boot_go: firmware loader");
@@ -194,18 +271,33 @@ boot_go(struct boot_rsp *rsp)
 
     /* Check if firmware loader button is pressed. TODO: check all entrance methods */
     if (boot_firmware_loader == true) {
-        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp);
+        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp,
+                 &booting_installer);
 
         if (FIH_EQ(fih_rc, FIH_SUCCESS)) {
+#if defined(CONFIG_FPROTECT) && defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+            if (protect_firmware_loader() != 0) {
+                FIH_RET(FIH_FAILURE);
+            }
+#endif
             FIH_RET(fih_rc);
         }
     }
 
-    FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_PRIMARY(0), rsp);
+    FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_PRIMARY(0), rsp,
+             &booting_installer);
 
 #ifdef CONFIG_BOOT_FIRMWARE_LOADER_NO_APPLICATION
     if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
-        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp);
+        FIH_CALL(validate_image_slot, fih_rc, FLASH_AREA_IMAGE_SECONDARY(0), rsp,
+                 &booting_installer);
+    }
+#endif
+
+#if defined(CONFIG_FPROTECT) && defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+    if (FIH_EQ(fih_rc, FIH_SUCCESS) && !booting_installer &&
+        protect_firmware_loader() != 0) {
+        FIH_RET(FIH_FAILURE);
     }
 #endif
 
