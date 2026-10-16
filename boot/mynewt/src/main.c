@@ -196,7 +196,7 @@ serial_boot_detect(void)
     return;
 serial_boot:
     boot_uart_open();
-    boot_serial_start(&boot_uart_funcs);
+    boot_serial_check_start(&boot_uart_funcs, 0);
     assert(0);
 }
 #endif

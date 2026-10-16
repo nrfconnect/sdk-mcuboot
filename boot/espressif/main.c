@@ -166,7 +166,7 @@ int main()
     boot_console_init();
     if (boot_serial_detect_pin()) {
         BOOT_LOG_INF("Enter the serial recovery mode");
-        boot_serial_start(&boot_funcs);
+        boot_serial_check_start(&boot_funcs, 0);
     }
 #endif
 
