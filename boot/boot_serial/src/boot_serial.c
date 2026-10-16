@@ -1583,17 +1583,6 @@ check_timeout:
     }
 }
 
-/*
- * Task which waits reading console, expecting to get image over
- * serial port.
- */
-void
-boot_serial_start(const struct boot_uart_funcs *f)
-{
-    bs_entry = true;
-    boot_serial_read_console(f,0);
-}
-
 #ifdef MCUBOOT_SERIAL_WAIT_FOR_DFU
 /*
  * Task which waits reading console for a certain amount of timeout.
