@@ -173,6 +173,8 @@ void nrf_cleanup_peripheral(void)
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXSTARTED);
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_ENDRX);
         nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_RXTO);
+        nrfy_uarte_event_clear(current, NRF_UARTE_EVENT_ERROR);
+        (void)nrfy_uarte_errorsrc_get_and_clear(current);
         nrfy_uarte_disable(current);
 
         uint32_t pin[4];
