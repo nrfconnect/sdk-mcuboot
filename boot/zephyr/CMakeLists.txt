@@ -590,8 +590,8 @@ if(CONFIG_MCUBOOT_CLEANUP_ARM_CORE)
 endif()
 
 if(CONFIG_SOC_EARLY_RESET_HOOK)
-  zephyr_library_sources(${BOOT_DIR}/zephyr/nrf54h20_custom_s2ram.S)
-  zephyr_library_sources(${BOOT_DIR}/zephyr/nrf54h20_custom_s2ram.c)
+  zephyr_library_sources(${BOOT_DIR}/zephyr/custom_s2ram_resume.S)
+  zephyr_library_sources(${BOOT_DIR}/zephyr/custom_s2ram_resume.c)
 endif()
 
 if(CONFIG_MCUBOOT_BOOT_BANNER)
