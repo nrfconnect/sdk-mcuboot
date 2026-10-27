@@ -30,8 +30,9 @@
 
 #include <string.h>
 
-#if defined(NRF_UARTE0) || defined(NRF_UARTE1) || defined(NRF_UARTE00) ||   \
-    defined(NRF_UARTE20) || defined(NRF_UARTE30) || defined(NRF_UARTE136) 
+#if defined(NRF_UARTE0) || defined(NRF_UARTE1) || defined(NRF_UARTE2) ||    \
+    defined(NRF_UARTE3) || defined(NRF_UARTE00) || defined(NRF_UARTE20) ||   \
+    defined(NRF_UARTE30) || defined(NRF_UARTE136)
 #define NRF_UARTE_CLEANUP
 #endif
 
@@ -97,6 +98,12 @@ static NRF_UARTE_Type *nrf_uarte_to_clean[] = {
 #endif
 #if defined(NRF_UARTE1)
     NRF_UARTE1,
+#endif
+#if defined(NRF_UARTE2)
+    NRF_UARTE2,
+#endif
+#if defined(NRF_UARTE3)
+    NRF_UARTE3,
 #endif
 #if defined(NRF_UARTE00)
     NRF_UARTE00,
