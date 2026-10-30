@@ -404,6 +404,19 @@ boot_verify_slot_dependencies(struct boot_loader_state *state, uint32_t slot)
     rc = bootutil_tlv_iter_begin(&it, boot_img_hdr(state, slot), fap,
             IMAGE_TLV_DEPENDENCY, true);
     if (rc != 0) {
+#if defined(CONFIG_SOC_NRF5340_CPUAPP) && (CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1)
+        /*
+         * Net core primary uses a synthetic header (see nrf53_hooks.c) with no
+         * protected TLV area. Dependency iteration cannot succeed there; treat
+         * as "no DEPENDENCY TLVs" so image 0/2 checks still run.
+         */
+        if (BOOT_CURR_IMG(state) == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER &&
+            slot == BOOT_SLOT_PRIMARY &&
+            boot_img_hdr(state, slot)->ih_protect_tlv_size == 0) {
+            rc = 0;
+            goto done;
+        }
+#endif
         goto done;
     }
 
