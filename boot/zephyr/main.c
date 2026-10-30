@@ -188,7 +188,17 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #define RRAMC_REGION_RWX_LSB 0
 #define RRAMC_REGION_RWX_WIDTH 3
 
+#if defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
+/* BOOTCONF maps the immutable region to region 2 on nRF54LS05 and region 3 otherwise. */
+#if defined(CONFIG_SOC_NRF54LS05A_CPUAPP) || defined(CONFIG_SOC_NRF54LS05B_CPUAPP)
+#define RRAMC_REGION_NUMBER 2
+#else
+#define RRAMC_REGION_NUMBER 3
+#endif
+#else
 #define RRAMC_REGION_NUMBER 4
+#endif
+
 #define NRF_RRAM_REGION_SIZE_UNIT 0x400
 #define NRF_RRAM_REGION_ADDRESS_RESOLUTION 0x400
 
@@ -984,6 +994,7 @@ int main(void)
     nrf_crypto_keys_housekeeping();
 
 #ifdef CONFIG_FPROTECT
+#if !defined(CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES)
 #ifdef CONFIG_SOC_SERIES_NRF54L
 #if defined(CONFIG_SOC_NRF54L15) || defined(CONFIG_SOC_NRF54L10) || defined(CONFIG_SOC_NRF54L05)
     BUILD_ASSERT(FPROTECT_REGION_SIZE <= (62 * 1024), "Can not FPROTECT region that big");
@@ -1001,6 +1012,7 @@ int main(void)
         while (1)
             ;
     }
+#endif /* !CONFIG_NCS_MCUBOOT_BOOTCONF_LOCK_WRITES */
 
 /* Lock back PCD used for CPUNET application udapte */
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && \
