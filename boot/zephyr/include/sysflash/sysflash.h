@@ -123,8 +123,12 @@
  */
 #define PROTECTED_REGION_START \
     (SECOND_STAGE_ACTIVE_MCUBOOT_OFFSET + PROTECTED_REGION_START_SKIP)
+#if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX_SIZE
+#define PROTECTED_REGION_SIZE  CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX_SIZE
+#else
 #define PROTECTED_REGION_SIZE  \
     (SECOND_STAGE_ACTIVE_MCUBOOT_SIZE - PROTECTED_REGION_START_SKIP)
+#endif
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 
 /* Normally MCUboot needs one pair of slots per image it is able to process,
@@ -202,7 +206,11 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 /* RWX protection regions, MCUboot is protecting itself */
 #if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX
 #define PROTECTED_REGION_START  PARTITION_OFFSET(boot_partition)
+#if CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX_SIZE
+#define PROTECTED_REGION_SIZE   CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX_SIZE
+#else
 #define PROTECTED_REGION_SIZE   PARTITION_SIZE(boot_partition)
+#endif
 #endif /* CONFIG_NCS_MCUBOOT_DISABLE_SELF_RWX */
 #endif
 
