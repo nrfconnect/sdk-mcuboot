@@ -611,6 +611,16 @@ config NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE
 	  ROM_START_OFFSET for application build for MCUboot, and it is not available
 	  in bootloader builds.
 
+config NCS_MCUBOOT_DISABLE_SELF_RWX_SIZE
+	hex "Size of the protected region in bytes"
+	depends on NCS_MCUBOOT_DISABLE_SELF_RWX
+	depends on !PARTITION_MANAGER_ENABLED
+	default 0
+	help
+	  Size of the RRAMC region used to protect MCUboot. A value of zero
+	  protects the MCUboot partition after NCS_MCUBOOT_DISABLE_SELF_RWX_SKIP_SIZE,
+	  preserving the default behavior.
+
 config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
 	bool "Infinite loop after RAM cleanup"
 	depends on MCUBOOT_CLEANUP_RAM
