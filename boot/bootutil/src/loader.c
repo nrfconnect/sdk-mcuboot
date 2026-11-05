@@ -1903,7 +1903,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
 
 #ifdef MCUBOOT_ENC_IMAGES
         boot_swap_enc_key_prepare(state, bs, hdr, BOOT_SLOT_PRIMARY,
-            (hdr->ih_magic != IMAGE_MAGIC));
+            (hdr->ih_magic != IMAGE_MAGIC) || IS_NSIB_OWNED(image_index));
 #endif
 
         hdr = boot_img_hdr(state, BOOT_SLOT_SECONDARY);
