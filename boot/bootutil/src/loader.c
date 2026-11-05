@@ -1888,7 +1888,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
          * will be used to determine the amount of sectors to swap.
          */
         hdr = boot_img_hdr(state, BOOT_SLOT_PRIMARY);
-        if (hdr->ih_magic == IMAGE_MAGIC) {
+        if (hdr->ih_magic == IMAGE_MAGIC && !IS_NSIB_OWNED(image_index)) {
 #if CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1 && defined(CONFIG_SOC_NRF5340_CPUAPP)
             if (image_index == CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER) {
                 rc = boot_read_image_size(state, BOOT_SLOT_SECONDARY, &copy_size);
