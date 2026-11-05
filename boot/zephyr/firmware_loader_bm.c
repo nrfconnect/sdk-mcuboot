@@ -20,8 +20,6 @@
 #include "io/io.h"
 #include "mcuboot_config/mcuboot_config.h"
 
-#define IMAGE_TLV_INSTALLER_IMAGE 0xa0
-
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct flash_area fa_app_installer = {
