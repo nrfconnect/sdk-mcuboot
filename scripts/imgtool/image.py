@@ -38,6 +38,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from intelhex import IntelHex
+from math import ceil
 from yaml import safe_load as yaml_safe_load
 
 from . import keys
@@ -352,7 +353,8 @@ class Image:
     def __init__(self, version=None, header_size=IMAGE_HEADER_SIZE,
                  pad_header=False, pad=False, confirm=False, test=False,
                  align=1, slot_size=0, max_sectors=DEFAULT_MAX_SECTORS,
-                 overwrite_only=False, endian="little", load_addr=0,
+                 overwrite_only=False, overwrite_confirm=False,
+                 endian="little", load_addr=0,
                  rom_fixed=None, erased_val=None, pad_value=None,
                  save_enctlv=False, security_counter=None, max_align=None,
                  non_bootable=False, vid=None, cid=None,
@@ -374,6 +376,7 @@ class Image:
         self.slot_size = slot_size
         self.max_sectors = max_sectors
         self.overwrite_only = overwrite_only
+        self.overwrite_confirm = overwrite_confirm
         self.endian = endian
         self.base_addr = None
         self.load_addr = 0 if load_addr is None else load_addr
@@ -399,6 +402,7 @@ class Image:
         self.vid = BootUuid(uuid.NAMESPACE_DNS, vid) if vid is not None else self.vid
         self.cid = BootUuid(self.vid, cid) if cid is not None else self.cid
         self.manifest = Manifest(endian=endian, path=manifest) if manifest is not None else None
+        self.sector_size = 1024 * 4 # Assume 4kB sectors
 
         if self.max_align == DEFAULT_MAX_ALIGN:
             self.boot_magic = bytes([
@@ -427,7 +431,7 @@ class Image:
     def __repr__(self):
         return "<Image version={}, header_size={}, security_counter={}, \
                 base_addr={}, load_addr={}, align={}, slot_size={}, \
-                max_sectors={}, overwrite_only={}, endian={} format={}, \
+                max_sectors={}, overwrite_only={}, overwrite_confirm={}, endian={} format={}, \
                 payloadlen=0x{:x}, vid={}, cid={}, manifest={}>".format(
                     self.version,
                     self.header_size,
@@ -438,6 +442,7 @@ class Image:
                     self.slot_size,
                     self.max_sectors,
                     self.overwrite_only,
+                    self.overwrite_confirm,
                     self.endian,
                     self.__class__.__name__,
                     len(self.payload),
@@ -489,6 +494,7 @@ class Image:
             if self.pad:
                 trailer_size = self._trailer_size(self.align, self.max_sectors,
                                                   self.overwrite_only,
+                                                  self.overwrite_confirm,
                                                   self.enckey,
                                                   self.save_enctlv,
                                                   self.enctlv_len)
@@ -545,8 +551,15 @@ class Image:
     def check_trailer(self):
         if self.slot_size > 0:
             tsize = self._trailer_size(self.align, self.max_sectors,
-                                       self.overwrite_only, self.enckey,
-                                       self.save_enctlv, self.enctlv_len)
+                                       self.overwrite_only, self.overwrite_confirm,
+                                       self.enckey, self.save_enctlv, self.enctlv_len)
+            if not self.overwrite_only and not self.overwrite_confirm:
+                # Align trailer with the sector size for swap modes
+                tsize = ceil(tsize / self.sector_size) * self.sector_size
+
+                # Append an empty 4kB area to the trailer size to accomodate the space required to
+                # perfom swap operation.
+                tsize += 1024 * 4
             padding = self.slot_size - (len(self.payload) + tsize)
             if padding < 0:
                 msg = f"Image size (0x{len(self.payload):x}) + trailer (0x{tsize:x}) exceeds " \
@@ -931,13 +944,14 @@ class Image:
         self.payload = bytearray(self.payload)
         self.payload[:len(header)] = header
 
-    def _trailer_size(self, write_size, max_sectors, overwrite_only, enckey,
-                      save_enctlv, enctlv_len):
+    def _trailer_size(self, write_size, max_sectors, overwrite_only, overwrite_confirm,
+                      enckey, save_enctlv, enctlv_len):
         # NOTE: should already be checked by the argument parser
         magic_size = 16
         magic_align_size = align_up(magic_size, self.max_align)
-        if overwrite_only:
-            return self.max_align * 2 + magic_align_size
+        if overwrite_only or overwrite_confirm:
+            # magic/image_ok/copy_done/swap_info
+            return self.max_align * 3 + magic_align_size
         else:
             if write_size not in set([1, 2, 4, 8, 16, 32]):
                 raise click.BadParameter(f"Invalid alignment: {write_size}")
@@ -957,8 +971,8 @@ class Image:
     def pad_to(self, size):
         """Pad the image to the given size, with the given flash alignment."""
         tsize = self._trailer_size(self.align, self.max_sectors,
-                                   self.overwrite_only, self.enckey,
-                                   self.save_enctlv, self.enctlv_len)
+                                   self.overwrite_only, self.overwrite_confirm,
+                                   self.enckey, self.save_enctlv, self.enctlv_len)
         padding = size - (len(self.payload) + tsize)
         pbytes = bytearray([self.erased_val] * padding)
         pbytes += bytearray([self.erased_val] * (tsize - len(self.boot_magic)))

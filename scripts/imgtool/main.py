@@ -453,6 +453,8 @@ class BasedIntParamType(click.ParamType):
               default='little', help="Select little or big endian")
 @click.option('--overwrite-only', default=False, is_flag=True,
               help='Use overwrite-only instead of swap upgrades')
+@click.option('--overwrite-confirm', default=False, is_flag=True,
+              help='Use overwrite with revert instead of swap upgrades')
 @click.option('--boot-record', metavar='sw_type', help='Create CBOR encoded '
               'boot record TLV. The sw_type represents the role of the '
               'software component (e.g. CoFM for coprocessor firmware). '
@@ -547,7 +549,7 @@ class BasedIntParamType(click.ParamType):
 @click.option('--compression-lzma-preset', type=int, default=9,
               help='LZMA - compression level preset', show_default=True)
 def sign(key, public_key_format, align, version, pad_sig, header_size,
-         pad_header, slot_size, pad, confirm, test, max_sectors, overwrite_only,
+         pad_header, slot_size, pad, confirm, test, max_sectors, overwrite_only, overwrite_confirm,
          endian, encrypt_keylen, encrypt, compression, infile, outfile,
          dependencies, load_addr, hex_addr, erased_val, pad_value, save_enctlv,
          security_counter, boot_record, custom_tlv, custom_tlv_file, rom_fixed, max_align,
@@ -563,6 +565,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                       pad_header=pad_header, pad=pad, confirm=confirm,
                       test=test, align=int(align), slot_size=slot_size,
                       max_sectors=max_sectors, overwrite_only=overwrite_only,
+                      overwrite_confirm=overwrite_confirm,
                       endian=endian, load_addr=load_addr, rom_fixed=rom_fixed,
                       erased_val=erased_val, pad_value=pad_value,
                       save_enctlv=save_enctlv,
