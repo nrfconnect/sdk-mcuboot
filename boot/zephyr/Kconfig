@@ -852,14 +852,30 @@ config SINGLE_APPLICATION_SLOT_RAM_LOAD
 # Workaround for not being able to have commas in macro arguments
 DT_CHOSEN_Z_SRAM := zephyr,sram
 
+# RAM window for the upgrade image when it is copied from flash,
+# distinct from zephyr,sram when the bootloader uses a separate SRAM region.
+DT_CHOSEN_MCUBOOT_IMAGE_RAM := mcuboot,image-ram
+
 if BOOT_RAM_LOAD || SINGLE_APPLICATION_SLOT_RAM_LOAD
 config BOOT_IMAGE_EXECUTABLE_RAM_START
 	hex "Boot image executable ram start"
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_MCUBOOT_IMAGE_RAM)) \
+		if $(dt_chosen_enabled,$(DT_CHOSEN_MCUBOOT_IMAGE_RAM))
 	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_SRAM))
+	help
+	  Bounds-checked by MCUboot in RAM load mode. Prefer setting the devicetree
+	  chosen property /chosen/mcuboot,image-ram to the executable/load RAM
+	  memory node; otherwise this defaults to /chosen/zephyr,sram.
 
 config BOOT_IMAGE_EXECUTABLE_RAM_SIZE
 	int "Boot image executable base size"
+	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_MCUBOOT_IMAGE_RAM),0) \
+		if $(dt_chosen_enabled,$(DT_CHOSEN_MCUBOOT_IMAGE_RAM))
 	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_SRAM),0)
+	help
+	  Size in bytes of the region described by CONFIG_BOOT_IMAGE_EXECUTABLE_RAM_START.
+	  Prefer /chosen/mcuboot,image-ram in devicetree; otherwise this defaults from
+	  /chosen/zephyr,sram.
 endif
 
 config MULTIPLE_EXECUTABLE_RAM_REGIONS
