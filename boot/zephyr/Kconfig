@@ -47,10 +47,6 @@ config BOOT_USE_PSA_CRYPTO
 config BOOT_USE_TINYCRYPT
 	bool
 	# Hidden option
-	# When building for ECDSA, we use our own copy of mbedTLS, so the
-	# Zephyr one must not be enabled or the MBEDTLS_CONFIG_FILE macros
-	# will collide.
-	select MBEDTLS_PROMPTLESS if ZEPHYR_MBEDTLS_MODULE
 	help
 	  Use TinyCrypt for crypto primitives.
 
@@ -650,7 +646,7 @@ config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
 	  RAM cleanup has been performed.
 
 config NRF_SECURITY
-	select MBEDTLS_PROMPTLESS
+	select PSA_PROMPTLESS
 
 config MBEDTLS_CONFIG_FILE
 	# It might be awkward to define an Mbed TLS header file when TinyCrypt
