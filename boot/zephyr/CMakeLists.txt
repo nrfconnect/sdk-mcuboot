@@ -844,18 +844,45 @@ if(SYSBUILD)
     set(boot_magic_size 16)
 
     # Estimates for trailer TLV data size, this was taken from hello world builds for nrf52840dk
+    if(CONFIG_BOOT_IMG_HASH_ALG_SHA256)
+      # type (2 bytes) + length (2 bytes) + hash (32 bytes)
+      set(hash_tlv_size 36)
+    elseif(CONFIG_BOOT_IMG_HASH_ALG_SHA384)
+      # type (2 bytes) + length (2 bytes) + hash (48 bytes)
+      set(hash_tlv_size 52)
+    elseif(CONFIG_BOOT_IMG_HASH_ALG_SHA512)
+      # type (2 bytes) + length (2 bytes) + hash (64 bytes)
+      set(hash_tlv_size 68)
+    else()
+      # No integrity check.
+      set(hash_tlv_size 0)
+    endif()
+
+    # Unprotected TLV magic (2 bytes) + length (2 bytes) + hash TLV
+    math(EXPR boot_tlv_estimate "2 + 2 + ${hash_tlv_size}")
+
     if(CONFIG_BOOT_SIGNATURE_TYPE_RSA)
       if(CONFIG_BOOT_SIGNATURE_TYPE_RSA_LEN EQUAL 3072)
-        set(boot_tlv_estimate 464)
+        # Add key hash TLV
+        math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + ${hash_tlv_size}")
+        # Add signature TLV: type (2 bytes) + length (2 bytes) + signature (256 bytes)
+        math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + 2 + 2 + 384")
       else()
-        set(boot_tlv_estimate 336)
+        # Add key hash TLV
+        math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + ${hash_tlv_size}")
+        # Add signature TLV: type (2 bytes) + length (2 bytes) + signature (256 bytes)
+        math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + 2 + 2 + 256")
       endif()
     elseif(CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256)
-      set(boot_tlv_estimate 150)
+      # Add key hash TLV
+      math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + ${hash_tlv_size}")
+      # Add signature TLV: type (2 bytes) + length (2 bytes) + signature (72 bytes)
+      math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + 2 + 2 + 72")
     elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519)
-      set(boot_tlv_estimate 144)
-    else()
-      set(boot_tlv_estimate 40)
+      # Add key hash TLV
+      math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + ${hash_tlv_size}")
+      # Add signature TLV: type (2 bytes) + length (2 bytes) + signature (64 bytes)
+      math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + 2 + 2 + 64")
     endif()
 
     if(CONFIG_BOOT_ENCRYPT_RSA OR CONFIG_BOOT_ENCRYPT_EC256 OR CONFIG_BOOT_ENCRYPT_X25519)
@@ -882,7 +909,11 @@ if(SYSBUILD)
 
     if(CONFIG_SINGLE_APPLICATION_SLOT OR CONFIG_BOOT_FIRMWARE_LOADER)
       set(boot_swap_data_size 0)
+    elseif(CONFIG_BOOT_DIRECT_XIP OR CONFIG_BOOT_RAM_LOAD)
+      # image_ok/copy_done/swap_info
+      math(EXPR boot_swap_data_size "${max_align_size} * 3")
     else()
+      # image_ok/copy_done/swap_info/swap_size
       math(EXPR boot_swap_data_size "${max_align_size} * 4")
     endif()
 
