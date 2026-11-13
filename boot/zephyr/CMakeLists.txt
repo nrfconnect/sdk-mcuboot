@@ -858,6 +858,12 @@ if(SYSBUILD)
       set(boot_tlv_estimate 40)
     endif()
 
+    # The estimates above use SHA-256. With SHA-512, the image hash TLV and
+    # the key hash TLV are 32 bytes larger each.
+    if(CONFIG_BOOT_IMG_HASH_ALG_SHA512)
+      math(EXPR boot_tlv_estimate "${boot_tlv_estimate} + 64")
+    endif()
+
     if(CONFIG_BOOT_ENCRYPT_RSA OR CONFIG_BOOT_ENCRYPT_EC256 OR CONFIG_BOOT_ENCRYPT_X25519)
       # 128-bit AES key size
       set(boot_enc_key_size 16)
