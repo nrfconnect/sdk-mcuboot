@@ -223,7 +223,7 @@ out:
  */
 fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index)
 {
-    return FIH_SUCCESS;
+    FIH_RET(FIH_SUCCESS);
 }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT */
 
