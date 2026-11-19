@@ -960,7 +960,7 @@ fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index)
          * Downgrade prevention on S0/S1 image is managed by NSIB, which is a software (not
          * hardware) check
          */
-        return FIH_FAILURE;
+        FIH_RET(FIH_FAILURE);
     }
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP) && CONFIG_MCUBOOT_NETWORK_CORE_IMAGE_NUMBER != -1
@@ -969,11 +969,11 @@ fih_ret boot_nv_image_should_have_security_counter(uint32_t image_index)
          * Downgrade prevention on network core image is managed by NSIB which is a software (not
          * hardware) check
          */
-        return FIH_FAILURE;
+        FIH_RET(FIH_FAILURE);
     }
 #endif
 
-    return FIH_SUCCESS;
+    FIH_RET(FIH_SUCCESS);
 }
 #endif /* MCUBOOT_HW_ROLLBACK_PROT */
 
