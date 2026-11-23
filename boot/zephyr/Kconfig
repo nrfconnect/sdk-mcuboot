@@ -646,7 +646,7 @@ config MCUBOOT_INFINITE_LOOP_AFTER_RAM_CLEANUP
 	  RAM cleanup has been performed.
 
 config NRF_SECURITY
-	select PSA_PROMPTLESS
+	select PSA_PROMPTLESS if PSA_CRYPTO
 
 config MBEDTLS_CONFIG_FILE
 	# It might be awkward to define an Mbed TLS header file when TinyCrypt
