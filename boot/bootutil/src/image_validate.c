@@ -105,8 +105,6 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #    define EXPECTED_SIG_TLV IMAGE_TLV_ED25519
 #    define SIG_BUF_SIZE 64
 #    define EXPECTED_SIG_LEN(x) ((x) == SIG_BUF_SIZE)
-#else
-#    define SIG_BUF_SIZE 32 /* no signing, sha256 digest only */
 #endif
 
 #if (defined(MCUBOOT_HW_KEY)       + \
@@ -247,7 +245,8 @@ bootutil_img_validate(struct boot_loader_state *state,
 #endif
 #endif /* EXPECTED_SIG_TLV */
     struct image_tlv_iter it;
-    uint8_t buf[SIG_BUF_SIZE];
+    /* Buf is used for reading either hash or signature, so has to have enough space for either */
+    uint8_t buf[IMAGE_HASH_SIZE];
 #if defined(EXPECTED_HASH_TLV) && !defined(MCUBOOT_SIGN_PURE)
     int image_hash_valid = 0;
     uint8_t hash[IMAGE_HASH_SIZE];
