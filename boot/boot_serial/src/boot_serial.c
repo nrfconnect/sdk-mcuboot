@@ -671,6 +671,7 @@ bs_list_set(uint8_t op, char *buf, int len)
 
     area_opened = true;
 
+#if !defined(CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE)
 #if !defined(MCUBOOT_DIRECT_XIP) && !defined(MCUBOOT_RAM_LOAD)
     IMAGES_ITER(BOOT_CURR_IMG(state)) {
         rc = boot_read_sectors(state, NULL);
@@ -680,6 +681,7 @@ bs_list_set(uint8_t op, char *buf, int len)
             goto out;
         }
     }
+#endif
 #endif
 
     if (op == NMGR_OP_READ) {
@@ -973,10 +975,23 @@ bs_upload(char *buf, int len)
         }
     }
 
+#if !defined(CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE)
 #if !defined(MCUBOOT_SERIAL_DIRECT_IMAGE_UPLOAD)
     rc = flash_area_open(flash_area_id_from_multi_image_slot(img_num, 0), &fap);
 #else
     rc = flash_area_open(flash_area_id_from_direct_image(img_num), &fap);
+#endif
+#else
+    /* In this mode we only serve slot 0 of image 0 as application and inactive
+     * MCUboot slot within image 1.
+     */
+    if (img_num == 0) {
+        rc = flash_area_open(flash_area_id_from_multi_image_slot(0, 0), &fap);
+    } else if (img_num == 1) {
+        rc = flash_area_open(SECOND_STAGE_INACTIVE_MCUBOOT_ID, &fap);
+    } else {
+        rc = MGMT_ERR_EINVAL;
+    }
 #endif
     if (rc) {
         rc = MGMT_ERR_EINVAL;

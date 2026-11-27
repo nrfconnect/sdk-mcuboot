@@ -62,7 +62,8 @@
 #undef MCUBOOT_IS_SECOND_STAGE
 #endif
 
-#if !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP)
+#if defined(CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE) || \
+    !defined(CONFIG_SINGLE_APPLICATION_SLOT) && !defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP)
 
 #ifdef MCUBOOT_IS_SECOND_STAGE
 /* Defined when building MCUboot for S1 */
@@ -152,7 +153,11 @@
 static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
 {
     static const int all_slots[] = {
+#ifdef CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE
+        PARTITION_ID(slot0_partition), (uint32_t)(-1),
+#else
         PARTITION_ID(slot0_partition), PARTITION_ID(slot1_partition),
+#endif
 #if MCUBOOT_NEEDED_SLOT_PAIRS > 1
         PARTITION_ID(slot2_partition), PARTITION_ID(slot3_partition),
 #endif
@@ -160,12 +165,16 @@ static inline uint32_t __flash_area_ids_for_slot(int img, int slot)
         PARTITION_ID(slot4_partition), PARTITION_ID(slot5_partition),
 #endif
 #ifdef MCUBOOT_IS_SECOND_STAGE
+#if !defined(CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE)
 /* MCUboot as a second stage bootloader brings in two additional slots;
  * one slot is slot that it can update itself to and the other is source
  * of update. At this point source slot is, by default, secondary slot
  * of primary image.
  */
         SECOND_STAGE_INACTIVE_MCUBOOT_ID, PARTITION_ID(slot1_partition)
+#else
+        PARTITION_ID(s0_partition), PARTITION_ID(s1_partition)
+#endif
 #endif
     };
 #ifdef CONFIG_ASSERT
