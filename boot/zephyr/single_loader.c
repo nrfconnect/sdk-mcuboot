@@ -116,8 +116,35 @@ boot_open_all_flash_areas(struct boot_loader_state *state)
 {
     int rc;
 
+    BOOT_LOG_DBG("Have slots %d", BOOT_NUM_SLOTS);
+#if !defined(CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE)
     rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(0), &BOOT_IMG_AREA(state, BOOT_SLOT_PRIMARY));
     assert(rc == 0);
+#else
+    #warning WE WANT TO BE HERE
+    BOOT_LOG_DBG("Area ID: %d", FLASH_AREA_IMAGE_PRIMARY(0));
+    BOOT_LOG_DBG("Area ID: %d", FLASH_AREA_IMAGE_PRIMARY(1));
+    BOOT_LOG_DBG("Area ID: %d", FLASH_AREA_IMAGE_SECONDARY(1));
+    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(0), &state->imgs[0][BOOT_SLOT_PRIMARY].area);
+    if (rc != 0) {
+        BOOT_LOG_DBG("Failed to open 0.0, %d", rc);
+        goto out;
+    }
+    state->imgs[0][BOOT_SLOT_SECONDARY].area = NULL;
+
+    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(1), &state->imgs[1][BOOT_SLOT_PRIMARY].area);
+    if (rc != 0) {
+        BOOT_LOG_DBG("Failed to open 1.0, %d", rc);
+        goto out;
+    }
+
+    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(1), &state->imgs[1][BOOT_SLOT_SECONDARY].area);
+    if (rc != 0) {
+        BOOT_LOG_DBG("Failed to open 1.1, %d", rc);
+        goto out;
+    }
+out:
+#endif
 
     return rc;
 }

@@ -66,7 +66,9 @@ struct flash_area;
 #endif
 
 /** Number of image slots in flash; currently limited to two. */
-#if defined(MCUBOOT_SINGLE_APPLICATION_SLOT) || defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
+#if defined(CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE)
+#define BOOT_NUM_SLOTS                  2
+#elif defined(MCUBOOT_SINGLE_APPLICATION_SLOT) || defined(MCUBOOT_SINGLE_APPLICATION_SLOT_RAM_LOAD)
 #define BOOT_NUM_SLOTS                  1
 #else
 #define BOOT_NUM_SLOTS                  2

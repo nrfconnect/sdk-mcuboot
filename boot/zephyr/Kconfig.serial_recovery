@@ -211,6 +211,16 @@ config NRF_BOOT_SERIAL_BOOT_REQ
 
 endmenu
 
+if MCUBOOT_MCUBOOT_IMAGE_NUMBER != -1
+
+config NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE
+	bool "Secondary stage bootloader can be updated via boot serial"
+	default y
+	help
+	  Secondary stage bootloader will presents itself as image 1.
+
+endif
+
 config BOOT_SERIAL_IMG_GRP_HASH
 	bool "Image list hash support"
 	default y

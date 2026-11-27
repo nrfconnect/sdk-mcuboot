@@ -36,7 +36,9 @@
 extern "C" {
 #endif
 
-#ifdef MCUBOOT_IMAGE_NUMBER
+#ifdef CONFIG_NRF_BOOT_SERIAL_SECONDARY_MCUBOOT_IMAGE_UPDATE
+#define BOOT_IMAGE_NUMBER          2
+#elif defined(MCUBOOT_IMAGE_NUMBER)
 #define BOOT_IMAGE_NUMBER          MCUBOOT_IMAGE_NUMBER
 #else
 #define BOOT_IMAGE_NUMBER          1
